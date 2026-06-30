@@ -9,9 +9,7 @@ import '../enums/zoom_gesture_phase.dart';
 import 'hand_geometry_service.dart';
 
 class ZoomGestureDetector {
-  ZoomGestureDetector({
-    this.geometry = const HandGeometryService(),
-  });
+  ZoomGestureDetector({this.geometry = const HandGeometryService()});
 
   final HandGeometryService geometry;
 
@@ -27,10 +25,7 @@ class ZoomGestureDetector {
   DateTime? _startPoseStartedAt;
   double? _startPoseDistanceRatio;
 
-  ZoomDirection detect({
-    required Hand hand,
-    required Size imageSize,
-  }) {
+  ZoomDirection detect({required Hand hand, required Size imageSize}) {
     final now = DateTime.now();
     final distanceRatio = _zoomDistanceRatio(hand);
 
@@ -152,10 +147,11 @@ class ZoomGestureDetector {
 
         final openedEnough =
             distanceRatio >= HandGestureThresholds.zoomOpenMinDistanceRatio &&
-                distanceRatio - latestStart >=
-                    HandGestureThresholds.zoomMinChangeRatio;
+            distanceRatio - latestStart >=
+                HandGestureThresholds.zoomMinChangeRatio;
 
-        final stableEnough = now.difference(startedAt) >=
+        final stableEnough =
+            now.difference(startedAt) >=
             HandGestureThresholds.zoomMinGestureDuration;
 
         if (openedEnough && stableEnough) {
@@ -181,10 +177,11 @@ class ZoomGestureDetector {
 
         final closedEnough =
             distanceRatio <= HandGestureThresholds.zoomClosedMaxDistanceRatio &&
-                latestStart - distanceRatio >=
-                    HandGestureThresholds.zoomMinChangeRatio;
+            latestStart - distanceRatio >=
+                HandGestureThresholds.zoomMinChangeRatio;
 
-        final stableEnough = now.difference(startedAt) >=
+        final stableEnough =
+            now.difference(startedAt) >=
             HandGestureThresholds.zoomMinGestureDuration;
 
         if (closedEnough && stableEnough) {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class HeroChip extends StatelessWidget {
-  const HeroChip({required this.text});
+  const HeroChip({super.key, required this.text});
 
   final String text;
 
@@ -10,9 +10,9 @@ class HeroChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.14),
+        color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: Colors.white.withOpacity(0.18)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
       ),
       child: Text(
         text,

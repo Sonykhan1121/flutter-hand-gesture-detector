@@ -1,5 +1,5 @@
 name: gesture_detector
-description: "A new Flutter project."
+description: "A Flutter camera app for controlling a smart stand with hand gestures."
 
 publish_to: 'none'
 

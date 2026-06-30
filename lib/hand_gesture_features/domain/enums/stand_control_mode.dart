@@ -1,6 +1,1 @@
-
-enum StandControlMode {
-  automaticDetect,
-  handGesture,
-  voiceCommand,
-}
+enum StandControlMode { automaticDetect, handGesture, voiceCommand }

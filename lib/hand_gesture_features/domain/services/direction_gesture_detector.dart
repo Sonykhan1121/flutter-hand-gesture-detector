@@ -8,9 +8,7 @@ import '../enums/hand_move_direction.dart';
 import 'hand_geometry_service.dart';
 
 class DirectionGestureDetector {
-  const DirectionGestureDetector({
-    this.geometry = const HandGeometryService(),
-  });
+  const DirectionGestureDetector({this.geometry = const HandGeometryService()});
 
   final HandGeometryService geometry;
 
@@ -38,8 +36,9 @@ class DirectionGestureDetector {
     double visibleX(double rawX) =>
         isFrontCamera ? imageSize.width - rawX : rawX;
 
-    final fingerTipXs =
-    fingerTips.map((landmark) => visibleX(landmark.x)).toList();
+    final fingerTipXs = fingerTips
+        .map((landmark) => visibleX(landmark.x))
+        .toList();
     final fingerTipYs = fingerTips.map((landmark) => landmark.y).toList();
 
     final minTipX = fingerTipXs.reduce(math.min);
@@ -93,7 +92,8 @@ class DirectionGestureDetector {
       handSize * HandGestureThresholds.sideBendMinRatio,
     );
 
-    final leftRightCandidate = tipXSpread <= maxAllowedTipXSpread &&
+    final leftRightCandidate =
+        tipXSpread <= maxAllowedTipXSpread &&
         bendDeltaX.abs() >= minSideBendDistance;
 
     final maxAllowedTipYSpread = math.max(
@@ -107,7 +107,8 @@ class DirectionGestureDetector {
       handSize * HandGestureThresholds.verticalBendMinRatio,
     );
 
-    final upDownCandidate = tipYSpread <= maxAllowedTipYSpread &&
+    final upDownCandidate =
+        tipYSpread <= maxAllowedTipYSpread &&
         bendDeltaY.abs() >= minVerticalBendDistance;
 
     if (leftRightCandidate && upDownCandidate) {
@@ -132,18 +133,30 @@ class DirectionGestureDetector {
   }
 
   bool _hasOnlyDirectionFingersOpen(Hand hand) {
-    final indexTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerTip);
-    final indexPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerPIP);
-    final middleTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerTip);
-    final middlePip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerPIP);
-    final ringTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerTip);
-    final ringPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerPIP);
+    final indexTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerTip,
+    );
+    final indexPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerPIP,
+    );
+    final middleTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerTip,
+    );
+    final middlePip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerPIP,
+    );
+    final ringTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerTip,
+    );
+    final ringPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerPIP,
+    );
     final pinkyTip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyTip);
     final pinkyPip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyPIP);
 
@@ -229,7 +242,7 @@ class DirectionGestureDetector {
     final maxDistance = distances.reduce(math.max);
 
     return averageDistance <=
-        handSize * HandGestureThresholds.wristToMcpAverageMaxRatio &&
+            handSize * HandGestureThresholds.wristToMcpAverageMaxRatio &&
         maxDistance <=
             handSize * HandGestureThresholds.wristToMcpSingleMaxRatio;
   }

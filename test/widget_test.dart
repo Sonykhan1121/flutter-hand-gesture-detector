@@ -1,30 +1,56 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:gesture_detector/main.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/enums/stand_control_mode.dart';
+import 'package:gesture_detector/hand_gesture_features/stand_control_home_page.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('home screen shows hand gesture as the selected mode', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: StandControlHomePage(
+          initialMode: StandControlMode.handGesture,
+          disabledModes: {
+            StandControlMode.automaticDetect,
+            StandControlMode.voiceCommand,
+          },
+        ),
+      ),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Control Settings'), findsOneWidget);
+    expect(find.text('Hand Gesture'), findsOneWidget);
+    expect(find.text('ON'), findsOneWidget);
+    expect(find.text('SOON'), findsNWidgets(2));
   });
+
+  testWidgets(
+    'disabled mode tap calls its callback without changing selection',
+    (tester) async {
+      var voiceTapCount = 0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StandControlHomePage(
+            initialMode: StandControlMode.handGesture,
+            disabledModes: const {
+              StandControlMode.automaticDetect,
+              StandControlMode.voiceCommand,
+            },
+            onVoiceCommandTap: () {
+              voiceTapCount += 1;
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Voice Command'));
+      await tester.pumpAndSettle();
+
+      expect(voiceTapCount, 1);
+      expect(find.text('ON'), findsOneWidget);
+      expect(find.text('SOON'), findsNWidgets(2));
+    },
+  );
 }

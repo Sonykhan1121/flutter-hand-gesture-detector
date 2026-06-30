@@ -93,7 +93,7 @@ class CustomGestureDetector {
     final points = _indexCircleHistory.map((sample) => sample.point).toList();
 
     final allPointsStayUpper = points.every(
-          (point) => _isPointOnUpperPalmSide(
+      (point) => _isPointOnUpperPalmSide(
         pointY: point.dy,
         palmCenterY: palmCenter.dy,
         handSize: handSize,
@@ -175,28 +175,48 @@ class CustomGestureDetector {
     final thumbIp = geometry.visibleLandmark(hand, HandLandmarkType.thumbIP);
     final thumbMcp = geometry.visibleLandmark(hand, HandLandmarkType.thumbMCP);
 
-    final indexTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerTip);
-    final indexDip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerDIP);
-    final indexPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerPIP);
-    final indexMcp =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerMCP);
+    final indexTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerTip,
+    );
+    final indexDip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerDIP,
+    );
+    final indexPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerPIP,
+    );
+    final indexMcp = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerMCP,
+    );
 
-    final middleTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerTip);
-    final middlePip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerPIP);
-    final middleMcp =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerMCP);
+    final middleTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerTip,
+    );
+    final middlePip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerPIP,
+    );
+    final middleMcp = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerMCP,
+    );
 
-    final ringTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerTip);
-    final ringPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerPIP);
-    final ringMcp =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerMCP);
+    final ringTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerTip,
+    );
+    final ringPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerPIP,
+    );
+    final ringMcp = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerMCP,
+    );
 
     final pinkyTip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyTip);
     final pinkyPip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyPIP);
@@ -235,7 +255,8 @@ class CustomGestureDetector {
       handSize: handSize,
     );
 
-    final indexFacesUp = indexTip.y < indexDip.y &&
+    final indexFacesUp =
+        indexTip.y < indexDip.y &&
         indexDip.y < indexPip.y &&
         indexTip.y <
             palmCenter.dy -
@@ -288,26 +309,44 @@ class CustomGestureDetector {
     final thumbIp = geometry.visibleLandmark(hand, HandLandmarkType.thumbIP);
     final thumbTip = geometry.visibleLandmark(hand, HandLandmarkType.thumbTip);
 
-    final indexMcp =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerMCP);
-    final indexPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerPIP);
-    final indexTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerTip);
+    final indexMcp = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerMCP,
+    );
+    final indexPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerPIP,
+    );
+    final indexTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerTip,
+    );
 
-    final middleMcp =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerMCP);
-    final middleTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerTip);
-    final middlePip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerPIP);
+    final middleMcp = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerMCP,
+    );
+    final middleTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerTip,
+    );
+    final middlePip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerPIP,
+    );
 
-    final ringMcp =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerMCP);
-    final ringTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerTip);
-    final ringPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerPIP);
+    final ringMcp = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerMCP,
+    );
+    final ringTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerTip,
+    );
+    final ringPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerPIP,
+    );
 
     final pinkyMcp = geometry.visibleLandmark(hand, HandLandmarkType.pinkyMCP);
     final pinkyTip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyTip);
@@ -337,8 +376,10 @@ class CustomGestureDetector {
     final handSize = _handSize(hand);
     if (handSize <= 0) return false;
 
-    final thumbIndexDistance =
-    geometry.distanceBetweenLandmarks(thumbTip, indexTip);
+    final thumbIndexDistance = geometry.distanceBetweenLandmarks(
+      thumbTip,
+      indexTip,
+    );
     final maxTouchDistance = math.max(
       handSize * HandGestureThresholds.okTouchMaxDistanceRatio,
       12.0,
@@ -353,10 +394,12 @@ class CustomGestureDetector {
 
     final touchIsAwayFromPalm =
         geometry.distanceBetweenOffsets(touchCenter, palmCenter) >
-            handSize * HandGestureThresholds.okTouchMinPalmDistanceRatio;
+        handSize * HandGestureThresholds.okTouchMinPalmDistanceRatio;
 
-    final loopGapDistance =
-    geometry.distanceBetweenLandmarks(thumbIp, indexMcp);
+    final loopGapDistance = geometry.distanceBetweenLandmarks(
+      thumbIp,
+      indexMcp,
+    );
     final hasLoopGap = loopGapDistance >= handSize * 0.16;
 
     final indexBendAngle = geometry.fingerJointAngleDegrees(
@@ -405,18 +448,30 @@ class CustomGestureDetector {
 
     final thumbTip = geometry.visibleLandmark(hand, HandLandmarkType.thumbTip);
     final thumbIp = geometry.visibleLandmark(hand, HandLandmarkType.thumbIP);
-    final indexTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerTip);
-    final indexPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerPIP);
-    final middleTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerTip);
-    final middlePip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerPIP);
-    final ringTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerTip);
-    final ringPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerPIP);
+    final indexTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerTip,
+    );
+    final indexPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerPIP,
+    );
+    final middleTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerTip,
+    );
+    final middlePip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerPIP,
+    );
+    final ringTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerTip,
+    );
+    final ringPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerPIP,
+    );
     final pinkyTip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyTip);
     final pinkyPip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyPIP);
 
@@ -438,9 +493,10 @@ class CustomGestureDetector {
 
     final handSize = _handSize(hand);
 
-    final thumbIsOpen = geometry.distance(thumbTip, palmCenter) >
-        geometry.distance(thumbIp, palmCenter) *
-            HandGestureThresholds.thumbExtendedRatio &&
+    final thumbIsOpen =
+        geometry.distance(thumbTip, palmCenter) >
+            geometry.distance(thumbIp, palmCenter) *
+                HandGestureThresholds.thumbExtendedRatio &&
         geometry.distance(thumbTip, palmCenter) > handSize * 0.23;
 
     final pinkyIsOpen = geometry.isFingerExtended(
@@ -489,18 +545,30 @@ class CustomGestureDetector {
     final thumbTip = geometry.visibleLandmark(hand, HandLandmarkType.thumbTip);
     final thumbIp = geometry.visibleLandmark(hand, HandLandmarkType.thumbIP);
 
-    final indexTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerTip);
-    final indexPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.indexFingerPIP);
-    final middleTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerTip);
-    final middlePip =
-    geometry.visibleLandmark(hand, HandLandmarkType.middleFingerPIP);
-    final ringTip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerTip);
-    final ringPip =
-    geometry.visibleLandmark(hand, HandLandmarkType.ringFingerPIP);
+    final indexTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerTip,
+    );
+    final indexPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerPIP,
+    );
+    final middleTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerTip,
+    );
+    final middlePip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerPIP,
+    );
+    final ringTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerTip,
+    );
+    final ringPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerPIP,
+    );
     final pinkyTip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyTip);
     final pinkyPip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyPIP);
 
@@ -549,7 +617,8 @@ class CustomGestureDetector {
       handSize: handSize,
     );
 
-    final thumbIsClosed = geometry.distance(thumbTip, palmCenter) <=
+    final thumbIsClosed =
+        geometry.distance(thumbTip, palmCenter) <=
         math.max(
           geometry.distance(thumbIp, palmCenter) * 1.06,
           handSize * HandGestureThresholds.punchThumbMaxPalmDistanceRatio,
@@ -572,8 +641,7 @@ class CustomGestureDetector {
 
     final tipsStayCompact =
         tipSpreadX <= handSize * HandGestureThresholds.punchTipMaxSpreadRatio &&
-            tipSpreadY <=
-                handSize * HandGestureThresholds.punchTipMaxSpreadRatio;
+        tipSpreadY <= handSize * HandGestureThresholds.punchTipMaxSpreadRatio;
 
     final otherHandPoints = <Offset>[];
 
@@ -612,12 +680,14 @@ class CustomGestureDetector {
       points: otherHandPoints,
     );
 
-    final packageClosedFistSupport = hand.gesture != null &&
+    final packageClosedFistSupport =
+        hand.gesture != null &&
         hand.gesture!.type == GestureType.closedFist &&
         hand.gesture!.confidence >=
             HandGestureThresholds.punchGestureMinPackageConfidence;
 
-    final allClosed = thumbIsClosed &&
+    final allClosed =
+        thumbIsClosed &&
         indexIsClosed &&
         middleIsClosed &&
         ringIsClosed &&
@@ -626,7 +696,8 @@ class CustomGestureDetector {
     final geometryPunchDetected =
         allClosed && tipsNearPalm && tipsStayCompact && wristInsideOtherPoints;
 
-    final packagePunchDetected = packageClosedFistSupport &&
+    final packagePunchDetected =
+        packageClosedFistSupport &&
         indexIsClosed &&
         middleIsClosed &&
         ringIsClosed &&
@@ -648,24 +719,31 @@ class CustomGestureDetector {
     final thumbTipToPalm = geometry.distance(thumbTip, palmCenter);
     final thumbIpToPalm = geometry.distance(thumbIp, palmCenter);
 
-    final thumbTipToIndexMcp =
-    geometry.distanceBetweenLandmarks(thumbTip, indexMcp);
-    final thumbTipToMiddleMcp =
-    geometry.distanceBetweenLandmarks(thumbTip, middleMcp);
-    final thumbTipToThumbMcp =
-    geometry.distanceBetweenLandmarks(thumbTip, thumbMcp);
+    final thumbTipToIndexMcp = geometry.distanceBetweenLandmarks(
+      thumbTip,
+      indexMcp,
+    );
+    final thumbTipToMiddleMcp = geometry.distanceBetweenLandmarks(
+      thumbTip,
+      middleMcp,
+    );
+    final thumbTipToThumbMcp = geometry.distanceBetweenLandmarks(
+      thumbTip,
+      thumbMcp,
+    );
 
     final thumbTipCloseToPalm =
-        thumbTipToPalm <= handSize * HandGestureThresholds.closedThumbMaxPalmDistanceRatio;
+        thumbTipToPalm <=
+        handSize * HandGestureThresholds.closedThumbMaxPalmDistanceRatio;
     final thumbTipNotPastIp =
         thumbTipToPalm <=
-            thumbIpToPalm * HandGestureThresholds.closedThumbTipIpPalmRatio;
+        thumbIpToPalm * HandGestureThresholds.closedThumbTipIpPalmRatio;
     final thumbTipCloseToPalmKnuckles =
         math.min(thumbTipToIndexMcp, thumbTipToMiddleMcp) <=
-            handSize * HandGestureThresholds.closedThumbMaxKnuckleDistanceRatio;
+        handSize * HandGestureThresholds.closedThumbMaxKnuckleDistanceRatio;
     final thumbNotStretchedOut =
         thumbTipToThumbMcp <=
-            handSize * HandGestureThresholds.closedThumbMaxTipMcpDistanceRatio;
+        handSize * HandGestureThresholds.closedThumbMaxTipMcpDistanceRatio;
 
     return thumbTipCloseToPalm &&
         thumbTipNotPastIp &&
@@ -719,7 +797,8 @@ class CustomGestureDetector {
   }) {
     return pointY <=
         palmCenterY -
-            handSize * HandGestureThresholds.indexUpperSideCircleMinDistanceRatio;
+            handSize *
+                HandGestureThresholds.indexUpperSideCircleMinDistanceRatio;
   }
 
   double _handSize(Hand hand) {

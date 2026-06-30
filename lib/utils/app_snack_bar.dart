@@ -10,7 +10,6 @@ class AppSnackBar {
     VoidCallback? onActionPressed,
     String? actionLabel,
   }) {
-
     ScaffoldMessenger.of(context).clearSnackBars();
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -20,17 +19,15 @@ class AppSnackBar {
           style: const TextStyle(color: Colors.white, fontSize: 14),
         ),
         backgroundColor: isError ? Colors.redAccent : Colors.teal,
-        behavior: SnackBarBehavior.floating, // Floating looks modern and avoids navigation bar overlaps
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 3),
         action: actionLabel != null && onActionPressed != null
             ? SnackBarAction(
-          label: actionLabel,
-          textColor: Colors.white,
-          onPressed: onActionPressed,
-        )
+                label: actionLabel,
+                textColor: Colors.white,
+                onPressed: onActionPressed,
+              )
             : null,
       ),
     );

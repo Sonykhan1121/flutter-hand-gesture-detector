@@ -5,14 +5,13 @@ import '../enums/follow_object_sequence_phase.dart';
 import '../models/follow_object_sequence_result.dart';
 
 class FollowObjectSequenceDetector {
-  FollowObjectSequenceDetector({
-    this.onDebug,
-  });
+  FollowObjectSequenceDetector({this.onDebug});
 
   final void Function(String message)? onDebug;
 
   FollowObjectSequencePhase _phase = FollowObjectSequencePhase.idle;
   DateTime? _lastDetectedAt;
+  DateTime? _firstOpenPalmStartedAt;
   GestureType? _currentPackageGestureType;
 
   bool? _lastOpenPalmDebugValue;
@@ -20,19 +19,20 @@ class FollowObjectSequenceDetector {
 
   /// V1.0.3 behavior:
   ///
-  /// 1. User first shows open palm.
+  /// 1. User first shows open palm and holds it for 2 seconds.
   /// 2. The sequence starts and stays alive while the hand remains on screen.
-  /// 3. No time count. No pose hold duration. No sequence timeout.
-  /// 4. User can show closed fist any time later.
-  /// 5. User can move while staying on screen.
-  /// 6. User can show open palm again any time later.
-  /// 7. Then this returns isDetected=true to show "Follow the object".
+  /// 3. User can show closed fist any time later.
+  /// 4. User can move while staying on screen.
+  /// 5. User can show open palm again any time later.
+  /// 6. Then this returns isDetected=true to show "Follow the object".
   ///
   /// Important: when the hand leaves the screen or becomes unreliable,
   /// the presentation layer calls [clear], so the sequence resets.
   FollowObjectSequenceResult update(Hand hand, DateTime now) {
     if (_recentDetected(now)) {
-      _debug('recent detected message is still active -> show "Follow the object"');
+      _debug(
+        'recent detected message is still active -> show "Follow the object"',
+      );
 
       return FollowObjectSequenceResult(
         isActive: true,
@@ -60,9 +60,28 @@ class FollowObjectSequenceDetector {
     switch (_phase) {
       case FollowObjectSequencePhase.idle:
         if (openPalm) {
+          _firstOpenPalmStartedAt = now;
+          _setPhase(
+            FollowObjectSequencePhase.holdingFirstOpen,
+            'first open palm detected; hold for 2 seconds',
+          );
+        }
+        break;
+
+      case FollowObjectSequencePhase.holdingFirstOpen:
+        if (!openPalm) {
+          _debug('first open palm hold interrupted; reset sequence');
+          clear();
+          break;
+        }
+
+        final firstOpenPalmStartedAt = _firstOpenPalmStartedAt;
+        if (firstOpenPalmStartedAt != null &&
+            now.difference(firstOpenPalmStartedAt) >=
+                HandGestureThresholds.followObjectFirstOpenPalmHoldDuration) {
           _setPhase(
             FollowObjectSequencePhase.waitingForClosed,
-            'first open palm detected; hand must stay on screen; waiting for closed fist',
+            'first open palm hold completed; waiting for closed fist',
           );
         }
         break;
@@ -100,11 +119,12 @@ class FollowObjectSequenceDetector {
     if (_phase != FollowObjectSequencePhase.idle) {
       _debug(
         'clear sequence | keepLastDetected=$keepLastDetected, '
-            'previousPhase=${_phase.name}',
+        'previousPhase=${_phase.name}',
       );
     }
 
     _phase = FollowObjectSequencePhase.idle;
+    _firstOpenPalmStartedAt = null;
     _currentPackageGestureType = null;
     _lastOpenPalmDebugValue = null;
     _lastClosedFistDebugValue = null;
@@ -121,7 +141,8 @@ class FollowObjectSequenceDetector {
   }) {
     final gesture = hand.gesture;
 
-    final detected = gesture != null &&
+    final detected =
+        gesture != null &&
         gesture.type == type &&
         gesture.confidence >= HandGestureThresholds.minPackageGestureConfidence;
 
@@ -129,7 +150,7 @@ class FollowObjectSequenceDetector {
       _currentPackageGestureType = gesture.type;
       _debug(
         'package $debugLabel detected | '
-            'confidence=${gesture.confidence.toStringAsFixed(2)}',
+        'confidence=${gesture.confidence.toStringAsFixed(2)}',
       );
     }
 
@@ -143,10 +164,7 @@ class FollowObjectSequenceDetector {
             HandGestureThresholds.followObjectMessageHoldDuration;
   }
 
-  void _debugPoseChange({
-    required bool openPalm,
-    required bool closedFist,
-  }) {
+  void _debugPoseChange({required bool openPalm, required bool closedFist}) {
     if (_lastOpenPalmDebugValue == openPalm &&
         _lastClosedFistDebugValue == closedFist) {
       return;
@@ -157,7 +175,7 @@ class FollowObjectSequenceDetector {
 
     _debug(
       'pose changed -> phase=${_phase.name}, '
-          'openPalm=$openPalm, closedFist=$closedFist',
+      'openPalm=$openPalm, closedFist=$closedFist',
     );
   }
 

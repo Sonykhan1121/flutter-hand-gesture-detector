@@ -14,22 +14,16 @@ class MobileStandPainter extends CustomPainter {
     );
 
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.22)
+      ..color = Colors.black.withValues(alpha: 0.22)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
 
-    canvas.drawRRect(
-      phoneRect.shift(const Offset(0, 12)),
-      shadowPaint,
-    );
+    canvas.drawRRect(phoneRect.shift(const Offset(0, 12)), shadowPaint);
 
     final phonePaint = Paint()
       ..shader = const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          Color(0xFFEFF6FF),
-          Color(0xFFBFD7FF),
-        ],
+        colors: [Color(0xFFEFF6FF), Color(0xFFBFD7FF)],
       ).createShader(phoneRect.outerRect);
 
     canvas.drawRRect(phoneRect, phonePaint);
@@ -48,15 +42,12 @@ class MobileStandPainter extends CustomPainter {
       ..shader = const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFF163B70),
-          Color(0xFF0B1220),
-        ],
+        colors: [Color(0xFF163B70), Color(0xFF0B1220)],
       ).createShader(screenRect.outerRect);
 
     canvas.drawRRect(screenRect, screenPaint);
 
-    final cameraPaint = Paint()..color = Colors.white.withOpacity(0.55);
+    final cameraPaint = Paint()..color = Colors.white.withValues(alpha: 0.55);
     canvas.drawCircle(
       Offset(phoneLeft + phoneWidth * 0.50, phoneTop + phoneHeight * 0.04),
       phoneWidth * 0.025,
@@ -81,17 +72,17 @@ class MobileStandPainter extends CustomPainter {
     canvas.drawPath(armPath, armPaint);
 
     final basePaint = Paint()
-      ..shader = const LinearGradient(
-        colors: [
-          Color(0xFFEFF6FF),
-          Color(0xFFBBD3F7),
-        ],
-      ).createShader(Rect.fromLTWH(
-        size.width * 0.22,
-        size.height * 0.88,
-        size.width * 0.58,
-        size.height * 0.10,
-      ));
+      ..shader =
+          const LinearGradient(
+            colors: [Color(0xFFEFF6FF), Color(0xFFBBD3F7)],
+          ).createShader(
+            Rect.fromLTWH(
+              size.width * 0.22,
+              size.height * 0.88,
+              size.width * 0.58,
+              size.height * 0.10,
+            ),
+          );
 
     final baseRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(
@@ -107,7 +98,7 @@ class MobileStandPainter extends CustomPainter {
     canvas.drawRRect(baseRect, basePaint);
 
     final glowPaint = Paint()
-      ..color = const Color(0xFF00FB46).withOpacity(0.22)
+      ..color = const Color(0xFF00FB46).withValues(alpha: 0.22)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 

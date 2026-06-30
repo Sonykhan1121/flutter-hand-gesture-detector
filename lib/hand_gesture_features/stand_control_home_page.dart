@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:gesture_detector/hand_gesture_features/presentation/painters/mobile_stand_painter.dart';
-import 'package:gesture_detector/hand_gesture_features/presentation/widgets/control_mode_card.dart';
 import 'package:gesture_detector/hand_gesture_features/presentation/widgets/settings_panel.dart';
 import 'package:gesture_detector/hand_gesture_features/presentation/widgets/stand_hero_section.dart';
 
 import 'domain/enums/stand_control_mode.dart';
 
 class StandControlHomePage extends StatefulWidget {
-
   final StandControlMode initialMode;
+  final Set<StandControlMode> disabledModes;
   final ValueChanged<StandControlMode>? onModeChanged;
   final VoidCallback? onAutomaticDetectTap;
   final VoidCallback? onHandGestureTap;
@@ -17,13 +15,12 @@ class StandControlHomePage extends StatefulWidget {
   const StandControlHomePage({
     super.key,
     this.initialMode = StandControlMode.handGesture,
+    this.disabledModes = const {},
     this.onModeChanged,
     this.onAutomaticDetectTap,
     this.onHandGestureTap,
     this.onVoiceCommandTap,
   });
-
-
 
   @override
   State<StandControlHomePage> createState() => _StandControlHomePageState();
@@ -39,12 +36,20 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
   }
 
   void _selectMode(StandControlMode mode) {
+    if (widget.disabledModes.contains(mode)) {
+      _notifyModeTap(mode);
+      return;
+    }
+
     setState(() {
       _selectedMode = mode;
     });
 
     widget.onModeChanged?.call(mode);
+    _notifyModeTap(mode);
+  }
 
+  void _notifyModeTap(StandControlMode mode) {
     switch (mode) {
       case StandControlMode.automaticDetect:
         widget.onAutomaticDetectTap?.call();
@@ -75,6 +80,7 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
             Expanded(
               child: SettingsPanel(
                 selectedMode: _selectedMode,
+                disabledModes: widget.disabledModes,
                 onSelectMode: _selectMode,
               ),
             ),
@@ -84,11 +90,3 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
     );
   }
 }
-
-
-
-
-
-
-
-

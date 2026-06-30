@@ -9,10 +9,10 @@ class HandGeometryService {
   const HandGeometryService();
 
   HandLandmark? visibleLandmark(
-      Hand hand,
-      HandLandmarkType type, {
-        double minVisibility = HandGestureThresholds.minLandmarkVisibility,
-      }) {
+    Hand hand,
+    HandLandmarkType type, {
+    double minVisibility = HandGestureThresholds.minLandmarkVisibility,
+  }) {
     final landmark = hand.getLandmark(type);
     if (landmark == null || landmark.visibility < minVisibility) return null;
     return landmark;
@@ -50,7 +50,7 @@ class HandGeometryService {
     final pipDistance = distance(pip, palmCenter);
 
     return tipDistance >
-        pipDistance * HandGestureThresholds.extendedFingerRatio &&
+            pipDistance * HandGestureThresholds.extendedFingerRatio &&
         tipDistance > handSize * 0.30;
   }
 
@@ -64,7 +64,7 @@ class HandGeometryService {
     final pipDistance = distance(pip, palmCenter);
 
     return tipDistance <=
-        pipDistance * HandGestureThresholds.foldedFingerRatio ||
+            pipDistance * HandGestureThresholds.foldedFingerRatio ||
         tipDistance < handSize * 0.26;
   }
 
@@ -88,8 +88,10 @@ class HandGeometryService {
 
     if (mcpVectorLength == 0 || tipVectorLength == 0) return 180;
 
-    final cosValue =
-    (dot / (mcpVectorLength * tipVectorLength)).clamp(-1.0, 1.0);
+    final cosValue = (dot / (mcpVectorLength * tipVectorLength)).clamp(
+      -1.0,
+      1.0,
+    );
 
     return math.acos(cosValue) * 180 / math.pi;
   }
@@ -111,7 +113,7 @@ class HandGeometryService {
     required double handSize,
   }) {
     return fingerJointAngleDegrees(mcp: mcp, pip: pip, tip: tip) >=
-        HandGestureThresholds.fingerExtendedMinAngleDegrees &&
+            HandGestureThresholds.fingerExtendedMinAngleDegrees &&
         distance(tip, palmCenter) > handSize * 0.30;
   }
 
@@ -217,12 +219,12 @@ class HandGeometryService {
         return true;
       }
 
-      final intersects = ((current.dy > point.dy) !=
-          (previous.dy > point.dy)) &&
+      final intersects =
+          ((current.dy > point.dy) != (previous.dy > point.dy)) &&
           point.dx <
               (previous.dx - current.dx) *
-                  (point.dy - current.dy) /
-                  (previous.dy - current.dy) +
+                      (point.dy - current.dy) /
+                      (previous.dy - current.dy) +
                   current.dx;
 
       if (intersects) inside = !inside;
@@ -238,14 +240,14 @@ class HandGeometryService {
   }) {
     const epsilon = 0.0001;
 
-    final cross = (point.dy - segmentStart.dy) *
-        (segmentEnd.dx - segmentStart.dx) -
+    final cross =
+        (point.dy - segmentStart.dy) * (segmentEnd.dx - segmentStart.dx) -
         (point.dx - segmentStart.dx) * (segmentEnd.dy - segmentStart.dy);
 
     if (cross.abs() > epsilon) return false;
 
-    final dot = (point.dx - segmentStart.dx) *
-        (segmentEnd.dx - segmentStart.dx) +
+    final dot =
+        (point.dx - segmentStart.dx) * (segmentEnd.dx - segmentStart.dx) +
         (point.dy - segmentStart.dy) * (segmentEnd.dy - segmentStart.dy);
 
     if (dot < 0) return false;

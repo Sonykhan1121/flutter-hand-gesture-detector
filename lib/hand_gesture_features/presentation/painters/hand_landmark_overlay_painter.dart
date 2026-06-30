@@ -33,11 +33,6 @@ class HandLandmarkOverlayPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..color = Colors.black;
 
-    final boxPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..color = const Color(0xFF00FB46);
-
     Offset mapPoint(double x, double y) {
       final mappedX = x * size.width / imageSize.width;
       final mappedY = y * size.height / imageSize.height;
@@ -69,19 +64,6 @@ class HandLandmarkOverlayPainter extends CustomPainter {
           _drawLandmarkIndex(canvas, '${landmark.type.index}', center);
         }
       }
-
-      final box = hand.boundingBox;
-      final topLeft = mapPoint(box.left, box.top);
-      final bottomRight = mapPoint(box.right, box.bottom);
-
-      final rect = Rect.fromLTRB(
-        mirrorHorizontally ? bottomRight.dx : topLeft.dx,
-        topLeft.dy,
-        mirrorHorizontally ? topLeft.dx : bottomRight.dx,
-        bottomRight.dy,
-      );
-
-      canvas.drawRect(rect, boxPaint);
     }
   }
 
@@ -93,18 +75,13 @@ class HandLandmarkOverlayPainter extends CustomPainter {
           color: Colors.white,
           fontSize: 9,
           fontWeight: FontWeight.w700,
-          shadows: [
-            Shadow(color: Colors.black, blurRadius: 3),
-          ],
+          shadows: [Shadow(color: Colors.black, blurRadius: 3)],
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
-    textPainter.paint(
-      canvas,
-      center + const Offset(7, -11),
-    );
+    textPainter.paint(canvas, center + const Offset(7, -11));
   }
 
   @override

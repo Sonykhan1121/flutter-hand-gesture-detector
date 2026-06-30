@@ -8,8 +8,12 @@ abstract final class HandGestureThresholds {
   static const double minHandScore = 0.60;
   static const double minPackageGestureConfidence = 0.50;
 
-  static const Duration followObjectMessageHoldDuration =
-  Duration(milliseconds: 1200);
+  static const Duration followObjectMessageHoldDuration = Duration(
+    milliseconds: 1200,
+  );
+  static const Duration followObjectFirstOpenPalmHoldDuration = Duration(
+    seconds: 2,
+  );
 
   static const double minLandmarkVisibility = 0.60;
 
@@ -52,8 +56,9 @@ abstract final class HandGestureThresholds {
 
   static const int indexCircleHistoryMaxLength = 36;
   static const Duration indexCircleWindow = Duration(milliseconds: 1400);
-  static const Duration cancelEverythingHoldDuration =
-  Duration(milliseconds: 900);
+  static const Duration cancelEverythingHoldDuration = Duration(
+    milliseconds: 900,
+  );
   static const double indexCircleMinAngleRadians = math.pi * 0.90;
   static const double indexCircleMinRadiusRatio = 0.025;
   static const double indexCircleMaxRadiusVariationRatio = 1.60;
@@ -71,15 +76,12 @@ abstract final class HandGestureThresholds {
   static const double zoomOpenMinDistanceRatio = 0.31;
   static const double zoomMinChangeRatio = 0.055;
 
-  static const Duration zoomStartPoseHoldDuration =
-  Duration(milliseconds: 500);
+  static const Duration zoomStartPoseHoldDuration = Duration(milliseconds: 500);
   static const double zoomActiveTipMinPalmDistanceRatio = 0.06;
   static const double zoomMinLandmarkVisibility = 0.30;
 
-  static const Duration zoomReleaseResetDuration =
-  Duration(milliseconds: 650);
-  static const Duration zoomMaxGestureDuration =
-  Duration(milliseconds: 2600);
+  static const Duration zoomReleaseResetDuration = Duration(milliseconds: 650);
+  static const Duration zoomMaxGestureDuration = Duration(milliseconds: 2600);
   static const Duration zoomMinGestureDuration = Duration(milliseconds: 90);
   static const Duration zoomHoldDuration = Duration(milliseconds: 650);
 }

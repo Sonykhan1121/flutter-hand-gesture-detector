@@ -1,14 +1,18 @@
-import 'control_mode_card.dart';
 import 'package:flutter/material.dart';
+
 import '../../domain/enums/stand_control_mode.dart';
+import 'control_mode_card.dart';
 
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({
+    super.key,
     required this.selectedMode,
+    required this.disabledModes,
     required this.onSelectMode,
   });
 
   final StandControlMode selectedMode;
+  final Set<StandControlMode> disabledModes;
   final ValueChanged<StandControlMode> onSelectMode;
 
   @override
@@ -47,30 +51,48 @@ class SettingsPanel extends StatelessWidget {
               children: [
                 ControlModeCard(
                   isSelected: selectedMode == StandControlMode.automaticDetect,
+                  isEnabled: !disabledModes.contains(
+                    StandControlMode.automaticDetect,
+                  ),
                   icon: Icons.person_search_rounded,
                   title: 'Automatic Detect',
                   subtitle: 'Person follow automatically',
-                  badgeText: 'AUTO',
+                  badgeText:
+                      disabledModes.contains(StandControlMode.automaticDetect)
+                      ? 'SOON'
+                      : 'AUTO',
                   accentColor: const Color(0xFF12B76A),
                   onTap: () => onSelectMode(StandControlMode.automaticDetect),
                 ),
                 const SizedBox(height: 14),
                 ControlModeCard(
                   isSelected: selectedMode == StandControlMode.handGesture,
+                  isEnabled: !disabledModes.contains(
+                    StandControlMode.handGesture,
+                  ),
                   icon: Icons.back_hand_rounded,
                   title: 'Hand Gesture',
                   subtitle: 'Control the stand using hand movement',
-                  badgeText: 'GESTURE',
+                  badgeText:
+                      disabledModes.contains(StandControlMode.handGesture)
+                      ? 'SOON'
+                      : 'GESTURE',
                   accentColor: const Color(0xFF2E90FA),
                   onTap: () => onSelectMode(StandControlMode.handGesture),
                 ),
                 const SizedBox(height: 14),
                 ControlModeCard(
                   isSelected: selectedMode == StandControlMode.voiceCommand,
+                  isEnabled: !disabledModes.contains(
+                    StandControlMode.voiceCommand,
+                  ),
                   icon: Icons.record_voice_over_rounded,
                   title: 'Voice Command',
                   subtitle: 'Give commands by voice',
-                  badgeText: 'VOICE',
+                  badgeText:
+                      disabledModes.contains(StandControlMode.voiceCommand)
+                      ? 'SOON'
+                      : 'VOICE',
                   accentColor: const Color(0xFF9E77ED),
                   onTap: () => onSelectMode(StandControlMode.voiceCommand),
                 ),

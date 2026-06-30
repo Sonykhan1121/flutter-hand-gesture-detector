@@ -28,7 +28,7 @@ class GestureStatusPanel extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           decoration: BoxDecoration(
             color: hasGesture
-                ? const Color(0xFF00FB46).withOpacity(0.18)
+                ? const Color(0xFF00FB46).withValues(alpha: 0.18)
                 : Colors.black45,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(

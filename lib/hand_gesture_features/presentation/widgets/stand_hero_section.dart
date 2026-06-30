@@ -4,7 +4,7 @@ import '../painters/mobile_stand_painter.dart';
 import 'hero_chip.dart';
 
 class StandHeroSection extends StatelessWidget {
-  const StandHeroSection();
+  const StandHeroSection({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -15,16 +15,12 @@ class StandHeroSection extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF101D42),
-            Color(0xFF152A5F),
-            Color(0xFF1F7A8C),
-          ],
+          colors: [Color(0xFF101D42), Color(0xFF152A5F), Color(0xFF1F7A8C)],
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF101D42).withOpacity(0.18),
+            color: const Color(0xFF101D42).withValues(alpha: 0.18),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),

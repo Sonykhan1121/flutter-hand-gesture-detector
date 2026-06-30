@@ -19,9 +19,9 @@ class CustomGestureDetectionResult {
   );
 
   List<String> get labels => [
-        if (isCancelEverything) 'Return to main position',
-        if (isOk) 'Start record video',
-        if (isCallMe) 'Detect my face',
-        if (isPunch) 'Pause video',
-      ];
+    if (isCancelEverything) 'Return to main position',
+    if (isOk) 'Start record video',
+    if (isCallMe) 'Detect my face',
+    if (isPunch) 'Pause video',
+  ];
 }

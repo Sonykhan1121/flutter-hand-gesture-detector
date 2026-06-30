@@ -1,17 +1,17 @@
-# gesture_detector
+# Smart Stand Control
 
-A new Flutter project.
+A Flutter app for controlling a smart mobile stand with camera-based hand gesture detection.
 
-## Getting Started
+## Development
 
-This project is a starting point for a Flutter application.
+This project is pinned to Flutter through FVM. Use the pinned toolchain:
 
-A few resources to get you started if this is your first Flutter project:
+```sh
+fvm flutter pub get
+fvm flutter analyze
+fvm flutter test
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Android Release Signing
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
-# flutter-hand-gesture-detector
+Copy `android/key.properties.example` to `android/key.properties` and fill it with your local release keystore values before building a release app bundle. Do not commit real signing secrets.
