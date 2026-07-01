@@ -1,110 +1,97 @@
 # Smart Stand Control
 
-<p align="center">
-  <img src="docs/images/app-banner.png" alt="Smart Stand Control app banner" width="900" />
-</p>
+Smart Stand Control is a Flutter camera app for controlling a mobile stand with hand gestures. The app reads the live camera stream, detects the user's hand, shows the current gesture on screen, and maps that gesture to camera or stand actions.
 
 <p align="center">
-  A Flutter camera app for controlling a smart mobile stand with real-time hand gesture detection.
+  <strong>Hand gesture control</strong> · <strong>Live camera preview</strong> · <strong>Zoom</strong> · <strong>Recording</strong> · <strong>Object follow</strong>
 </p>
+
+## Gesture Action Guide
+
+This is the full gesture sheet for the app.
 
 <p align="center">
-  <strong>Hand tracking</strong> · <strong>Gesture commands</strong> · <strong>Camera zoom</strong> · <strong>Video recording</strong> · <strong>Smart stand control</strong>
+  <img width="520" alt="Gesture Actions For Control App" src="https://github.com/user-attachments/assets/27f87f5a-0047-4050-81b8-aac3949fd01c" />
 </p>
 
-> You can use local images from `docs/images/` or GitHub uploaded image links like `https://github.com/user-attachments/assets/...`.
+## App Screens
 
-## Preview
+| Home / Mode Selection |
+| --- |
+| <img src="https://github.com/user-attachments/assets/36623e0d-7cf6-4c40-a3fa-56ee0faeff45" alt="Control settings home screen" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| Choose Automatic Detect, Hand Gesture, or Voice Command. |
 
-Use this section to show the most important app interfaces. Replace each `src` with your GitHub uploaded image URL when you add new screenshots.
+## Gesture Demo Images
 
-> Note: GitHub README pages may ignore inline `style`, but `width` and `height` work reliably. Keep the style in the template if you also view the README in editors that support it.
+Replace each demo `src` with your own GitHub uploaded image URL when you have screenshots or short demo frames for that action.
 
-| Home / Mode Selection | Live Gesture Detection | Recording Controls |
+| Move Left | Move Right | Move Up |
 | --- | --- | --- |
-| <img src="https://github.com/user-attachments/assets/36623e0d-7cf6-4c40-a3fa-56ee0faeff45" alt="Control settings home screen" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/live-detection.png" alt="Live hand gesture detection screen" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/recording-controls.png" alt="Gesture video recording controls" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
-| Choose Automatic Detect, Hand Gesture, or Voice Command. | Track hands, landmarks, gesture labels, and confidence in real time. | Start, pause, continue, and stop recording using gesture actions. |
+| <img src="docs/images/demo-move-left.png" alt="Move left gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-move-right.png" alt="Move right gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-move-up.png" alt="Move up gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| Swipe or hold the hand toward the left. | Swipe or hold the hand toward the right. | Point or move the hand upward. |
 
-| Hand Focus Mode | Zoom Control | Camera Permission / Loading |
+| Move Down | Detect My Face | Follow The Object |
 | --- | --- | --- |
-| <img src="docs/images/hand-focus.png" alt="Hand focus overlay screen" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/zoom-control.png" alt="Camera zoom control overlay" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/camera-loading.png" alt="Camera loading and permission state" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
-| Keep the selected hand centered and highlighted. | Adjust camera zoom with gestures or the floating zoom control. | Clear states for initialization, permission, retry, and camera failure. |
+| <img src="docs/images/demo-move-down.png" alt="Move down gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-detect-my-face.png" alt="Detect my face gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-follow-object.png" alt="Follow the object gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| Point or move the hand downward. | Use the call gesture to start face detection. | Open palm, closed fist, then release on the object. |
 
-## What It Does
+| Stop & Continue | Return To Main Position | Start Record Video |
+| --- | --- | --- |
+| <img src="docs/images/demo-stop-continue.png" alt="Stop and continue gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-return-main-position.png" alt="Return to main position gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-start-record-video.png" alt="Start record video gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| Hold thumbs-up for 1 second. | Rotate the index finger in a small circle. | Hold the OK gesture for 1 second. |
 
-Smart Stand Control turns a phone camera into a gesture-driven remote for a smart mobile stand. The app detects hands from the live camera stream, reads hand landmarks, understands gesture patterns, and turns those gestures into stand-control actions.
+| Pause Video | End Record Video | Zoom In |
+| --- | --- | --- |
+| <img src="docs/images/demo-pause-video.png" alt="Pause video gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-end-record-video.png" alt="End record video gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-zoom-in.png" alt="Zoom in gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| Make a fist and hold for 1 second. | Hold the victory gesture for 2 seconds. | Pinch fingers together, then open outward. |
 
-The experience is built around fast visual feedback: users can see hand landmarks, current gesture status, confidence, detected hand count, zoom state, and recording state directly on top of the camera preview.
+| Zoom Out |
+| --- |
+| <img src="docs/images/demo-zoom-out.png" alt="Zoom out gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| Start with open fingers, then pinch together. |
 
-## Core Features
+## Features
 
-| Feature | Description |
+| Feature | What It Does |
 | --- | --- |
-| Control mode home | A polished mode picker for Automatic Detect, Hand Gesture, and Voice Command workflows. |
-| Real-time hand detection | Uses the `hand_detection` package to detect hands, bounding boxes, landmarks, handedness, and gesture confidence from camera frames. |
-| Direction gestures | Detects directional hand movement for left, right, up, and down control actions. |
-| Custom gestures | Recognizes app-specific actions such as start recording, pause video, detect face, and return to the main position. |
-| Follow-hand mode | Highlights the tracked hand and updates camera focus/exposure around the hand position. |
-| Gesture zoom | Supports zoom-in and zoom-out gestures, plus a manual floating zoom controller. |
-| Video recording flow | Includes gesture-based recording start, pause, continue, and stop behavior with clear loading states. |
-| Camera switching | Supports front/back camera switching and keeps preview, overlays, and detection behavior aligned across platforms. |
-| iOS and Android support | Handles platform-specific camera frame formats and preview coordinate mirroring. |
+| Control mode screen | Lets the user choose Automatic Detect, Hand Gesture, or Voice Command. |
+| Live hand detection | Detects hands, landmarks, handedness, and gesture confidence from the camera stream. |
+| Direction control | Reads left, right, up, and down hand movement. |
+| Face detect action | Uses the call gesture to trigger face recognition/follow behavior. |
+| Object follow action | Uses palm and fist gestures to start object-follow flow. |
+| Recording actions | Starts, pauses, continues, and ends video recording through hand gestures. |
+| Camera zoom | Supports zoom in and zoom out gestures plus a manual zoom overlay. |
+| Focus overlay | Highlights the selected hand and updates camera focus/exposure. |
+| Camera switching | Supports front and back cameras. |
+| Platform handling | Keeps Android and iOS camera frames, rotation, and mirror behavior aligned. |
 
 ## Gesture Actions
 
-| Gesture / Motion | App Response |
+| Function | Gesture Details |
 | --- | --- |
-| Move hand left | Shows `Moving left` and can drive left stand movement. |
-| Move hand right | Shows `Moving right` and can drive right stand movement. |
-| Move hand up | Shows `Moving up` and can drive upward stand movement. |
-| Move hand down | Shows `Moving down` and can drive downward stand movement. |
-| OK gesture | Starts video recording. |
-| Punch gesture | Pauses video recording. |
-| Victory gesture | Ends video recording. |
-| Call-me gesture | Starts face-detection/follow intent. |
-| Index circle | Returns the stand to the main position. |
-| Closed/open zoom gesture | Applies camera zoom in or zoom out. |
-
-## App Flow
-
-```mermaid
-flowchart TD
-    A["Open Smart Stand Control"] --> B["Choose Control Mode"]
-    B --> C["Hand Gesture Camera"]
-    C --> D["Camera Stream Frames"]
-    D --> E["Hand Detection Package"]
-    E --> F["Landmarks + Gesture Classification"]
-    F --> G["Custom Gesture Logic"]
-    G --> H["UI Feedback"]
-    G --> I["Stand / Camera Action"]
-    I --> J["Zoom, Focus, Recording, or Direction Control"]
-```
+| Move left | Swipe your open hand from center to left. Hold the position to continue moving. |
+| Move right | Swipe your open hand from center to right. Hold the position to continue moving. |
+| Move up | Point the index finger upward or move the palm upward. |
+| Move down | Point the index finger downward or move the palm downward. |
+| Detect my face | Make the call gesture. |
+| Follow the object | Hold your palm in front of the camera, make a fist, drag to the object, then release. |
+| Stop & Continue action | Show thumbs-up and hold for 1 second. |
+| Return to main position | Rotate your index finger in a small circle. |
+| Start record video | Hold the OK gesture for 1 second. |
+| Pause video | Make a fist and hold for 1 second. |
+| End record video | Make a victory sign and keep it for 2 seconds. |
+| Zoom in | Pinch fingers together, then open them outward. |
+| Zoom out | Start with open fingers, then pinch them together. |
 
 ## GitHub Image Template
 
 After uploading an image to a GitHub issue, pull request, or README editor, copy the generated `user-attachments` URL and paste it into the `src`.
 
 ```html
-<img src="https://github.com/user-attachments/assets/YOUR_IMAGE_ID" alt="Describe this app screen" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" />
+<img src="https://github.com/user-attachments/assets/YOUR_IMAGE_ID" alt="Screen name" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" />
 ```
 
-Suggested screenshot slots:
-
-```text
-Home / Mode Selection
-Live Gesture Detection
-Recording Controls
-Hand Focus Mode
-Zoom Control
-Camera Permission / Loading
-```
-
-Recommended screenshot tips:
-
-- Use real app screens, not cropped code screenshots.
-- Keep phone screenshots the same size for a clean gallery.
-- Prefer bright, readable images where the camera overlay, gesture label, and controls are visible.
-- If a screen has private information, blur it before placing it in `docs/images/`.
+GitHub may ignore inline `style`, but `width` and `height` work in README files.
 
 ## Tech Stack
 
@@ -120,8 +107,6 @@ Recommended screenshot tips:
 ## Project Structure
 
 For a guided map of where each feature lives, see [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md).
-
-Key areas:
 
 ```text
 lib/
@@ -169,7 +154,3 @@ fvm flutter run
 Copy `android/key.properties.example` to `android/key.properties` and fill it with your local release keystore values before building a release app bundle.
 
 Do not commit real signing secrets.
-
-## About
-
-Smart Stand Control is designed for hands-free camera and stand control. It combines live computer vision with a simple mobile interface so users can move, follow, zoom, and record without touching the screen.
