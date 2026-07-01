@@ -27,27 +27,27 @@ Replace each demo `src` with your own GitHub uploaded image URL when you have sc
 
 | Move Left | Move Right | Move Up |
 | --- | --- | --- |
-| <img src="docs/images/demo-move-left.png" alt="Move left gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-move-right.png" alt="Move right gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-move-up.png" alt="Move up gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| <img src="https://github.com/user-attachments/assets/2e4b3515-5f13-48f2-bb80-4d15b7f85b20" alt="Move left gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/60dfc86e-77b5-44d3-8b8c-ab3cc1154076" alt="Move right gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/1f37db34-16a2-41ac-b9f7-f6b9ab193377" alt="Move up gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
 | Swipe or hold the hand toward the left. | Swipe or hold the hand toward the right. | Point or move the hand upward. |
 
 | Move Down | Detect My Face | Follow The Object |
 | --- | --- | --- |
-| <img src="docs/images/demo-move-down.png" alt="Move down gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-detect-my-face.png" alt="Detect my face gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-follow-object.png" alt="Follow the object gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| <img src="https://github.com/user-attachments/assets/07960aca-6df4-48bf-a9f2-44144bb2716c" alt="Move down gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/db63e89d-38c9-40fd-a502-b816fe1b9cfd" alt="Detect my face gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/a3d40b80-2dd5-430c-b354-776421e602b9" alt="Follow the object gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
 | Point or move the hand downward. | Use the call gesture to start face detection. | Open palm, closed fist, then release on the object. |
 
 | Stop & Continue | Return To Main Position | Start Record Video |
 | --- | --- | --- |
-| <img src="docs/images/demo-stop-continue.png" alt="Stop and continue gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-return-main-position.png" alt="Return to main position gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-start-record-video.png" alt="Start record video gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| <img src="https://github.com/user-attachments/assets/638234dc-f41c-4e03-90eb-432e94ca4976" alt="Stop and continue gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/e6ffafc7-79b7-4a9c-a9b5-1b4989f84326" alt="Return to main position gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/033ba49a-8b9c-4992-b3d9-4c14b615cecf" alt="Start record video gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
 | Hold thumbs-up for 1 second. | Rotate the index finger in a small circle. | Hold the OK gesture for 1 second. |
 
 | Pause Video | End Record Video | Zoom In |
 | --- | --- | --- |
-| <img src="docs/images/demo-pause-video.png" alt="Pause video gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-end-record-video.png" alt="End record video gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="docs/images/demo-zoom-in.png" alt="Zoom in gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| <img src="https://github.com/user-attachments/assets/17f3c551-5a65-4bfe-bf0e-d6188aca8200" alt="Pause video gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/9d00df54-69be-49c4-9f56-bed01af41c78" alt="End record video gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/8082dd6e-4d67-4704-b511-2931f2181963" alt="Zoom in gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
 | Make a fist and hold for 1 second. | Hold the victory gesture for 2 seconds. | Pinch fingers together, then open outward. |
 
 | Zoom Out |
 | --- |
-| <img src="docs/images/demo-zoom-out.png" alt="Zoom out gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
+| <img src="https://github.com/user-attachments/assets/bd6b86df-cb8d-4bc0-b72e-7d8a2b5519cb" alt="Zoom out gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
 | Start with open fingers, then pinch together. |
 
 ## Features
