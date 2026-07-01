@@ -93,7 +93,7 @@ class CustomGestureDetector {
     final points = _indexCircleHistory.map((sample) => sample.point).toList();
 
     final allPointsStayUpper = points.every(
-      (point) => _isPointOnUpperPalmSide(
+          (point) => _isPointOnUpperPalmSide(
         pointY: point.dy,
         palmCenterY: palmCenter.dy,
         handSize: handSize,
@@ -257,14 +257,14 @@ class CustomGestureDetector {
 
     final indexFacesUp =
         indexTip.y < indexDip.y &&
-        indexDip.y < indexPip.y &&
-        indexTip.y <
-            palmCenter.dy -
-                handSize *
-                    HandGestureThresholds.indexUpperFacingMinDistanceRatio &&
-        indexPip.y < palmCenter.dy - handSize * 0.04 &&
-        (indexTip.x - indexMcp.x).abs() <=
-            handSize * HandGestureThresholds.indexUprightMaxSideOffsetRatio;
+            indexDip.y < indexPip.y &&
+            indexTip.y <
+                palmCenter.dy -
+                    handSize *
+                        HandGestureThresholds.indexUpperFacingMinDistanceRatio &&
+            indexPip.y < palmCenter.dy - handSize * 0.04 &&
+            (indexTip.x - indexMcp.x).abs() <=
+                handSize * HandGestureThresholds.indexUprightMaxSideOffsetRatio;
 
     final thumbIsClosed = _isThumbReallyClosedForIndexOnlyGesture(
       thumbTip: thumbTip,
@@ -394,7 +394,7 @@ class CustomGestureDetector {
 
     final touchIsAwayFromPalm =
         geometry.distanceBetweenOffsets(touchCenter, palmCenter) >
-        handSize * HandGestureThresholds.okTouchMinPalmDistanceRatio;
+            handSize * HandGestureThresholds.okTouchMinPalmDistanceRatio;
 
     final loopGapDistance = geometry.distanceBetweenLandmarks(
       thumbIp,
@@ -497,7 +497,7 @@ class CustomGestureDetector {
         geometry.distance(thumbTip, palmCenter) >
             geometry.distance(thumbIp, palmCenter) *
                 HandGestureThresholds.thumbExtendedRatio &&
-        geometry.distance(thumbTip, palmCenter) > handSize * 0.23;
+            geometry.distance(thumbTip, palmCenter) > handSize * 0.23;
 
     final pinkyIsOpen = geometry.isFingerExtended(
       tip: pinkyTip,
@@ -617,12 +617,10 @@ class CustomGestureDetector {
       handSize: handSize,
     );
 
+    // Thumb must be close to index finger for punch/closed fist.
     final thumbIsClosed =
-        geometry.distance(thumbTip, palmCenter) <=
-        math.max(
-          geometry.distance(thumbIp, palmCenter) * 1.06,
-          handSize * HandGestureThresholds.punchThumbMaxPalmDistanceRatio,
-        );
+        geometry.distanceBetweenLandmarks(thumbTip, indexTip) <=
+            math.max(handSize * 0.22, 14.0);
 
     final fingertips = [thumbTip, indexTip, middleTip, ringTip, pinkyTip];
 
@@ -641,7 +639,7 @@ class CustomGestureDetector {
 
     final tipsStayCompact =
         tipSpreadX <= handSize * HandGestureThresholds.punchTipMaxSpreadRatio &&
-        tipSpreadY <= handSize * HandGestureThresholds.punchTipMaxSpreadRatio;
+            tipSpreadY <= handSize * HandGestureThresholds.punchTipMaxSpreadRatio;
 
     final otherHandPoints = <Offset>[];
 
@@ -682,27 +680,27 @@ class CustomGestureDetector {
 
     final packageClosedFistSupport =
         hand.gesture != null &&
-        hand.gesture!.type == GestureType.closedFist &&
-        hand.gesture!.confidence >=
-            HandGestureThresholds.punchGestureMinPackageConfidence;
+            hand.gesture!.type == GestureType.closedFist &&
+            hand.gesture!.confidence >=
+                HandGestureThresholds.punchGestureMinPackageConfidence;
 
     final allClosed =
         thumbIsClosed &&
-        indexIsClosed &&
-        middleIsClosed &&
-        ringIsClosed &&
-        pinkyIsClosed;
+            indexIsClosed &&
+            middleIsClosed &&
+            ringIsClosed &&
+            pinkyIsClosed;
 
     final geometryPunchDetected =
         allClosed && tipsNearPalm && tipsStayCompact && wristInsideOtherPoints;
 
     final packagePunchDetected =
         packageClosedFistSupport &&
-        indexIsClosed &&
-        middleIsClosed &&
-        ringIsClosed &&
-        pinkyIsClosed &&
-        wristInsideOtherPoints;
+            indexIsClosed &&
+            middleIsClosed &&
+            ringIsClosed &&
+            pinkyIsClosed &&
+            wristInsideOtherPoints;
 
     return geometryPunchDetected || packagePunchDetected;
   }
@@ -734,16 +732,16 @@ class CustomGestureDetector {
 
     final thumbTipCloseToPalm =
         thumbTipToPalm <=
-        handSize * HandGestureThresholds.closedThumbMaxPalmDistanceRatio;
+            handSize * HandGestureThresholds.closedThumbMaxPalmDistanceRatio;
     final thumbTipNotPastIp =
         thumbTipToPalm <=
-        thumbIpToPalm * HandGestureThresholds.closedThumbTipIpPalmRatio;
+            thumbIpToPalm * HandGestureThresholds.closedThumbTipIpPalmRatio;
     final thumbTipCloseToPalmKnuckles =
         math.min(thumbTipToIndexMcp, thumbTipToMiddleMcp) <=
-        handSize * HandGestureThresholds.closedThumbMaxKnuckleDistanceRatio;
+            handSize * HandGestureThresholds.closedThumbMaxKnuckleDistanceRatio;
     final thumbNotStretchedOut =
         thumbTipToThumbMcp <=
-        handSize * HandGestureThresholds.closedThumbMaxTipMcpDistanceRatio;
+            handSize * HandGestureThresholds.closedThumbMaxTipMcpDistanceRatio;
 
     return thumbTipCloseToPalm &&
         thumbTipNotPastIp &&
