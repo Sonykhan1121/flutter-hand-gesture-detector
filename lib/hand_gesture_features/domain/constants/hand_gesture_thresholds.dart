@@ -84,4 +84,10 @@ abstract final class HandGestureThresholds {
   static const Duration zoomMaxGestureDuration = Duration(milliseconds: 2600);
   static const Duration zoomMinGestureDuration = Duration(milliseconds: 90);
   static const Duration zoomHoldDuration = Duration(milliseconds: 650);
+
+  static const Duration minFrameProcessInterval = Duration(milliseconds: 100);
+  static const double zoomStep = 0.2;
+  static const Duration recordStartHoldDuration = Duration(seconds: 1);
+  static const Duration recordPauseHoldDuration = Duration(seconds: 1);
+  static const Duration recordStopHoldDuration = Duration(seconds: 2);
 }

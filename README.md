@@ -12,6 +12,9 @@ fvm flutter analyze
 fvm flutter test
 ```
 
+For a guided map of where each feature lives, see
+[`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md).
+
 ## Android Release Signing
 
 Copy `android/key.properties.example` to `android/key.properties` and fill it with your local release keystore values before building a release app bundle. Do not commit real signing secrets.

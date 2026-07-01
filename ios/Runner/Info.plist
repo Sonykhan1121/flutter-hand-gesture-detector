@@ -27,7 +27,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Smart Stand Control uses the camera to detect hand gestures for stand controls.</string>
+	<string>Smart Stand Control uses the camera to detect hand gestures, show a live preview, and record videos for stand control actions.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Smart Stand Control uses the microphone to record audio while capturing videos.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

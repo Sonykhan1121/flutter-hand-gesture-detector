@@ -6,11 +6,13 @@ class HandLandmarkOverlayPainter extends CustomPainter {
     required this.hands,
     required this.imageSize,
     required this.mirrorHorizontally,
+    this.previewQuarterTurns = 0,
   });
 
   final List<Hand> hands;
   final Size imageSize;
   final bool mirrorHorizontally;
+  final int previewQuarterTurns;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -18,27 +20,38 @@ class HandLandmarkOverlayPainter extends CustomPainter {
       return;
     }
 
-    final skeletonPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round
-      ..color = const Color(0xFF00FB46);
+    final skeletonPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round
+          ..color = const Color(0xFF00FB46);
 
-    final pointPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = const Color(0xFFFFD54F);
+    final pointPaint =
+        Paint()
+          ..style = PaintingStyle.fill
+          ..color = const Color(0xFFFFD54F);
 
-    final pointBorderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = Colors.black;
+    final pointBorderPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..color = Colors.black;
 
     Offset mapPoint(double x, double y) {
-      final mappedX = x * size.width / imageSize.width;
-      final mappedY = y * size.height / imageSize.height;
+      final normalizedX = (x / imageSize.width).clamp(0.0, 1.0);
+      final normalizedY = (y / imageSize.height).clamp(0.0, 1.0);
+      final rotatedPoint = _rotateNormalizedPoint(
+        Offset(normalizedX, normalizedY),
+      );
+      final displayPoint =
+          mirrorHorizontally
+              ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
+              : rotatedPoint;
+
       return Offset(
-        mirrorHorizontally ? size.width - mappedX : mappedX,
-        mappedY,
+        displayPoint.dx * size.width,
+        displayPoint.dy * size.height,
       );
     }
 
@@ -67,6 +80,19 @@ class HandLandmarkOverlayPainter extends CustomPainter {
     }
   }
 
+  Offset _rotateNormalizedPoint(Offset point) {
+    switch (previewQuarterTurns % 4) {
+      case 1:
+        return Offset(1 - point.dy, point.dx);
+      case 2:
+        return Offset(1 - point.dx, 1 - point.dy);
+      case 3:
+        return Offset(point.dy, 1 - point.dx);
+      default:
+        return point;
+    }
+  }
+
   void _drawLandmarkIndex(Canvas canvas, String text, Offset center) {
     final textPainter = TextPainter(
       text: TextSpan(
@@ -88,6 +114,7 @@ class HandLandmarkOverlayPainter extends CustomPainter {
   bool shouldRepaint(covariant HandLandmarkOverlayPainter oldDelegate) {
     return oldDelegate.hands != hands ||
         oldDelegate.imageSize != imageSize ||
-        oldDelegate.mirrorHorizontally != mirrorHorizontally;
+        oldDelegate.mirrorHorizontally != mirrorHorizontally ||
+        oldDelegate.previewQuarterTurns != previewQuarterTurns;
   }
 }
