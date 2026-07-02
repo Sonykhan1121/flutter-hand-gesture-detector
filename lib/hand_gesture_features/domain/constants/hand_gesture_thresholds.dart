@@ -24,6 +24,12 @@ abstract final class HandGestureThresholds {
   static const Duration followObjectFirstOpenPalmHoldDuration = Duration(
     seconds: 1,
   );
+  static const double followTargetReleasePointPadding = 0.025;
+  static const double followTargetMinTrackingOverlap = 0.08;
+  static const double followTargetMaxTrackingDistance = 0.18;
+  static const Duration followTargetLostHoldDuration = Duration(
+    milliseconds: 900,
+  );
 
   static const double minLandmarkVisibility = 0.60;
 

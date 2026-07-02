@@ -69,8 +69,20 @@ extension on _AdminHandGestureLiveScreenState {
   }
 
   Future<void> _initializeDetector() async {
-    if (_handDetector != null) return;
-    _handDetector = await HandDetectorFactory.create();
+    _handDetector ??= await HandDetectorFactory.create();
+    _faceDetector ??= ml_face.FaceDetector(
+      options: ml_face.FaceDetectorOptions(
+        enableTracking: true,
+        performanceMode: ml_face.FaceDetectorMode.fast,
+      ),
+    );
+    _objectDetector ??= ml_object.ObjectDetector(
+      options: ml_object.ObjectDetectorOptions(
+        mode: ml_object.DetectionMode.stream,
+        classifyObjects: true,
+        multipleObjects: true,
+      ),
+    );
   }
 
   Future<void> _initializeCamera() async {
@@ -96,10 +108,11 @@ extension on _AdminHandGestureLiveScreenState {
         selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup:
-            Platform.isAndroid || Platform.isIOS
-                ? ImageFormatGroup.yuv420
-                : ImageFormatGroup.bgra8888,
+        imageFormatGroup: Platform.isIOS
+            ? ImageFormatGroup.bgra8888
+            : Platform.isAndroid
+            ? ImageFormatGroup.yuv420
+            : ImageFormatGroup.bgra8888,
       );
 
       _controller = controller;
@@ -132,6 +145,8 @@ extension on _AdminHandGestureLiveScreenState {
         _isFollowingHand = false;
         _focusedHandBox = null;
         _focusImageSize = null;
+        _lockedFollowTarget = null;
+        _lockedFollowTargetLostAt = null;
         _lastFrameProcessedAt = null;
       });
 
@@ -303,6 +318,7 @@ extension on _AdminHandGestureLiveScreenState {
 
     _zoomGestureDetector.clearState();
     _followObjectSequenceDetector.clear();
+    _clearLockedFollowTarget();
     _clearRecordingGestureHold();
     _zoomControlAutoHideTimer?.cancel();
     _gestureZoomSuppressedUntil = null;
@@ -325,6 +341,8 @@ extension on _AdminHandGestureLiveScreenState {
       _isFollowingHand = false;
       _focusedHandBox = null;
       _focusImageSize = null;
+      _lockedFollowTarget = null;
+      _lockedFollowTargetLostAt = null;
       _isZoomControlVisible = false;
       _isManualZoomInteractionActive = false;
       _pendingZoomLevel = null;
@@ -379,6 +397,7 @@ extension on _AdminHandGestureLiveScreenState {
 
     _zoomGestureDetector.clearState();
     _followObjectSequenceDetector.clear();
+    _clearLockedFollowTarget();
     _clearRecordingGestureHold();
 
     if (!mounted) return;
@@ -398,6 +417,8 @@ extension on _AdminHandGestureLiveScreenState {
       _isFollowingHand = false;
       _focusedHandBox = null;
       _focusImageSize = null;
+      _lockedFollowTarget = null;
+      _lockedFollowTargetLostAt = null;
       _isZoomControlVisible = false;
     });
   }

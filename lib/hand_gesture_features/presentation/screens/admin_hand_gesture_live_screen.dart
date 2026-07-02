@@ -4,19 +4,27 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart'
+    as ml_face;
+import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart'
+    as ml_object;
 import 'package:hand_detection/hand_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../../utils/app_snack_bar.dart';
 import '../../data/factories/hand_detector_factory.dart';
 import '../../domain/constants/hand_gesture_thresholds.dart';
+import '../../domain/enums/follow_target_type.dart';
 import '../../domain/enums/hand_move_direction.dart';
 import '../../domain/enums/zoom_direction.dart';
 import '../../domain/models/custom_gesture_detection_result.dart';
+import '../../domain/models/follow_target.dart';
 import '../../domain/services/custom_gesture_detector.dart';
 import '../../domain/services/direction_gesture_detector.dart';
 import '../../domain/services/follow_object_sequence_detector.dart';
+import '../../domain/services/follow_target_selector.dart';
 import '../../domain/services/zoom_gesture_detector.dart';
+import '../painters/follow_target_overlay_painter.dart';
 import '../painters/hand_focus_overlay_painter.dart';
 import '../painters/hand_landmark_overlay_painter.dart';
 import '../painters/recording_hand_landmark_overlay_painter.dart';
@@ -48,10 +56,13 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
   HandDetector? _handDetector;
+  ml_face.FaceDetector? _faceDetector;
+  ml_object.ObjectDetector? _objectDetector;
 
   final _customGestureDetector = CustomGestureDetector();
   final _directionGestureDetector = const DirectionGestureDetector();
   final _zoomGestureDetector = ZoomGestureDetector();
+  final _followTargetSelector = const FollowTargetSelector();
 
   late final FollowObjectSequenceDetector _followObjectSequenceDetector;
 
@@ -91,6 +102,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   Size? _detectionImageSize;
   Rect? _focusedHandBox;
   Size? _focusImageSize;
+  FollowTarget? _lockedFollowTarget;
+  DateTime? _lockedFollowTargetLostAt;
   DateTime? _lastFrameProcessedAt;
   DateTime? _lastCameraFocusPointSetAt;
   DateTime? _lastOrientationDebugPrintedAt;
@@ -132,6 +145,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
     }
 
     unawaited(_handDetector?.dispose() ?? Future<void>.value());
+    unawaited(_faceDetector?.close() ?? Future<void>.value());
+    unawaited(_objectDetector?.close() ?? Future<void>.value());
     super.dispose();
   }
 

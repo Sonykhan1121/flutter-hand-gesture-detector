@@ -35,20 +35,21 @@ extension on _AdminHandGestureLiveScreenState {
         maxDim: HandGestureThresholds.maxDetectionDimension,
       );
 
-      debugPrint(
-        'image send to detectFromCameraImage : $image ${Platform.isIOS}',
-      );
       final hands = await detector.detectFromCameraImage(
         image,
         rotation: rotation,
-        isBgra: Platform.isMacOS,
+        isBgra: Platform.isMacOS || Platform.isIOS,
         maxDim: HandGestureThresholds.maxDetectionDimension,
       );
-      debugPrint('hands : ${hands.length}');
 
       if (!mounted) return;
 
-      _updateGestureState(hands, detectionImageSize);
+      await _updateGestureState(
+        hands,
+        detectionImageSize,
+        image: image,
+        rotation: rotation,
+      );
     } catch (e, st) {
       debugPrint('Hand gesture detection error: $e\n$st');
     } finally {
@@ -90,22 +91,38 @@ extension on _AdminHandGestureLiveScreenState {
     return rotation;
   }
 
-  void _updateGestureState(List<Hand> hands, Size detectionImageSize) {
+  Future<void> _updateGestureState(
+    List<Hand> hands,
+    Size detectionImageSize, {
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+  }) async {
+    final now = DateTime.now();
+    final trackedFollowTarget = await _refreshLockedFollowTarget(
+      image: image,
+      rotation: rotation,
+      now: now,
+    );
+    if (!mounted) return;
+
     if (hands.isEmpty) {
-      _zoomGestureDetector.markPoseInvalid(DateTime.now());
+      _zoomGestureDetector.markPoseInvalid(now);
       _followObjectSequenceDetector.clear();
       _clearRecordingGestureHold();
 
       _setScreenState(() {
-        _gestureText = 'No hand detected';
+        _gestureText = trackedFollowTarget == null
+            ? 'No hand detected'
+            : _followTargetText(trackedFollowTarget);
         _handText = '';
-        _gestureConfidence = 0;
+        _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
         _detectedHandsCount = 0;
         _hands = const [];
         _detectionImageSize = detectionImageSize;
         _isFollowingHand = false;
         _focusedHandBox = null;
         _focusImageSize = null;
+        _lockedFollowTarget = trackedFollowTarget;
       });
       return;
     }
@@ -115,7 +132,7 @@ extension on _AdminHandGestureLiveScreenState {
         .toList(growable: false);
 
     if (reliableHands.isEmpty) {
-      if (_isFollowingHand) {
+      if (_isFollowingHand && trackedFollowTarget == null) {
         final trackedHand = _selectTrackedHand(hands);
         _updateFocusedHand(hand: trackedHand, imageSize: detectionImageSize);
 
@@ -130,7 +147,7 @@ extension on _AdminHandGestureLiveScreenState {
         return;
       }
 
-      _zoomGestureDetector.markPoseInvalid(DateTime.now());
+      _zoomGestureDetector.markPoseInvalid(now);
       _followObjectSequenceDetector.clear();
       _clearRecordingGestureHold();
 
@@ -139,24 +156,25 @@ extension on _AdminHandGestureLiveScreenState {
         _detectionImageSize = detectionImageSize;
         _detectedHandsCount = hands.length;
         _handText = '';
-        _gestureText = 'Move hand closer';
-        _gestureConfidence = 0;
+        _gestureText = trackedFollowTarget == null
+            ? 'Move hand closer'
+            : _followTargetText(trackedFollowTarget);
+        _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
         _isFollowingHand = false;
         _focusedHandBox = null;
         _focusImageSize = null;
+        _lockedFollowTarget = trackedFollowTarget;
       });
       return;
     }
 
-    final bestHand =
-        _isFollowingHand
-            ? _selectTrackedHand(hands)
-            : reliableHands.reduce(
-              (currentBest, next) =>
-                  next.score > currentBest.score ? next : currentBest,
-            );
+    final bestHand = _isFollowingHand && trackedFollowTarget == null
+        ? _selectTrackedHand(hands)
+        : reliableHands.reduce(
+            (currentBest, next) =>
+                next.score > currentBest.score ? next : currentBest,
+          );
 
-    final now = DateTime.now();
     final mirrorDirectionalGestureCoordinates =
         _shouldMirrorDirectionalGestureCoordinates(_controller);
     final mirrorPalmGestureCoordinates = _shouldMirrorPalmGestureCoordinates(
@@ -173,9 +191,41 @@ extension on _AdminHandGestureLiveScreenState {
       allowOppositePalmSide: allowBackCameraPalmFallback,
     );
 
+    var lockedFollowTarget = trackedFollowTarget;
+    var releaseHadNoTarget = false;
+    final releasePoint = followObjectSequence.releasePoint;
+    if (releasePoint != null) {
+      final releaseDisplayPoint = _handPointToDisplayPoint(
+        releasePoint,
+        detectionImageSize,
+      );
+      lockedFollowTarget = await _selectFollowTargetAtReleasePoint(
+        releaseDisplayPoint,
+        image: image,
+        rotation: rotation,
+        now: now,
+      );
+      if (!mounted) return;
+
+      if (lockedFollowTarget == null) {
+        releaseHadNoTarget = true;
+        _clearLockedFollowTarget();
+      } else {
+        _lockedFollowTarget = lockedFollowTarget;
+        _lockedFollowTargetLostAt = null;
+        _isFollowingHand = false;
+        _focusedHandBox = null;
+        _focusImageSize = null;
+        unawaited(_updateCameraFocusPointForTarget(lockedFollowTarget));
+      }
+    }
+
     final followObjectSequenceActive = followObjectSequence.isActive;
-    final followObjectDetected = followObjectSequence.isDetected;
-    final followTrackingActive = _isFollowingHand || followObjectSequenceActive;
+    final followObjectDetected =
+        followObjectSequence.isDetected && lockedFollowTarget == null;
+    final followTargetActive = lockedFollowTarget != null;
+    final followTrackingActive =
+        followTargetActive || _isFollowingHand || followObjectSequenceActive;
 
     final gesture = bestHand.gesture;
     final hasKnownGesture =
@@ -185,14 +235,13 @@ extension on _AdminHandGestureLiveScreenState {
         gesture.type != GestureType.openPalm &&
         gesture.confidence >= HandGestureThresholds.minPackageGestureConfidence;
 
-    final customGestureResult =
-        followTrackingActive
-            ? CustomGestureDetectionResult.empty
-            : _customGestureDetector.detect(
-              hand: bestHand,
-              imageSize: detectionImageSize,
-              mirrorHorizontally: mirrorDirectionalGestureCoordinates,
-            );
+    final customGestureResult = followTrackingActive
+        ? CustomGestureDetectionResult.empty
+        : _customGestureDetector.detect(
+            hand: bestHand,
+            imageSize: detectionImageSize,
+            mirrorHorizontally: mirrorDirectionalGestureCoordinates,
+          );
 
     final customGestureLabels = customGestureResult.labels;
     final hasSingleCustomGesture = customGestureLabels.length == 1;
@@ -216,14 +265,14 @@ extension on _AdminHandGestureLiveScreenState {
 
     final moveDirection =
         !followTrackingActive &&
-                customGestureLabels.isEmpty &&
-                !recordingGestureActive
-            ? _directionGestureDetector.detect(
-              hand: bestHand,
-              imageSize: detectionImageSize,
-              mirrorHorizontally: mirrorDirectionalGestureCoordinates,
-            )
-            : HandMoveDirection.none;
+            customGestureLabels.isEmpty &&
+            !recordingGestureActive
+        ? _directionGestureDetector.detect(
+            hand: bestHand,
+            imageSize: detectionImageSize,
+            mirrorHorizontally: mirrorDirectionalGestureCoordinates,
+          )
+        : HandMoveDirection.none;
 
     final hasDirectionGesture = moveDirection != HandMoveDirection.none;
 
@@ -233,15 +282,15 @@ extension on _AdminHandGestureLiveScreenState {
 
     final zoomDirection =
         !followTrackingActive &&
-                customGestureLabels.isEmpty &&
-                !recordingGestureActive &&
-                !hasDirectionGesture
-            ? _zoomGestureDetector.detect(
-              hand: bestHand,
-              imageSize: detectionImageSize,
-              allowPartialZoomOut: _shouldAllowPartialZoomOutRecovery,
-            )
-            : ZoomDirection.none;
+            customGestureLabels.isEmpty &&
+            !recordingGestureActive &&
+            !hasDirectionGesture
+        ? _zoomGestureDetector.detect(
+            hand: bestHand,
+            imageSize: detectionImageSize,
+            allowPartialZoomOut: _shouldAllowPartialZoomOutRecovery,
+          )
+        : ZoomDirection.none;
 
     _handleZoomDirection(zoomDirection);
 
@@ -249,9 +298,11 @@ extension on _AdminHandGestureLiveScreenState {
         followObjectSequence.packageGestureType?.displayLabel;
 
     final shouldFocusOnHand =
-        _isFollowingHand ||
-        (followObjectSequenceActive &&
-            followObjectSequence.packageGestureType == GestureType.closedFist);
+        !followTargetActive &&
+        (_isFollowingHand ||
+            (followObjectSequenceActive &&
+                followObjectSequence.packageGestureType ==
+                    GestureType.closedFist));
 
     if (shouldFocusOnHand) {
       _updateFocusedHand(hand: bestHand, imageSize: detectionImageSize);
@@ -261,6 +312,7 @@ extension on _AdminHandGestureLiveScreenState {
       _hands = hands;
       _detectionImageSize = detectionImageSize;
       _isFollowingHand = shouldFocusOnHand;
+      _lockedFollowTarget = lockedFollowTarget;
       if (!shouldFocusOnHand) {
         _focusedHandBox = null;
         _focusImageSize = null;
@@ -268,8 +320,14 @@ extension on _AdminHandGestureLiveScreenState {
       _detectedHandsCount = hands.length;
       _handText = bestHand.handedness.displayLabel;
 
-      if (followObjectDetected) {
-        _gestureText = 'Follow the object';
+      if (followTargetActive) {
+        _gestureText = _followTargetText(lockedFollowTarget!);
+        _gestureConfidence = 1;
+      } else if (releaseHadNoTarget) {
+        _gestureText = 'No face or object selected';
+        _gestureConfidence = 0;
+      } else if (followObjectDetected) {
+        _gestureText = 'Release on a face or object';
         _gestureConfidence = 1;
       } else if (_isFollowingHand) {
         _gestureText = 'Following hand';
@@ -367,16 +425,411 @@ extension on _AdminHandGestureLiveScreenState {
     return dx * dx + dy * dy;
   }
 
+  Future<FollowTarget?> _selectFollowTargetAtReleasePoint(
+    Offset releasePoint, {
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+    required DateTime now,
+  }) async {
+    final detections = await _detectFollowTargets(
+      image: image,
+      rotation: rotation,
+      now: now,
+      includeFaces: true,
+      includeObjects: true,
+    );
+    if (detections == null) return null;
+
+    return _followTargetSelector.select(
+      releasePoint: releasePoint,
+      faces: detections.faces,
+      objects: detections.objects,
+    );
+  }
+
+  Future<FollowTarget?> _refreshLockedFollowTarget({
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+    required DateTime now,
+  }) async {
+    final previous = _lockedFollowTarget;
+    if (previous == null) return null;
+
+    final detections = await _detectFollowTargets(
+      image: image,
+      rotation: rotation,
+      now: now,
+      includeFaces: previous.type == FollowTargetType.face,
+      includeObjects: previous.type == FollowTargetType.object,
+    );
+    if (detections == null) return _keepOrClearLostFollowTarget(now);
+
+    final candidates = previous.type == FollowTargetType.face
+        ? detections.faces
+        : detections.objects;
+    final updated = _followTargetSelector.track(
+      previous: previous,
+      candidates: candidates,
+    );
+
+    if (updated == null) return _keepOrClearLostFollowTarget(now);
+
+    _lockedFollowTarget = updated;
+    _lockedFollowTargetLostAt = null;
+    unawaited(_updateCameraFocusPointForTarget(updated));
+    return updated;
+  }
+
+  Future<_FollowTargetDetections?> _detectFollowTargets({
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+    required DateTime now,
+    required bool includeFaces,
+    required bool includeObjects,
+  }) async {
+    if (!Platform.isAndroid && !Platform.isIOS) return null;
+
+    final inputImage = _inputImageFromCameraImage(image, rotation);
+    if (inputImage == null) return null;
+
+    final inputRotation = _inputImageRotationFromCameraFrameRotation(rotation);
+    final imageSize = Size(image.width.toDouble(), image.height.toDouble());
+    var faces = const <FollowTarget>[];
+    var objects = const <FollowTarget>[];
+
+    if (includeFaces) {
+      final faceDetector = _faceDetector;
+      if (faceDetector != null) {
+        try {
+          final detectedFaces = await faceDetector.processImage(inputImage);
+          faces = [
+            for (final face in detectedFaces)
+              FollowTarget(
+                type: FollowTargetType.face,
+                boundingBox: face.boundingBox,
+                displayBox: _mlKitRectToDisplayBox(
+                  face.boundingBox,
+                  imageSize: imageSize,
+                  rotation: inputRotation,
+                ),
+                detectedAt: now,
+                trackingId: face.trackingId,
+                label: 'Face',
+              ),
+          ];
+        } catch (e, st) {
+          debugPrint('Face detection ignored: $e\n$st');
+        }
+      }
+    }
+
+    if (includeObjects) {
+      final objectDetector = _objectDetector;
+      if (objectDetector != null) {
+        try {
+          final detectedObjects = await objectDetector.processImage(inputImage);
+          objects = [
+            for (final object in detectedObjects)
+              FollowTarget(
+                type: FollowTargetType.object,
+                boundingBox: object.boundingBox,
+                displayBox: _mlKitRectToDisplayBox(
+                  object.boundingBox,
+                  imageSize: imageSize,
+                  rotation: inputRotation,
+                ),
+                detectedAt: now,
+                trackingId: object.trackingId,
+                label: _objectLabel(object),
+              ),
+          ];
+        } catch (e, st) {
+          debugPrint('Object detection ignored: $e\n$st');
+        }
+      }
+    }
+
+    return _FollowTargetDetections(faces: faces, objects: objects);
+  }
+
+  ml_face.InputImage? _inputImageFromCameraImage(
+    CameraImage image,
+    CameraFrameRotation? rotation,
+  ) {
+    if (Platform.isAndroid) {
+      final bytes = _androidNv21Bytes(image);
+      if (bytes == null) return null;
+
+      return ml_face.InputImage.fromBytes(
+        bytes: bytes,
+        metadata: ml_face.InputImageMetadata(
+          size: Size(image.width.toDouble(), image.height.toDouble()),
+          rotation: _inputImageRotationFromCameraFrameRotation(rotation),
+          format: ml_face.InputImageFormat.nv21,
+          bytesPerRow: image.planes.first.bytesPerRow,
+        ),
+      );
+    }
+
+    if (Platform.isIOS) {
+      final format = ml_face.InputImageFormatValue.fromRawValue(
+        image.format.raw,
+      );
+      if (format != ml_face.InputImageFormat.bgra8888 ||
+          image.planes.length != 1) {
+        return null;
+      }
+
+      final plane = image.planes.first;
+      return ml_face.InputImage.fromBytes(
+        bytes: plane.bytes,
+        metadata: ml_face.InputImageMetadata(
+          size: Size(image.width.toDouble(), image.height.toDouble()),
+          rotation: _inputImageRotationFromCameraFrameRotation(rotation),
+          format: format!,
+          bytesPerRow: plane.bytesPerRow,
+        ),
+      );
+    }
+
+    return null;
+  }
+
+  Uint8List? _androidNv21Bytes(CameraImage image) {
+    final format = ml_face.InputImageFormatValue.fromRawValue(image.format.raw);
+    if (format == ml_face.InputImageFormat.nv21 && image.planes.length == 1) {
+      return image.planes.first.bytes;
+    }
+
+    if (image.planes.length < 3 || image.width.isOdd || image.height.isOdd) {
+      return null;
+    }
+
+    final width = image.width;
+    final height = image.height;
+    final yPlane = image.planes[0];
+    final uPlane = image.planes[1];
+    final vPlane = image.planes[2];
+    final ySize = width * height;
+    final out = Uint8List(ySize + width * height ~/ 2);
+
+    for (var row = 0; row < height; row++) {
+      for (var col = 0; col < width; col++) {
+        out[row * width + col] = _planeValue(yPlane, row, col);
+      }
+    }
+
+    final chromaHeight = height ~/ 2;
+    final chromaWidth = width ~/ 2;
+    for (var row = 0; row < chromaHeight; row++) {
+      for (var col = 0; col < chromaWidth; col++) {
+        final outIndex = ySize + row * width + col * 2;
+        out[outIndex] = _planeValue(vPlane, row, col);
+        out[outIndex + 1] = _planeValue(uPlane, row, col);
+      }
+    }
+
+    return out;
+  }
+
+  int _planeValue(Plane plane, int row, int col) {
+    final pixelStride = plane.bytesPerPixel ?? 1;
+    final index = row * plane.bytesPerRow + col * pixelStride;
+    if (index < 0 || index >= plane.bytes.length) return 128;
+    return plane.bytes[index];
+  }
+
+  ml_face.InputImageRotation _inputImageRotationFromCameraFrameRotation(
+    CameraFrameRotation? rotation,
+  ) {
+    switch (rotation) {
+      case CameraFrameRotation.cw90:
+        return ml_face.InputImageRotation.rotation90deg;
+      case CameraFrameRotation.cw180:
+        return ml_face.InputImageRotation.rotation180deg;
+      case CameraFrameRotation.cw270:
+        return ml_face.InputImageRotation.rotation270deg;
+      case null:
+        return ml_face.InputImageRotation.rotation0deg;
+    }
+  }
+
+  Rect _mlKitRectToDisplayBox(
+    Rect rect, {
+    required Size imageSize,
+    required ml_face.InputImageRotation rotation,
+  }) {
+    final topLeft = _mlKitPointToDisplayPoint(
+      Offset(rect.left, rect.top),
+      imageSize: imageSize,
+      rotation: rotation,
+    );
+    final bottomRight = _mlKitPointToDisplayPoint(
+      Offset(rect.right, rect.bottom),
+      imageSize: imageSize,
+      rotation: rotation,
+    );
+
+    return Rect.fromLTRB(
+      (topLeft.dx < bottomRight.dx ? topLeft.dx : bottomRight.dx).clamp(0, 1),
+      (topLeft.dy < bottomRight.dy ? topLeft.dy : bottomRight.dy).clamp(0, 1),
+      (topLeft.dx > bottomRight.dx ? topLeft.dx : bottomRight.dx).clamp(0, 1),
+      (topLeft.dy > bottomRight.dy ? topLeft.dy : bottomRight.dy).clamp(0, 1),
+    );
+  }
+
+  Offset _mlKitPointToDisplayPoint(
+    Offset point, {
+    required Size imageSize,
+    required ml_face.InputImageRotation rotation,
+  }) {
+    final mirrorHorizontally = _shouldMirrorPreviewCoordinates(_controller);
+    final x = _translateMlKitX(
+      point.dx,
+      imageSize: imageSize,
+      rotation: rotation,
+      mirrorHorizontally: mirrorHorizontally,
+    );
+    final y = _translateMlKitY(
+      point.dy,
+      imageSize: imageSize,
+      rotation: rotation,
+    );
+
+    return Offset(x.clamp(0, 1), y.clamp(0, 1));
+  }
+
+  double _translateMlKitX(
+    double x, {
+    required Size imageSize,
+    required ml_face.InputImageRotation rotation,
+    required bool mirrorHorizontally,
+  }) {
+    switch (rotation) {
+      case ml_face.InputImageRotation.rotation90deg:
+        return x / (Platform.isIOS ? imageSize.width : imageSize.height);
+      case ml_face.InputImageRotation.rotation270deg:
+        return 1 - x / (Platform.isIOS ? imageSize.width : imageSize.height);
+      case ml_face.InputImageRotation.rotation0deg:
+      case ml_face.InputImageRotation.rotation180deg:
+        final normalizedX = x / imageSize.width;
+        return mirrorHorizontally ? 1 - normalizedX : normalizedX;
+    }
+  }
+
+  double _translateMlKitY(
+    double y, {
+    required Size imageSize,
+    required ml_face.InputImageRotation rotation,
+  }) {
+    switch (rotation) {
+      case ml_face.InputImageRotation.rotation90deg:
+      case ml_face.InputImageRotation.rotation270deg:
+        return y / (Platform.isIOS ? imageSize.height : imageSize.width);
+      case ml_face.InputImageRotation.rotation0deg:
+      case ml_face.InputImageRotation.rotation180deg:
+        return y / imageSize.height;
+    }
+  }
+
+  Offset _handPointToDisplayPoint(Offset point, Size imageSize) {
+    if (imageSize.width <= 0 || imageSize.height <= 0) {
+      return Offset.zero;
+    }
+
+    final normalizedPoint = Offset(
+      (point.dx / imageSize.width).clamp(0.0, 1.0),
+      (point.dy / imageSize.height).clamp(0.0, 1.0),
+    );
+    final controller = _controller;
+    final rotatedPoint = controller == null
+        ? normalizedPoint
+        : _rotateNormalizedPoint(
+            normalizedPoint,
+            _previewQuarterTurnsForOverlays(controller),
+          );
+    final displayPoint = _shouldMirrorPreviewCoordinates(controller)
+        ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
+        : rotatedPoint;
+
+    return Offset(
+      displayPoint.dx.clamp(0.0, 1.0),
+      displayPoint.dy.clamp(0.0, 1.0),
+    );
+  }
+
+  Offset _rotateNormalizedPoint(Offset point, int quarterTurns) {
+    switch (quarterTurns % 4) {
+      case 1:
+        return Offset(1 - point.dy, point.dx);
+      case 2:
+        return Offset(1 - point.dx, 1 - point.dy);
+      case 3:
+        return Offset(point.dy, 1 - point.dx);
+      default:
+        return point;
+    }
+  }
+
+  String _objectLabel(ml_object.DetectedObject object) {
+    if (object.labels.isEmpty) return 'Object';
+
+    final bestLabel = object.labels.reduce(
+      (currentBest, next) =>
+          next.confidence > currentBest.confidence ? next : currentBest,
+    );
+    return bestLabel.text.isEmpty ? 'Object' : bestLabel.text;
+  }
+
+  String _followTargetText(FollowTarget target) {
+    return 'Following ${target.displayLabel.toLowerCase()}';
+  }
+
+  FollowTarget? _keepOrClearLostFollowTarget(DateTime now) {
+    final previous = _lockedFollowTarget;
+    if (previous == null) return null;
+
+    final lostAt = _lockedFollowTargetLostAt;
+    if (lostAt == null) {
+      _lockedFollowTargetLostAt = now;
+      return previous;
+    }
+
+    if (now.difference(lostAt) <=
+        HandGestureThresholds.followTargetLostHoldDuration) {
+      return previous;
+    }
+
+    _clearLockedFollowTarget();
+    return null;
+  }
+
+  void _clearLockedFollowTarget() {
+    _lockedFollowTarget = null;
+    _lockedFollowTargetLostAt = null;
+  }
+
   Future<void> _updateCameraFocusPoint({
     required Hand hand,
     required Size imageSize,
   }) async {
+    final box = hand.boundingBox;
+    await _updateCameraFocusAtNormalizedPoint(
+      Offset(
+        (((box.left + box.right) / 2) / imageSize.width).clamp(0.0, 1.0),
+        (((box.top + box.bottom) / 2) / imageSize.height).clamp(0.0, 1.0),
+      ),
+    );
+  }
+
+  Future<void> _updateCameraFocusPointForTarget(FollowTarget target) async {
+    await _updateCameraFocusAtNormalizedPoint(target.displayBox.center);
+  }
+
+  Future<void> _updateCameraFocusAtNormalizedPoint(Offset focusPoint) async {
     final controller = _controller;
 
-    if (controller == null ||
-        !controller.value.isInitialized ||
-        imageSize.width <= 0 ||
-        imageSize.height <= 0) {
+    if (controller == null || !controller.value.isInitialized) {
       return;
     }
 
@@ -391,17 +844,23 @@ extension on _AdminHandGestureLiveScreenState {
 
     _lastCameraFocusPointSetAt = now;
 
-    final box = hand.boundingBox;
-    final focusPoint = Offset(
-      (((box.left + box.right) / 2) / imageSize.width).clamp(0.0, 1.0),
-      (((box.top + box.bottom) / 2) / imageSize.height).clamp(0.0, 1.0),
+    final boundedFocusPoint = Offset(
+      focusPoint.dx.clamp(0.0, 1.0),
+      focusPoint.dy.clamp(0.0, 1.0),
     );
 
     try {
-      await controller.setFocusPoint(focusPoint);
-      await controller.setExposurePoint(focusPoint);
+      await controller.setFocusPoint(boundedFocusPoint);
+      await controller.setExposurePoint(boundedFocusPoint);
     } catch (e) {
       debugPrint('Camera focus point update ignored: $e');
     }
   }
+}
+
+class _FollowTargetDetections {
+  const _FollowTargetDetections({required this.faces, required this.objects});
+
+  final List<FollowTarget> faces;
+  final List<FollowTarget> objects;
 }

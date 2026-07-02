@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:hand_detection/hand_detection.dart';
 
 import '../constants/hand_gesture_thresholds.dart';
@@ -68,6 +70,7 @@ class FollowObjectSequenceDetector {
     _debugPoseChange(openPalm: openPalm, closedFist: closedFist);
 
     var detected = false;
+    Offset? releasePoint;
 
     switch (_phase) {
       case FollowObjectSequencePhase.idle:
@@ -111,7 +114,12 @@ class FollowObjectSequenceDetector {
         if (openPalm) {
           _lastDetectedAt = now;
           detected = true;
-          _debug('sequence completed -> Follow the object');
+          releasePoint = _handReleasePoint(hand);
+          _debug(
+            'sequence completed -> release point '
+            '(${releasePoint.dx.toStringAsFixed(1)}, '
+            '${releasePoint.dy.toStringAsFixed(1)})',
+          );
           clear(keepLastDetected: true);
         }
         break;
@@ -124,6 +132,7 @@ class FollowObjectSequenceDetector {
       isActive: isActive || isDetected,
       isDetected: isDetected,
       packageGestureType: _currentPackageGestureType,
+      releasePoint: releasePoint,
     );
   }
 
@@ -199,6 +208,11 @@ class FollowObjectSequenceDetector {
     return lastDetectedAt != null &&
         now.difference(lastDetectedAt) <=
             HandGestureThresholds.followObjectMessageHoldDuration;
+  }
+
+  Offset _handReleasePoint(Hand hand) {
+    final box = hand.boundingBox;
+    return Offset((box.left + box.right) / 2, (box.top + box.bottom) / 2);
   }
 
   void _debugPoseChange({required bool openPalm, required bool closedFist}) {

@@ -197,6 +197,12 @@ extension on _AdminHandGestureLiveScreenState {
                                         ),
                                   ),
                                 ),
+                              if (_lockedFollowTarget != null)
+                                CustomPaint(
+                                  painter: FollowTargetOverlayPainter(
+                                    target: _lockedFollowTarget!,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
