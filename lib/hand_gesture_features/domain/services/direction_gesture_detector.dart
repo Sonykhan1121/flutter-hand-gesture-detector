@@ -36,9 +36,8 @@ class DirectionGestureDetector {
     double visibleX(double rawX) =>
         isFrontCamera ? imageSize.width - rawX : rawX;
 
-    final fingerTipXs = fingerTips
-        .map((landmark) => visibleX(landmark.x))
-        .toList();
+    final fingerTipXs =
+        fingerTips.map((landmark) => visibleX(landmark.x)).toList();
     final fingerTipYs = fingerTips.map((landmark) => landmark.y).toList();
 
     final minTipX = fingerTipXs.reduce(math.min);
@@ -87,10 +86,26 @@ class DirectionGestureDetector {
     );
 
     final bendDeltaX = fingerTipCenterX - palmCenterX;
+    final sideBendRatio =
+        bendDeltaX > 0
+            ? HandGestureThresholds.rightSideBendMinRatio
+            : HandGestureThresholds.sideBendMinRatio;
     final minSideBendDistance = math.max(
       imageSize.width * 0.035,
-      handSize * HandGestureThresholds.sideBendMinRatio,
+      handSize * sideBendRatio,
     );
+    final minRightFingerTipOffset = math.max(
+      imageSize.width * 0.020,
+      handSize * HandGestureThresholds.rightFingerTipMinOffsetRatio,
+    );
+    final rightFingerTipAlignedCount =
+        fingerTipXs
+            .where((tipX) => tipX - palmCenterX >= minRightFingerTipOffset)
+            .length;
+    final rightFingerTipCandidate =
+        bendDeltaX > 0 &&
+        rightFingerTipAlignedCount >=
+            HandGestureThresholds.rightFingerTipMinAlignedCount;
 
     final leftRightCandidate =
         tipXSpread <= maxAllowedTipXSpread &&
@@ -117,6 +132,10 @@ class DirectionGestureDetector {
 
     if (leftRightCandidate) {
       if (bendDeltaX < 0) return HandMoveDirection.left;
+      return HandMoveDirection.right;
+    }
+
+    if (rightFingerTipCandidate && !upDownCandidate) {
       return HandMoveDirection.right;
     }
 
@@ -234,9 +253,10 @@ class DirectionGestureDetector {
 
     if (handSize <= 0) return false;
 
-    final distances = palmReferencePoints
-        .map((point) => geometry.distanceBetweenLandmarks(wrist, point))
-        .toList();
+    final distances =
+        palmReferencePoints
+            .map((point) => geometry.distanceBetweenLandmarks(wrist, point))
+            .toList();
 
     final averageDistance = geometry.average(distances);
     final maxDistance = distances.reduce(math.max);

@@ -8,11 +8,21 @@ abstract final class HandGestureThresholds {
   static const double minHandScore = 0.60;
   static const double minPackageGestureConfidence = 0.50;
 
+  static const double openPalmEnterConfidence = 0.55;
+  static const double openPalmExitConfidence = 0.45;
+  static const double openPalmMinFingerConfidence = 0.50;
+  static const double openPalmMinSpreadConfidence = 0.50;
+  static const double openPalmMinPalmSideConfidence = 0.35;
+  static const double openPalmMinYAxisConfidence = 0.55;
+  static const int openPalmSmoothingSampleCount = 4;
+  static const int openPalmSmoothingMinPositiveSamples = 2;
+  static const Duration openPalmSmoothingMaxAge = Duration(milliseconds: 500);
+
   static const Duration followObjectMessageHoldDuration = Duration(
     milliseconds: 1200,
   );
   static const Duration followObjectFirstOpenPalmHoldDuration = Duration(
-    seconds: 2,
+    seconds: 1,
   );
 
   static const double minLandmarkVisibility = 0.60;
@@ -34,6 +44,9 @@ abstract final class HandGestureThresholds {
   static const double fingerTipVerticalMaxSpreadRatio = 0.22;
   static const double fingerTipHorizontalMaxSpreadRatio = 0.22;
   static const double sideBendMinRatio = 0.16;
+  static const double rightSideBendMinRatio = 0.11;
+  static const double rightFingerTipMinOffsetRatio = 0.08;
+  static const int rightFingerTipMinAlignedCount = 3;
   static const double verticalBendMinRatio = 0.16;
 
   static const double wristToMcpAverageMaxRatio = 0.30;
@@ -47,12 +60,9 @@ abstract final class HandGestureThresholds {
   static const double fingerExtendedMinAngleDegrees = 160.0;
 
   static const double okTouchMaxDistanceRatio = 0.11;
-  static const double okTouchMinPalmDistanceRatio = 0.22;
 
-  static const double punchTipMaxPalmDistanceRatio = 0.28;
-  static const double punchThumbMaxPalmDistanceRatio = 0.36;
-  static const double punchTipMaxSpreadRatio = 0.25;
-  static const double punchGestureMinPackageConfidence = 0.70;
+  static const double punchKnuckleMaxYSpreadRatio = 0.12;
+  static const double punchGestureMinPackageConfidence = 0.60;
 
   static const int indexCircleHistoryMaxLength = 36;
   static const Duration indexCircleWindow = Duration(milliseconds: 1400);
@@ -72,9 +82,9 @@ abstract final class HandGestureThresholds {
   static const double closedThumbMaxKnuckleDistanceRatio = 0.32;
   static const double closedThumbMaxTipMcpDistanceRatio = 0.36;
 
-  static const double zoomClosedMaxDistanceRatio = 0.24;
-  static const double zoomOpenMinDistanceRatio = 0.31;
-  static const double zoomMinChangeRatio = 0.055;
+  static const double zoomClosedMaxDistanceRatio = 0.26;
+  static const double zoomOpenMinDistanceRatio = 0.27;
+  static const double zoomMinChangeRatio = 0.035;
 
   static const Duration zoomStartPoseHoldDuration = Duration(milliseconds: 500);
   static const double zoomActiveTipMinPalmDistanceRatio = 0.06;

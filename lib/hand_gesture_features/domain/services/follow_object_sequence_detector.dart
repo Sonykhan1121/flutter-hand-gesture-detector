@@ -3,10 +3,16 @@ import 'package:hand_detection/hand_detection.dart';
 import '../constants/hand_gesture_thresholds.dart';
 import '../enums/follow_object_sequence_phase.dart';
 import '../models/follow_object_sequence_result.dart';
+import 'open_palm_gesture_detector.dart';
 
 class FollowObjectSequenceDetector {
-  FollowObjectSequenceDetector({this.onDebug});
+  FollowObjectSequenceDetector({
+    OpenPalmGestureDetector? openPalmGestureDetector,
+    this.onDebug,
+  }) : _openPalmGestureDetector =
+           openPalmGestureDetector ?? OpenPalmGestureDetector();
 
+  final OpenPalmGestureDetector _openPalmGestureDetector;
   final void Function(String message)? onDebug;
 
   FollowObjectSequencePhase _phase = FollowObjectSequencePhase.idle;
@@ -19,7 +25,7 @@ class FollowObjectSequenceDetector {
 
   /// V1.0.3 behavior:
   ///
-  /// 1. User first shows open palm and holds it for 2 seconds.
+  /// 1. User first shows open palm and holds it for 1 second.
   /// 2. The sequence starts and stays alive while the hand remains on screen.
   /// 3. User can show closed fist any time later.
   /// 4. User can move while staying on screen.
@@ -28,7 +34,11 @@ class FollowObjectSequenceDetector {
   ///
   /// Important: when the hand leaves the screen or becomes unreliable,
   /// the presentation layer calls [clear], so the sequence resets.
-  FollowObjectSequenceResult update(Hand hand, DateTime now) {
+  FollowObjectSequenceResult update(
+    Hand hand,
+    DateTime now, {
+    required bool isFrontCamera,
+  }) {
     if (_recentDetected(now)) {
       _debug(
         'recent detected message is still active -> show "Follow the object"',
@@ -41,10 +51,10 @@ class FollowObjectSequenceDetector {
       );
     }
 
-    final openPalm = _isPackageGesture(
+    final openPalm = _isOpenPalmGesture(
       hand: hand,
-      type: GestureType.openPalm,
-      debugLabel: 'openPalm',
+      now: now,
+      isFrontCamera: isFrontCamera,
     );
 
     final closedFist = _isPackageGesture(
@@ -63,7 +73,7 @@ class FollowObjectSequenceDetector {
           _firstOpenPalmStartedAt = now;
           _setPhase(
             FollowObjectSequencePhase.holdingFirstOpen,
-            'first open palm detected; hold for 2 seconds',
+            'first open palm detected; hold for 1 second',
           );
         }
         break;
@@ -128,10 +138,33 @@ class FollowObjectSequenceDetector {
     _currentPackageGestureType = null;
     _lastOpenPalmDebugValue = null;
     _lastClosedFistDebugValue = null;
+    _openPalmGestureDetector.clear();
 
     if (!keepLastDetected) {
       _lastDetectedAt = null;
     }
+  }
+
+  bool _isOpenPalmGesture({
+    required Hand hand,
+    required DateTime now,
+    required bool isFrontCamera,
+  }) {
+    final result = _openPalmGestureDetector.detect(
+      hand: hand,
+      now: now,
+      isFrontCamera: isFrontCamera,
+    );
+
+    if (result.isDetected) {
+      _currentPackageGestureType = GestureType.openPalm;
+      _debug(
+        'custom openPalm detected | '
+        'confidence=${result.confidence.toStringAsFixed(2)}',
+      );
+    }
+
+    return result.isDetected;
   }
 
   bool _isPackageGesture({

@@ -159,6 +159,7 @@ extension on _AdminHandGestureLiveScreenState {
     final followObjectSequence = _followObjectSequenceDetector.update(
       bestHand,
       now,
+      isFrontCamera: _shouldMirrorPreviewCoordinates(_controller),
     );
 
     final followObjectSequenceActive = followObjectSequence.isActive;
@@ -170,6 +171,7 @@ extension on _AdminHandGestureLiveScreenState {
         !followTrackingActive &&
         gesture != null &&
         gesture.type != GestureType.unknown &&
+        gesture.type != GestureType.openPalm &&
         gesture.confidence >= HandGestureThresholds.minPackageGestureConfidence;
 
     final customGestureResult =
