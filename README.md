@@ -33,7 +33,7 @@ Replace each demo `src` with your own GitHub uploaded image URL when you have sc
 | Move Down | Detect My Face | Follow The Object |
 | --- | --- | --- |
 | <img src="https://github.com/user-attachments/assets/07960aca-6df4-48bf-a9f2-44144bb2716c" alt="Move down gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/db63e89d-38c9-40fd-a502-b816fe1b9cfd" alt="Detect my face gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> | <img src="https://github.com/user-attachments/assets/a3d40b80-2dd5-430c-b354-776421e602b9" alt="Follow the object gesture demo" width="200" height="370" style="border: 2px solid #000; border-radius: 10px;" /> |
-| Point or move the hand downward. | Use the call gesture to start face detection. | Open palm, closed fist, then release on the object. |
+| Point or move the hand downward. | Hold the call gesture for 2 seconds to start face detection. | Open palm, closed fist, then release on the object. |
 
 | Stop & Continue | Return To Main Position | Start Record Video |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ Replace each demo `src` with your own GitHub uploaded image URL when you have sc
 | Move right | Swipe your open hand from center to right. Hold the position to continue moving. |
 | Move up | Point the index finger upward or move the palm upward. |
 | Move down | Point the index finger downward or move the palm downward. |
-| Detect my face | Make the call gesture. |
+| Detect my face | Hold the call gesture for 2 seconds. |
 | Follow the object | Hold your palm in front of the camera, make a fist, drag to the object, then release. |
 | Stop & Continue action | Show thumbs-up and hold for 1 second. |
 | Return to main position | Rotate your index finger in a small circle. |

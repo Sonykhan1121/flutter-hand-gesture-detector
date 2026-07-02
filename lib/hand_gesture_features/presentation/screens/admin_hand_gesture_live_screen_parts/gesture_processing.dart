@@ -109,6 +109,7 @@ extension on _AdminHandGestureLiveScreenState {
       _zoomGestureDetector.markPoseInvalid(now);
       _followObjectSequenceDetector.clear();
       _clearRecordingGestureHold();
+      _clearFaceDetectGestureHold();
 
       _setScreenState(() {
         _gestureText = trackedFollowTarget == null
@@ -150,6 +151,7 @@ extension on _AdminHandGestureLiveScreenState {
       _zoomGestureDetector.markPoseInvalid(now);
       _followObjectSequenceDetector.clear();
       _clearRecordingGestureHold();
+      _clearFaceDetectGestureHold();
 
       _setScreenState(() {
         _hands = hands;
@@ -183,6 +185,93 @@ extension on _AdminHandGestureLiveScreenState {
     final allowBackCameraPalmFallback = _shouldAllowBackCameraPalmFallback(
       _controller,
     );
+    final rawCustomGestureResult = _customGestureDetector.detect(
+      hand: bestHand,
+      imageSize: detectionImageSize,
+      mirrorHorizontally: mirrorDirectionalGestureCoordinates,
+    );
+
+    if (rawCustomGestureResult.isCancelEverything) {
+      _clearAllActiveGestureTasks(resetCameraZoom: true);
+
+      _setScreenState(() {
+        _hands = hands;
+        _detectionImageSize = detectionImageSize;
+        _isFollowingHand = false;
+        _focusedHandBox = null;
+        _focusImageSize = null;
+        _lockedFollowTarget = null;
+        _detectedHandsCount = hands.length;
+        _handText = bestHand.handedness.displayLabel;
+        _gestureText = 'Return to main position';
+        _gestureConfidence = 1;
+      });
+      return;
+    }
+
+    if (rawCustomGestureResult.isCallMe && trackedFollowTarget == null) {
+      final startedAt = _faceDetectGestureStartedAt ?? now;
+      _faceDetectGestureStartedAt = startedAt;
+
+      final holdProgress =
+          (now.difference(startedAt).inMilliseconds /
+                  HandGestureThresholds.faceDetectHoldDuration.inMilliseconds)
+              .clamp(0.0, 1.0)
+              .toDouble();
+
+      if (holdProgress < 1) {
+        _zoomGestureDetector.clearState();
+        _followObjectSequenceDetector.clear();
+        _clearRecordingGestureHold();
+
+        _setScreenState(() {
+          _hands = hands;
+          _detectionImageSize = detectionImageSize;
+          _isFollowingHand = false;
+          _focusedHandBox = null;
+          _focusImageSize = null;
+          _lockedFollowTarget = trackedFollowTarget;
+          _detectedHandsCount = hands.length;
+          _handText = bestHand.handedness.displayLabel;
+          _gestureText = 'Hold call to detect face';
+          _gestureConfidence = holdProgress;
+        });
+        return;
+      }
+
+      final faceTarget = await _selectBestFaceTarget(
+        image: image,
+        rotation: rotation,
+        now: now,
+      );
+      if (!mounted) return;
+
+      _clearAllActiveGestureTasks(resetCameraZoom: false);
+
+      if (faceTarget != null) {
+        _lockedFollowTarget = faceTarget;
+        _lockedFollowTargetLostAt = null;
+        unawaited(_updateCameraFocusPointForTarget(faceTarget));
+      }
+
+      _setScreenState(() {
+        _hands = hands;
+        _detectionImageSize = detectionImageSize;
+        _isFollowingHand = false;
+        _focusedHandBox = null;
+        _focusImageSize = null;
+        _lockedFollowTarget = faceTarget;
+        _detectedHandsCount = hands.length;
+        _handText = bestHand.handedness.displayLabel;
+        _gestureText = faceTarget == null
+            ? 'No face detected'
+            : _followTargetText(faceTarget);
+        _gestureConfidence = faceTarget == null ? 0 : 1;
+      });
+      return;
+    }
+
+    _clearFaceDetectGestureHold();
 
     final followObjectSequence = _followObjectSequenceDetector.update(
       bestHand,
@@ -237,11 +326,7 @@ extension on _AdminHandGestureLiveScreenState {
 
     final customGestureResult = followTrackingActive
         ? CustomGestureDetectionResult.empty
-        : _customGestureDetector.detect(
-            hand: bestHand,
-            imageSize: detectionImageSize,
-            mirrorHorizontally: mirrorDirectionalGestureCoordinates,
-          );
+        : rawCustomGestureResult;
 
     final customGestureLabels = customGestureResult.labels;
     final hasSingleCustomGesture = customGestureLabels.length == 1;
@@ -445,6 +530,28 @@ extension on _AdminHandGestureLiveScreenState {
       faces: detections.faces,
       objects: detections.objects,
     );
+  }
+
+  Future<FollowTarget?> _selectBestFaceTarget({
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+    required DateTime now,
+  }) async {
+    final detections = await _detectFollowTargets(
+      image: image,
+      rotation: rotation,
+      now: now,
+      includeFaces: true,
+      includeObjects: false,
+    );
+    if (detections == null || detections.faces.isEmpty) return null;
+
+    return detections.faces.reduce((currentBest, next) {
+      final currentArea =
+          currentBest.displayBox.width * currentBest.displayBox.height;
+      final nextArea = next.displayBox.width * next.displayBox.height;
+      return nextArea > currentArea ? next : currentBest;
+    });
   }
 
   Future<FollowTarget?> _refreshLockedFollowTarget({
@@ -807,6 +914,36 @@ extension on _AdminHandGestureLiveScreenState {
   void _clearLockedFollowTarget() {
     _lockedFollowTarget = null;
     _lockedFollowTargetLostAt = null;
+  }
+
+  void _clearFaceDetectGestureHold() {
+    _faceDetectGestureStartedAt = null;
+  }
+
+  void _clearAllActiveGestureTasks({required bool resetCameraZoom}) {
+    _zoomGestureDetector.clearState();
+    _followObjectSequenceDetector.clear();
+    _clearLockedFollowTarget();
+    _clearRecordingGestureHold();
+    _clearFaceDetectGestureHold();
+    _isFollowingHand = false;
+    _focusedHandBox = null;
+    _focusImageSize = null;
+    _lastAppliedZoomDirection = ZoomDirection.none;
+    _pendingZoomLevel = null;
+    _gestureZoomSuppressedUntil = null;
+    _isManualZoomInteractionActive = false;
+    _isZoomControlVisible = false;
+    _zoomControlAutoHideTimer?.cancel();
+
+    if (resetCameraZoom) {
+      _lastCameraFocusPointSetAt = null;
+      unawaited(_updateCameraFocusAtNormalizedPoint(const Offset(0.5, 0.5)));
+
+      if (_isCameraZoomSupported) {
+        unawaited(_setCameraZoomLevel(_minZoomLevel, revealZoomControl: false));
+      }
+    }
   }
 
   Future<void> _updateCameraFocusPoint({

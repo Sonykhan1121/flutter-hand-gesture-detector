@@ -21,249 +21,142 @@ class DirectionGestureDetector {
       return HandMoveDirection.none;
     }
 
-    if (!_hasOnlyDirectionFingersOpen(hand)) {
-      return HandMoveDirection.none;
-    }
+    return _detectFingerChainDirection(
+      hand: hand,
+      imageSize: imageSize,
+      mirrorHorizontally: mirrorHorizontally,
+    );
+  }
 
-    final fingerTips = <HandLandmark>[];
-
-    for (final type in HandGestureThresholds.directionFingerTipTypes) {
-      final landmark = geometry.visibleLandmark(hand, type);
-      if (landmark == null) return HandMoveDirection.none;
-      fingerTips.add(landmark);
-    }
-
+  HandMoveDirection _detectFingerChainDirection({
+    required Hand hand,
+    required Size imageSize,
+    required bool mirrorHorizontally,
+  }) {
     double visibleX(double rawX) =>
         mirrorHorizontally ? imageSize.width - rawX : rawX;
 
-    final fingerTipXs =
-        fingerTips.map((landmark) => visibleX(landmark.x)).toList();
-    final fingerTipYs = fingerTips.map((landmark) => landmark.y).toList();
+    final fingerChains = <List<HandLandmark>>[];
+    final pointXs = <double>[];
+    final pointYs = <double>[];
 
-    final minTipX = fingerTipXs.reduce(math.min);
-    final maxTipX = fingerTipXs.reduce(math.max);
-    final tipXSpread = maxTipX - minTipX;
+    for (final chainTypes in HandGestureThresholds.directionFingerChainTypes) {
+      final chain = <HandLandmark>[];
 
-    final minTipY = fingerTipYs.reduce(math.min);
-    final maxTipY = fingerTipYs.reduce(math.max);
-    final tipYSpread = maxTipY - minTipY;
+      for (final type in chainTypes) {
+        final landmark = geometry.visibleLandmark(hand, type);
+        if (landmark == null) return HandMoveDirection.none;
 
-    final box = hand.boundingBox;
-    final handWidth = (box.right - box.left).abs();
-    final handHeight = (box.bottom - box.top).abs();
-    final handSize = math.max(handWidth, handHeight);
-
-    final palmReferenceXs = <double>[];
-    final palmReferenceYs = <double>[];
-
-    for (final type in HandGestureThresholds.palmReferenceTypes) {
-      final landmark = geometry.visibleLandmark(hand, type);
-      if (landmark == null) continue;
-
-      palmReferenceXs.add(visibleX(landmark.x));
-      palmReferenceYs.add(landmark.y);
-    }
-
-    if (palmReferenceXs.isEmpty || palmReferenceYs.isEmpty) {
-      final rawCenterX = (box.left + box.right) / 2;
-      final rawCenterY = (box.top + box.bottom) / 2;
-      palmReferenceXs
-        ..clear()
-        ..add(visibleX(rawCenterX));
-      palmReferenceYs
-        ..clear()
-        ..add(rawCenterY);
-    }
-
-    final fingerTipCenterX = geometry.average(fingerTipXs);
-    final fingerTipCenterY = geometry.average(fingerTipYs);
-    final palmCenterX = geometry.average(palmReferenceXs);
-    final palmCenterY = geometry.average(palmReferenceYs);
-
-    final maxAllowedTipXSpread = math.max(
-      imageSize.width * 0.035,
-      handSize * HandGestureThresholds.fingerTipVerticalMaxSpreadRatio,
-    );
-
-    final bendDeltaX = fingerTipCenterX - palmCenterX;
-    final sideBendRatio =
-        bendDeltaX > 0
-            ? HandGestureThresholds.rightSideBendMinRatio
-            : HandGestureThresholds.sideBendMinRatio;
-    final minSideBendDistance = math.max(
-      imageSize.width * 0.035,
-      handSize * sideBendRatio,
-    );
-    final minRightFingerTipOffset = math.max(
-      imageSize.width * 0.020,
-      handSize * HandGestureThresholds.rightFingerTipMinOffsetRatio,
-    );
-    final rightFingerTipAlignedCount =
-        fingerTipXs
-            .where((tipX) => tipX - palmCenterX >= minRightFingerTipOffset)
-            .length;
-    final rightFingerTipCandidate =
-        bendDeltaX > 0 &&
-        rightFingerTipAlignedCount >=
-            HandGestureThresholds.rightFingerTipMinAlignedCount;
-
-    final leftRightCandidate =
-        tipXSpread <= maxAllowedTipXSpread &&
-        bendDeltaX.abs() >= minSideBendDistance;
-
-    final maxAllowedTipYSpread = math.max(
-      imageSize.height * 0.035,
-      handSize * HandGestureThresholds.fingerTipHorizontalMaxSpreadRatio,
-    );
-
-    final bendDeltaY = fingerTipCenterY - palmCenterY;
-    final minVerticalBendDistance = math.max(
-      imageSize.height * 0.035,
-      handSize * HandGestureThresholds.verticalBendMinRatio,
-    );
-
-    final upDownCandidate =
-        tipYSpread <= maxAllowedTipYSpread &&
-        bendDeltaY.abs() >= minVerticalBendDistance;
-
-    if (leftRightCandidate && upDownCandidate) {
-      return HandMoveDirection.none;
-    }
-
-    if (leftRightCandidate) {
-      if (bendDeltaX < 0) return HandMoveDirection.left;
-      return HandMoveDirection.right;
-    }
-
-    if (rightFingerTipCandidate && !upDownCandidate) {
-      return HandMoveDirection.right;
-    }
-
-    if (upDownCandidate) {
-      if (!_isWristVeryCloseToPalmReferencePoints(hand)) {
-        return HandMoveDirection.none;
+        chain.add(landmark);
+        pointXs.add(visibleX(landmark.x));
+        pointYs.add(landmark.y);
       }
 
-      if (bendDeltaY < 0) return HandMoveDirection.up;
-      return HandMoveDirection.down;
+      fingerChains.add(chain);
     }
 
-    return HandMoveDirection.none;
-  }
+    if (pointXs.isEmpty || pointYs.isEmpty) return HandMoveDirection.none;
 
-  bool _hasOnlyDirectionFingersOpen(Hand hand) {
-    final indexTip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.indexFingerTip,
-    );
-    final indexPip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.indexFingerPIP,
-    );
-    final middleTip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.middleFingerTip,
-    );
-    final middlePip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.middleFingerPIP,
-    );
-    final ringTip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.ringFingerTip,
-    );
-    final ringPip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.ringFingerPIP,
-    );
-    final pinkyTip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyTip);
-    final pinkyPip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyPIP);
+    final fingerPointWidth =
+        pointXs.reduce(math.max) - pointXs.reduce(math.min);
+    final fingerPointHeight =
+        pointYs.reduce(math.max) - pointYs.reduce(math.min);
+    final fingerPointSpan = math.max(fingerPointWidth, fingerPointHeight);
 
-    if (indexTip == null ||
-        indexPip == null ||
-        middleTip == null ||
-        middlePip == null ||
-        ringTip == null ||
-        ringPip == null ||
-        pinkyTip == null ||
-        pinkyPip == null) {
-      return false;
+    if (fingerPointSpan <= 0) return HandMoveDirection.none;
+
+    final minHorizontalDistance = math.max(
+      imageSize.width *
+          HandGestureThresholds.directionFingerChainMinHorizontalImageRatio,
+      fingerPointSpan *
+          HandGestureThresholds.directionFingerChainMinHorizontalSpanRatio,
+    );
+    final minVerticalDistance = math.max(
+      imageSize.height *
+          HandGestureThresholds.directionFingerChainMinVerticalImageRatio,
+      fingerPointSpan *
+          HandGestureThresholds.directionFingerChainMinVerticalSpanRatio,
+    );
+
+    var leftPointingFingerCount = 0;
+    var rightPointingFingerCount = 0;
+    var upPointingFingerCount = 0;
+    var downPointingFingerCount = 0;
+    var totalDeltaX = 0.0;
+    var totalDeltaY = 0.0;
+
+    for (final chain in fingerChains) {
+      final deltaX =
+          visibleX(chain[1].x) -
+          visibleX(chain[0].x) +
+          visibleX(chain[2].x) -
+          visibleX(chain[1].x) +
+          visibleX(chain[3].x) -
+          visibleX(chain[2].x);
+      final deltaY =
+          chain[1].y -
+          chain[0].y +
+          chain[2].y -
+          chain[1].y +
+          chain[3].y -
+          chain[2].y;
+
+      totalDeltaX += deltaX;
+      totalDeltaY += deltaY;
+
+      if (deltaX.abs() >= minHorizontalDistance &&
+          deltaX.abs() >=
+              deltaY.abs() *
+                  HandGestureThresholds
+                      .directionFingerChainHorizontalDominanceRatio) {
+        if (deltaX < 0) {
+          leftPointingFingerCount += 1;
+        } else {
+          rightPointingFingerCount += 1;
+        }
+      }
+
+      if (deltaY.abs() >= minVerticalDistance &&
+          deltaY.abs() >=
+              deltaX.abs() *
+                  HandGestureThresholds
+                      .directionFingerChainVerticalDominanceRatio) {
+        if (deltaY < 0) {
+          upPointingFingerCount += 1;
+        } else {
+          downPointingFingerCount += 1;
+        }
+      }
     }
 
-    final palmCenter = geometry.palmCenter(hand);
-    if (palmCenter == null) return false;
+    final horizontalDirection =
+        leftPointingFingerCount >=
+            HandGestureThresholds.directionFingerChainMinAlignedCount
+        ? HandMoveDirection.left
+        : rightPointingFingerCount >=
+              HandGestureThresholds.directionFingerChainMinAlignedCount
+        ? HandMoveDirection.right
+        : HandMoveDirection.none;
+    final verticalDirection =
+        upPointingFingerCount >=
+            HandGestureThresholds.directionFingerChainMinAlignedCount
+        ? HandMoveDirection.up
+        : downPointingFingerCount >=
+              HandGestureThresholds.directionFingerChainMinAlignedCount
+        ? HandMoveDirection.down
+        : HandMoveDirection.none;
 
-    final box = hand.boundingBox;
-    final handWidth = (box.right - box.left).abs();
-    final handHeight = (box.bottom - box.top).abs();
-    final handSize = math.max(handWidth, handHeight);
-
-    final indexIsOpen = geometry.isFingerExtended(
-      tip: indexTip,
-      pip: indexPip,
-      palmCenter: palmCenter,
-      handSize: handSize,
-    );
-
-    final middleIsOpen = geometry.isFingerExtended(
-      tip: middleTip,
-      pip: middlePip,
-      palmCenter: palmCenter,
-      handSize: handSize,
-    );
-
-    final ringIsOpen = geometry.isFingerExtended(
-      tip: ringTip,
-      pip: ringPip,
-      palmCenter: palmCenter,
-      handSize: handSize,
-    );
-
-    final pinkyIsOpen = geometry.isFingerExtended(
-      tip: pinkyTip,
-      pip: pinkyPip,
-      palmCenter: palmCenter,
-      handSize: handSize,
-    );
-
-    return indexIsOpen && middleIsOpen && ringIsOpen && pinkyIsOpen;
-  }
-
-  bool _isWristVeryCloseToPalmReferencePoints(Hand hand) {
-    final wrist = geometry.visibleLandmark(hand, HandLandmarkType.wrist);
-    if (wrist == null) return false;
-
-    final palmReferencePoints = <HandLandmark>[];
-
-    for (final type in HandGestureThresholds.palmReferenceTypes) {
-      final landmark = geometry.visibleLandmark(hand, type);
-      if (landmark == null) return false;
-      palmReferencePoints.add(landmark);
+    if (horizontalDirection != HandMoveDirection.none &&
+        verticalDirection != HandMoveDirection.none) {
+      return totalDeltaY.abs() > totalDeltaX.abs()
+          ? verticalDirection
+          : horizontalDirection;
     }
 
-    if (palmReferencePoints.length !=
-        HandGestureThresholds.palmReferenceTypes.length) {
-      return false;
+    if (horizontalDirection != HandMoveDirection.none) {
+      return horizontalDirection;
     }
 
-    final box = hand.boundingBox;
-    final handWidth = (box.right - box.left).abs();
-    final handHeight = (box.bottom - box.top).abs();
-    final handSize = math.max(handWidth, handHeight);
-
-    if (handSize <= 0) return false;
-
-    final distances =
-        palmReferencePoints
-            .map((point) => geometry.distanceBetweenLandmarks(wrist, point))
-            .toList();
-
-    final averageDistance = geometry.average(distances);
-    final maxDistance = distances.reduce(math.max);
-
-    return averageDistance <=
-            handSize * HandGestureThresholds.wristToMcpAverageMaxRatio &&
-        maxDistance <=
-            handSize * HandGestureThresholds.wristToMcpSingleMaxRatio;
+    return verticalDirection;
   }
 }

@@ -49,22 +49,22 @@ class SettingsPanel extends StatelessWidget {
             child: ListView(
               physics: const BouncingScrollPhysics(),
               children: [
-                ControlModeCard(
-                  isSelected: selectedMode == StandControlMode.automaticDetect,
-                  isEnabled: !disabledModes.contains(
-                    StandControlMode.automaticDetect,
-                  ),
-                  icon: Icons.person_search_rounded,
-                  title: 'Automatic Detect',
-                  subtitle: 'Person follow automatically',
-                  badgeText:
-                      disabledModes.contains(StandControlMode.automaticDetect)
-                      ? 'SOON'
-                      : 'AUTO',
-                  accentColor: const Color(0xFF12B76A),
-                  onTap: () => onSelectMode(StandControlMode.automaticDetect),
-                ),
-                const SizedBox(height: 14),
+                // ControlModeCard(
+                //   isSelected: selectedMode == StandControlMode.automaticDetect,
+                //   isEnabled: !disabledModes.contains(
+                //     StandControlMode.automaticDetect,
+                //   ),
+                //   icon: Icons.person_search_rounded,
+                //   title: 'Automatic Detect',
+                //   subtitle: 'Person follow automatically',
+                //   badgeText:
+                //       disabledModes.contains(StandControlMode.automaticDetect)
+                //       ? 'SOON'
+                //       : 'AUTO',
+                //   accentColor: const Color(0xFF12B76A),
+                //   onTap: () => onSelectMode(StandControlMode.automaticDetect),
+                // ),
+                // const SizedBox(height: 14),
                 ControlModeCard(
                   isSelected: selectedMode == StandControlMode.handGesture,
                   isEnabled: !disabledModes.contains(
@@ -80,22 +80,22 @@ class SettingsPanel extends StatelessWidget {
                   accentColor: const Color(0xFF2E90FA),
                   onTap: () => onSelectMode(StandControlMode.handGesture),
                 ),
-                const SizedBox(height: 14),
-                ControlModeCard(
-                  isSelected: selectedMode == StandControlMode.voiceCommand,
-                  isEnabled: !disabledModes.contains(
-                    StandControlMode.voiceCommand,
-                  ),
-                  icon: Icons.record_voice_over_rounded,
-                  title: 'Voice Command',
-                  subtitle: 'Give commands by voice',
-                  badgeText:
-                      disabledModes.contains(StandControlMode.voiceCommand)
-                      ? 'SOON'
-                      : 'VOICE',
-                  accentColor: const Color(0xFF9E77ED),
-                  onTap: () => onSelectMode(StandControlMode.voiceCommand),
-                ),
+                // const SizedBox(height: 14),
+                // ControlModeCard(
+                //   isSelected: selectedMode == StandControlMode.voiceCommand,
+                //   isEnabled: !disabledModes.contains(
+                //     StandControlMode.voiceCommand,
+                //   ),
+                //   icon: Icons.record_voice_over_rounded,
+                //   title: 'Voice Command',
+                //   subtitle: 'Give commands by voice',
+                //   badgeText:
+                //       disabledModes.contains(StandControlMode.voiceCommand)
+                //       ? 'SOON'
+                //       : 'VOICE',
+                //   accentColor: const Color(0xFF9E77ED),
+                //   onTap: () => onSelectMode(StandControlMode.voiceCommand),
+                // ),
               ],
             ),
           ),

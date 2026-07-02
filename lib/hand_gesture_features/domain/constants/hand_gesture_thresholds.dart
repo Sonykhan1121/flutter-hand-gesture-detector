@@ -24,12 +24,13 @@ abstract final class HandGestureThresholds {
   static const Duration followObjectFirstOpenPalmHoldDuration = Duration(
     seconds: 1,
   );
-  static const double followTargetReleasePointPadding = 0.025;
+  static const double followTargetReleasePointPadding = 0.10;
   static const double followTargetMinTrackingOverlap = 0.08;
   static const double followTargetMaxTrackingDistance = 0.18;
   static const Duration followTargetLostHoldDuration = Duration(
     milliseconds: 900,
   );
+  static const Duration faceDetectHoldDuration = Duration(seconds: 2);
 
   static const double minLandmarkVisibility = 0.60;
 
@@ -40,12 +41,47 @@ abstract final class HandGestureThresholds {
     HandLandmarkType.pinkyTip,
   ];
 
+  static const List<List<HandLandmarkType>> directionFingerChainTypes = [
+    [
+      HandLandmarkType.indexFingerMCP,
+      HandLandmarkType.indexFingerPIP,
+      HandLandmarkType.indexFingerDIP,
+      HandLandmarkType.indexFingerTip,
+    ],
+    [
+      HandLandmarkType.middleFingerMCP,
+      HandLandmarkType.middleFingerPIP,
+      HandLandmarkType.middleFingerDIP,
+      HandLandmarkType.middleFingerTip,
+    ],
+    [
+      HandLandmarkType.ringFingerMCP,
+      HandLandmarkType.ringFingerPIP,
+      HandLandmarkType.ringFingerDIP,
+      HandLandmarkType.ringFingerTip,
+    ],
+    [
+      HandLandmarkType.pinkyMCP,
+      HandLandmarkType.pinkyPIP,
+      HandLandmarkType.pinkyDIP,
+      HandLandmarkType.pinkyTip,
+    ],
+  ];
+
   static const List<HandLandmarkType> palmReferenceTypes = [
     HandLandmarkType.indexFingerMCP,
     HandLandmarkType.middleFingerMCP,
     HandLandmarkType.ringFingerMCP,
     HandLandmarkType.pinkyMCP,
   ];
+
+  static const int directionFingerChainMinAlignedCount = 3;
+  static const double directionFingerChainMinHorizontalImageRatio = 0.025;
+  static const double directionFingerChainMinHorizontalSpanRatio = 0.18;
+  static const double directionFingerChainHorizontalDominanceRatio = 0.45;
+  static const double directionFingerChainMinVerticalImageRatio = 0.025;
+  static const double directionFingerChainMinVerticalSpanRatio = 0.18;
+  static const double directionFingerChainVerticalDominanceRatio = 0.45;
 
   static const double fingerTipVerticalMaxSpreadRatio = 0.22;
   static const double fingerTipHorizontalMaxSpreadRatio = 0.22;

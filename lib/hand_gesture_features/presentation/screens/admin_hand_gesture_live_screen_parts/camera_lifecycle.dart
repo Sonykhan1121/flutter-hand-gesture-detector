@@ -320,6 +320,7 @@ extension on _AdminHandGestureLiveScreenState {
     _followObjectSequenceDetector.clear();
     _clearLockedFollowTarget();
     _clearRecordingGestureHold();
+    _clearFaceDetectGestureHold();
     _zoomControlAutoHideTimer?.cancel();
     _gestureZoomSuppressedUntil = null;
 
@@ -348,10 +349,9 @@ extension on _AdminHandGestureLiveScreenState {
       _pendingZoomLevel = null;
     });
 
-    _currentLensDirection =
-        _currentLensDirection == CameraLensDirection.front
-            ? CameraLensDirection.back
-            : CameraLensDirection.front;
+    _currentLensDirection = _currentLensDirection == CameraLensDirection.front
+        ? CameraLensDirection.back
+        : CameraLensDirection.front;
 
     await _initializeCamera();
 
@@ -399,6 +399,7 @@ extension on _AdminHandGestureLiveScreenState {
     _followObjectSequenceDetector.clear();
     _clearLockedFollowTarget();
     _clearRecordingGestureHold();
+    _clearFaceDetectGestureHold();
 
     if (!mounted) return;
 

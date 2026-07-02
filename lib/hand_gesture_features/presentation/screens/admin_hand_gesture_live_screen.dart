@@ -107,6 +107,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   DateTime? _lastFrameProcessedAt;
   DateTime? _lastCameraFocusPointSetAt;
   DateTime? _lastOrientationDebugPrintedAt;
+  DateTime? _faceDetectGestureStartedAt;
   Timer? _recordingTimer;
   Timer? _zoomControlAutoHideTimer;
   DateTime? _recordingSegmentStartedAt;
