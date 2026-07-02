@@ -20,13 +20,13 @@ class CustomGestureDetector {
   CustomGestureDetectionResult detect({
     required Hand hand,
     required Size imageSize,
-    required bool isFrontCamera,
+    required bool mirrorHorizontally,
   }) {
     return CustomGestureDetectionResult(
       isCancelEverything: _detectCancelEverythingGesture(
         hand: hand,
         imageSize: imageSize,
-        isFrontCamera: isFrontCamera,
+        mirrorHorizontally: mirrorHorizontally,
       ),
       isOk: _isOkGesture(hand),
       isCallMe: _isCallMeGesture(hand),
@@ -37,7 +37,7 @@ class CustomGestureDetector {
   bool _detectCancelEverythingGesture({
     required Hand hand,
     required Size imageSize,
-    required bool isFrontCamera,
+    required bool mirrorHorizontally,
   }) {
     final now = DateTime.now();
 
@@ -69,7 +69,7 @@ class CustomGestureDetector {
     }
 
     final point = Offset(
-      isFrontCamera ? imageSize.width - indexTip.x : indexTip.x,
+      mirrorHorizontally ? imageSize.width - indexTip.x : indexTip.x,
       indexTip.y,
     );
 

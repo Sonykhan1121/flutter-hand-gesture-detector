@@ -15,7 +15,7 @@ class DirectionGestureDetector {
   HandMoveDirection detect({
     required Hand hand,
     required Size imageSize,
-    required bool isFrontCamera,
+    required bool mirrorHorizontally,
   }) {
     if (!hand.hasLandmarks || imageSize.width <= 0 || imageSize.height <= 0) {
       return HandMoveDirection.none;
@@ -34,7 +34,7 @@ class DirectionGestureDetector {
     }
 
     double visibleX(double rawX) =>
-        isFrontCamera ? imageSize.width - rawX : rawX;
+        mirrorHorizontally ? imageSize.width - rawX : rawX;
 
     final fingerTipXs =
         fingerTips.map((landmark) => visibleX(landmark.x)).toList();

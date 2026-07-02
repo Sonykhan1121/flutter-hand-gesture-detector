@@ -3,6 +3,10 @@ part of '../admin_hand_gesture_live_screen.dart';
 extension on _AdminHandGestureLiveScreenState {
   bool get _isCameraZoomSupported => _maxZoomLevel > _minZoomLevel;
 
+  bool get _shouldAllowPartialZoomOutRecovery {
+    return _isCameraZoomSupported && _currentZoomLevel > _minZoomLevel;
+  }
+
   bool get _shouldIgnoreGestureZoomForManualControl {
     if (_isManualZoomInteractionActive) return true;
 
@@ -26,12 +30,14 @@ extension on _AdminHandGestureLiveScreenState {
       final rawMinZoomLevel = await controller.getMinZoomLevel();
       final rawMaxZoomLevel = await controller.getMaxZoomLevel();
 
-      final minZoomLevel = rawMinZoomLevel <= rawMaxZoomLevel
-          ? rawMinZoomLevel
-          : rawMaxZoomLevel;
-      final maxZoomLevel = rawMaxZoomLevel >= rawMinZoomLevel
-          ? rawMaxZoomLevel
-          : rawMinZoomLevel;
+      final minZoomLevel =
+          rawMinZoomLevel <= rawMaxZoomLevel
+              ? rawMinZoomLevel
+              : rawMaxZoomLevel;
+      final maxZoomLevel =
+          rawMaxZoomLevel >= rawMinZoomLevel
+              ? rawMaxZoomLevel
+              : rawMinZoomLevel;
 
       _minZoomLevel = minZoomLevel;
       _maxZoomLevel = maxZoomLevel;
@@ -93,12 +99,14 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final zoomDelta = direction == ZoomDirection.zoomIn
-        ? HandGestureThresholds.zoomStep
-        : -HandGestureThresholds.zoomStep;
-    final nextZoomLevel = (_currentZoomLevel + zoomDelta)
-        .clamp(_minZoomLevel, _maxZoomLevel)
-        .toDouble();
+    final zoomDelta =
+        direction == ZoomDirection.zoomIn
+            ? HandGestureThresholds.zoomStep
+            : -HandGestureThresholds.zoomStep;
+    final nextZoomLevel =
+        (_currentZoomLevel + zoomDelta)
+            .clamp(_minZoomLevel, _maxZoomLevel)
+            .toDouble();
 
     if (nextZoomLevel == _currentZoomLevel) {
       _showZoomControlOverlay();
@@ -120,9 +128,8 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final targetZoomLevel = zoomLevel
-        .clamp(_minZoomLevel, _maxZoomLevel)
-        .toDouble();
+    final targetZoomLevel =
+        zoomLevel.clamp(_minZoomLevel, _maxZoomLevel).toDouble();
 
     _pendingZoomLevel = targetZoomLevel;
 
@@ -145,9 +152,8 @@ extension on _AdminHandGestureLiveScreenState {
 
     try {
       while (_pendingZoomLevel != null && _controller == controller) {
-        final nextZoomLevel = _pendingZoomLevel!
-            .clamp(_minZoomLevel, _maxZoomLevel)
-            .toDouble();
+        final nextZoomLevel =
+            _pendingZoomLevel!.clamp(_minZoomLevel, _maxZoomLevel).toDouble();
         _pendingZoomLevel = null;
 
         await controller.setZoomLevel(nextZoomLevel);
@@ -247,9 +253,10 @@ extension on _AdminHandGestureLiveScreenState {
     );
     _showZoomControlOverlay();
 
-    final nextZoomLevel = (_currentZoomLevel + delta)
-        .clamp(_minZoomLevel, _maxZoomLevel)
-        .toDouble();
+    final nextZoomLevel =
+        (_currentZoomLevel + delta)
+            .clamp(_minZoomLevel, _maxZoomLevel)
+            .toDouble();
 
     unawaited(_setCameraZoomLevel(nextZoomLevel, revealZoomControl: true));
   }

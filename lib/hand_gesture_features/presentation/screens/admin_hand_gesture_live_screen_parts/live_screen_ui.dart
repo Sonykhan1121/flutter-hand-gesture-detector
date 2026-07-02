@@ -79,6 +79,26 @@ extension on _AdminHandGestureLiveScreenState {
         !Platform.isIOS;
   }
 
+  bool _shouldMirrorDirectionalGestureCoordinates(
+    CameraController? controller,
+  ) {
+    // Rear-camera users face the camera, so horizontal commands are reversed
+    // compared with the raw image coordinate system.
+    if (controller?.description.lensDirection == CameraLensDirection.back) {
+      return true;
+    }
+
+    return _shouldMirrorPreviewCoordinates(controller);
+  }
+
+  bool _shouldMirrorPalmGestureCoordinates(CameraController? controller) {
+    return _shouldMirrorPreviewCoordinates(controller);
+  }
+
+  bool _shouldAllowBackCameraPalmFallback(CameraController? controller) {
+    return controller?.description.lensDirection == CameraLensDirection.back;
+  }
+
   bool _shouldApplyRecordingPreviewCorrection(CameraController controller) {
     return Platform.isAndroid &&
         (_isRecordingPreviewCorrectionActive ||

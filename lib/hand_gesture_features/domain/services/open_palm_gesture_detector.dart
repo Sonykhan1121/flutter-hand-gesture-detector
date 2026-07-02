@@ -19,9 +19,14 @@ class OpenPalmGestureDetector {
   OpenPalmGestureDetectionResult detect({
     required Hand hand,
     required DateTime now,
-    required bool isFrontCamera,
+    required bool mirrorHorizontally,
+    bool allowOppositePalmSide = false,
   }) {
-    final confidence = _confidence(hand, isFrontCamera: isFrontCamera);
+    final confidence = _confidence(
+      hand,
+      mirrorHorizontally: mirrorHorizontally,
+      allowOppositePalmSide: allowOppositePalmSide,
+    );
     final confidenceThreshold =
         _wasDetected
             ? HandGestureThresholds.openPalmExitConfidence
@@ -55,7 +60,11 @@ class OpenPalmGestureDetector {
     _wasDetected = false;
   }
 
-  double _confidence(Hand hand, {required bool isFrontCamera}) {
+  double _confidence(
+    Hand hand, {
+    required bool mirrorHorizontally,
+    required bool allowOppositePalmSide,
+  }) {
     if (!hand.hasLandmarks) return 0;
 
     final landmarks = _OpenPalmLandmarks.fromHand(hand, geometry);
@@ -104,11 +113,23 @@ class OpenPalmGestureDetector {
       landmarks: landmarks,
       handSize: handSize,
     );
-    final palmSideScore = _palmSideScore(
+    final primaryPalmSideScore = _palmSideScore(
       hand: hand,
       landmarks: landmarks,
-      isFrontCamera: isFrontCamera,
+      mirrorHorizontally: mirrorHorizontally,
     );
+    // Back-camera handedness can arrive in the opposite horizontal convention.
+    final palmSideScore =
+        allowOppositePalmSide
+            ? math.max(
+              primaryPalmSideScore,
+              _palmSideScore(
+                hand: hand,
+                landmarks: landmarks,
+                mirrorHorizontally: !mirrorHorizontally,
+              ),
+            )
+            : primaryPalmSideScore;
     final yAxisScore = _fingerYAxisScore(landmarks);
 
     final fingerScores = [
@@ -264,7 +285,7 @@ class OpenPalmGestureDetector {
   double _palmSideScore({
     required Hand hand,
     required _OpenPalmLandmarks landmarks,
-    required bool isFrontCamera,
+    required bool mirrorHorizontally,
   }) {
     final handedness = hand.handedness;
     if (handedness == null) {
@@ -272,7 +293,7 @@ class OpenPalmGestureDetector {
     }
 
     var expectedPalmSide = handedness == Handedness.right ? 1.0 : -1.0;
-    if (isFrontCamera) {
+    if (mirrorHorizontally) {
       expectedPalmSide *= -1;
     }
 

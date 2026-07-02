@@ -157,11 +157,20 @@ extension on _AdminHandGestureLiveScreenState {
             );
 
     final now = DateTime.now();
+    final mirrorDirectionalGestureCoordinates =
+        _shouldMirrorDirectionalGestureCoordinates(_controller);
+    final mirrorPalmGestureCoordinates = _shouldMirrorPalmGestureCoordinates(
+      _controller,
+    );
+    final allowBackCameraPalmFallback = _shouldAllowBackCameraPalmFallback(
+      _controller,
+    );
 
     final followObjectSequence = _followObjectSequenceDetector.update(
       bestHand,
       now,
-      isFrontCamera: _shouldMirrorPreviewCoordinates(_controller),
+      mirrorHorizontally: mirrorPalmGestureCoordinates,
+      allowOppositePalmSide: allowBackCameraPalmFallback,
     );
 
     final followObjectSequenceActive = followObjectSequence.isActive;
@@ -182,7 +191,7 @@ extension on _AdminHandGestureLiveScreenState {
             : _customGestureDetector.detect(
               hand: bestHand,
               imageSize: detectionImageSize,
-              isFrontCamera: _shouldMirrorPreviewCoordinates(_controller),
+              mirrorHorizontally: mirrorDirectionalGestureCoordinates,
             );
 
     final customGestureLabels = customGestureResult.labels;
@@ -212,7 +221,7 @@ extension on _AdminHandGestureLiveScreenState {
             ? _directionGestureDetector.detect(
               hand: bestHand,
               imageSize: detectionImageSize,
-              isFrontCamera: _shouldMirrorPreviewCoordinates(_controller),
+              mirrorHorizontally: mirrorDirectionalGestureCoordinates,
             )
             : HandMoveDirection.none;
 
@@ -230,7 +239,7 @@ extension on _AdminHandGestureLiveScreenState {
             ? _zoomGestureDetector.detect(
               hand: bestHand,
               imageSize: detectionImageSize,
-              allowPartialZoomOut: _currentZoomLevel > _minZoomLevel,
+              allowPartialZoomOut: _shouldAllowPartialZoomOutRecovery,
             )
             : ZoomDirection.none;
 

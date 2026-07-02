@@ -37,7 +37,8 @@ class FollowObjectSequenceDetector {
   FollowObjectSequenceResult update(
     Hand hand,
     DateTime now, {
-    required bool isFrontCamera,
+    required bool mirrorHorizontally,
+    bool allowOppositePalmSide = false,
   }) {
     if (_recentDetected(now)) {
       _debug(
@@ -54,7 +55,8 @@ class FollowObjectSequenceDetector {
     final openPalm = _isOpenPalmGesture(
       hand: hand,
       now: now,
-      isFrontCamera: isFrontCamera,
+      mirrorHorizontally: mirrorHorizontally,
+      allowOppositePalmSide: allowOppositePalmSide,
     );
 
     final closedFist = _isPackageGesture(
@@ -148,12 +150,14 @@ class FollowObjectSequenceDetector {
   bool _isOpenPalmGesture({
     required Hand hand,
     required DateTime now,
-    required bool isFrontCamera,
+    required bool mirrorHorizontally,
+    required bool allowOppositePalmSide,
   }) {
     final result = _openPalmGestureDetector.detect(
       hand: hand,
       now: now,
-      isFrontCamera: isFrontCamera,
+      mirrorHorizontally: mirrorHorizontally,
+      allowOppositePalmSide: allowOppositePalmSide,
     );
 
     if (result.isDetected) {
