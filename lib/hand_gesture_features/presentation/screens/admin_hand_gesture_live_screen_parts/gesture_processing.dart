@@ -35,14 +35,16 @@ extension on _AdminHandGestureLiveScreenState {
         maxDim: HandGestureThresholds.maxDetectionDimension,
       );
 
-      print("image send to detectFromCameraImage : $image ${Platform.isIOS}");
+      debugPrint(
+        'image send to detectFromCameraImage : $image ${Platform.isIOS}',
+      );
       final hands = await detector.detectFromCameraImage(
         image,
         rotation: rotation,
         isBgra: Platform.isMacOS,
         maxDim: HandGestureThresholds.maxDetectionDimension,
       );
-      print("hands : ${hands.length}");
+      debugPrint('hands : ${hands.length}');
 
       if (!mounted) return;
 
@@ -228,6 +230,7 @@ extension on _AdminHandGestureLiveScreenState {
             ? _zoomGestureDetector.detect(
               hand: bestHand,
               imageSize: detectionImageSize,
+              allowPartialZoomOut: _currentZoomLevel > _minZoomLevel,
             )
             : ZoomDirection.none;
 

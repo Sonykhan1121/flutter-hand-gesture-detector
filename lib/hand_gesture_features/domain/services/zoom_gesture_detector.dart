@@ -15,6 +15,7 @@ class ZoomGestureDetector {
 
   ZoomGesturePhase _phase = ZoomGesturePhase.idle;
   ZoomDirection _directionLock = ZoomDirection.none;
+  bool _isPartialZoomOutPhase = false;
   double? _startDistanceRatio;
   DateTime? _phaseStartedAt;
   DateTime? _poseInvalidStartedAt;
@@ -25,13 +26,35 @@ class ZoomGestureDetector {
   DateTime? _startPoseStartedAt;
   double? _startPoseDistanceRatio;
 
-  ZoomDirection detect({required Hand hand, required Size imageSize}) {
+  ZoomDirection detect({
+    required Hand hand,
+    required Size imageSize,
+    bool allowPartialZoomOut = false,
+  }) {
     final now = DateTime.now();
     final distanceRatio = _zoomDistanceRatio(hand);
 
     if (distanceRatio == null) {
+      if (allowPartialZoomOut) {
+        final partialZoomOutDistanceRatio = _partialZoomOutDistanceRatio(
+          hand: hand,
+          imageSize: imageSize,
+        );
+
+        if (partialZoomOutDistanceRatio != null) {
+          return _detectPartialZoomOut(
+            distanceRatio: partialZoomOutDistanceRatio,
+            now: now,
+          );
+        }
+      }
+
       markPoseInvalid(now);
       return _recentDetected(now);
+    }
+
+    if (_isPartialZoomOutPhase) {
+      _clearActivePhase();
     }
 
     _poseInvalidStartedAt = null;
@@ -230,6 +253,7 @@ class ZoomGestureDetector {
 
   void _clearActivePhase() {
     _phase = ZoomGesturePhase.idle;
+    _isPartialZoomOutPhase = false;
     _startDistanceRatio = null;
     _phaseStartedAt = null;
     _clearStartPoseCandidate();
@@ -276,6 +300,126 @@ class ZoomGestureDetector {
 
     return now.difference(startedAt) >=
         HandGestureThresholds.zoomStartPoseHoldDuration;
+  }
+
+  ZoomDirection _detectPartialZoomOut({
+    required double distanceRatio,
+    required DateTime now,
+  }) {
+    _poseInvalidStartedAt = null;
+
+    final phaseStartedAt = _phaseStartedAt;
+    if (phaseStartedAt != null &&
+        now.difference(phaseStartedAt) >
+            HandGestureThresholds.zoomMaxGestureDuration) {
+      _clearActivePhase();
+    }
+
+    if (_phase == ZoomGesturePhase.armedForZoomIn ||
+        (_phase == ZoomGesturePhase.armedForZoomOut &&
+            !_isPartialZoomOutPhase)) {
+      _clearActivePhase();
+    }
+
+    if (_directionLock == ZoomDirection.zoomIn) {
+      _directionLock = ZoomDirection.none;
+      _clearStartPoseCandidate();
+    }
+
+    if (_directionLock == ZoomDirection.zoomOut) {
+      if (distanceRatio >=
+          HandGestureThresholds.partialZoomOutOpenMinImageRatio) {
+        final startPoseReady = _startOrContinueStartPose(
+          direction: ZoomDirection.zoomOut,
+          distanceRatio: distanceRatio,
+          now: now,
+        );
+
+        if (startPoseReady) {
+          final startDistance = _startPoseDistanceRatio ?? distanceRatio;
+          _armPartialZoomOut(startDistance: startDistance, now: now);
+        }
+      } else {
+        _clearStartPoseCandidate();
+      }
+
+      return _recentDetected(now);
+    }
+
+    switch (_phase) {
+      case ZoomGesturePhase.idle:
+        if (distanceRatio >=
+            HandGestureThresholds.partialZoomOutOpenMinImageRatio) {
+          final startPoseReady = _startOrContinueStartPose(
+            direction: ZoomDirection.zoomOut,
+            distanceRatio: distanceRatio,
+            now: now,
+          );
+
+          if (startPoseReady) {
+            final startDistance = _startPoseDistanceRatio ?? distanceRatio;
+            _armPartialZoomOut(startDistance: startDistance, now: now);
+          }
+        } else {
+          _clearStartPoseCandidate();
+        }
+
+        return _recentDetected(now);
+
+      case ZoomGesturePhase.armedForZoomIn:
+        _clearActivePhase();
+        return _recentDetected(now);
+
+      case ZoomGesturePhase.armedForZoomOut:
+        if (!_isPartialZoomOutPhase) {
+          _clearActivePhase();
+          return _recentDetected(now);
+        }
+
+        final startDistance = _startDistanceRatio;
+        final startedAt = _phaseStartedAt;
+
+        if (startDistance == null || startedAt == null) {
+          _clearActivePhase();
+          return _recentDetected(now);
+        }
+
+        if (distanceRatio > startDistance) {
+          _startDistanceRatio = distanceRatio;
+        }
+
+        final latestStart = _startDistanceRatio ?? startDistance;
+
+        final closedEnough =
+            latestStart - distanceRatio >=
+                HandGestureThresholds.partialZoomOutMinChangeImageRatio &&
+            distanceRatio <=
+                latestStart *
+                    HandGestureThresholds
+                        .partialZoomOutClosedMaxStartDistanceFactor;
+
+        final stableEnough =
+            now.difference(startedAt) >=
+            HandGestureThresholds.zoomMinGestureDuration;
+
+        if (closedEnough && stableEnough) {
+          return _completeGesture(ZoomDirection.zoomOut, now);
+        }
+
+        return _recentDetected(now);
+    }
+  }
+
+  void _armPartialZoomOut({
+    required double startDistance,
+    required DateTime now,
+  }) {
+    _clearStartPoseCandidate();
+    _directionLock = ZoomDirection.none;
+    _phase = ZoomGesturePhase.armedForZoomOut;
+    _isPartialZoomOutPhase = true;
+    _startDistanceRatio = startDistance;
+    _phaseStartedAt = now;
   }
 
   bool _hasOtherFingersClosedByAngle(Hand hand) {
@@ -369,6 +513,28 @@ class ZoomGestureDetector {
     }
 
     return geometry.distanceBetweenLandmarks(thumbTip, indexTip) / handSize;
+  }
+
+  double? _partialZoomOutDistanceRatio({
+    required Hand hand,
+    required Size imageSize,
+  }) {
+    if (!hand.hasLandmarks || imageSize.width <= 0 || imageSize.height <= 0) {
+      return null;
+    }
+
+    final thumbTip = _zoomVisibleLandmark(hand, HandLandmarkType.thumbTip);
+    final indexTip = _zoomVisibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerTip,
+    );
+
+    if (thumbTip == null || indexTip == null) return null;
+
+    final imageMaxSide = math.max(imageSize.width, imageSize.height);
+    if (imageMaxSide <= 0) return null;
+
+    return geometry.distanceBetweenLandmarks(thumbTip, indexTip) / imageMaxSide;
   }
 
   HandLandmark? _zoomVisibleLandmark(Hand hand, HandLandmarkType type) {
