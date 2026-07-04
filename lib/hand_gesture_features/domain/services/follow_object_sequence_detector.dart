@@ -4,6 +4,7 @@ import 'package:hand_detection/hand_detection.dart';
 
 import '../constants/hand_gesture_thresholds.dart';
 import '../enums/follow_object_sequence_phase.dart';
+import '../enums/follow_object_release_reason.dart';
 import '../models/follow_object_sequence_result.dart';
 import 'open_palm_gesture_detector.dart';
 
@@ -20,6 +21,7 @@ class FollowObjectSequenceDetector {
   FollowObjectSequencePhase _phase = FollowObjectSequencePhase.idle;
   DateTime? _lastDetectedAt;
   DateTime? _firstOpenPalmStartedAt;
+  Offset? _lastVisibleReleasePoint;
   GestureType? _currentPackageGestureType;
 
   bool? _lastOpenPalmDebugValue;
@@ -30,12 +32,13 @@ class FollowObjectSequenceDetector {
   /// 1. User first shows open palm and holds it for 1 second.
   /// 2. The sequence starts and stays alive while the hand remains on screen.
   /// 3. User can show closed fist any time later.
-  /// 4. User can move while staying on screen.
-  /// 5. User can show open palm again any time later.
-  /// 6. Then this returns isDetected=true to show "Follow the object".
+  /// 4. Full-screen target scanning starts after the first closed fist.
+  /// 5. User can move while staying on screen.
+  /// 6. Final open palm or hand leaving the screen releases at the last
+  ///    visible hand center.
   ///
-  /// Important: when the hand leaves the screen or becomes unreliable,
-  /// the presentation layer calls [clear], so the sequence resets.
+  /// Important: once closed fist has been detected, the presentation layer can
+  /// call [releaseFromLastVisiblePoint] when the hand leaves the screen.
   FollowObjectSequenceResult update(
     Hand hand,
     DateTime now, {
@@ -50,6 +53,7 @@ class FollowObjectSequenceDetector {
       return FollowObjectSequenceResult(
         isActive: true,
         isDetected: true,
+        isTargetSelectionActive: false,
         packageGestureType: _currentPackageGestureType,
       );
     }
@@ -71,6 +75,8 @@ class FollowObjectSequenceDetector {
 
     var detected = false;
     Offset? releasePoint;
+    FollowObjectReleaseReason? releaseReason;
+    GestureType? packageGestureType;
 
     switch (_phase) {
       case FollowObjectSequencePhase.idle:
@@ -103,6 +109,7 @@ class FollowObjectSequenceDetector {
 
       case FollowObjectSequencePhase.waitingForClosed:
         if (closedFist) {
+          _lastVisibleReleasePoint = _handReleasePoint(hand);
           _setPhase(
             FollowObjectSequencePhase.waitingForFinalOpen,
             'closed fist detected; waiting for final open palm',
@@ -111,10 +118,15 @@ class FollowObjectSequenceDetector {
         break;
 
       case FollowObjectSequencePhase.waitingForFinalOpen:
+        final currentReleasePoint = _handReleasePoint(hand);
+        _lastVisibleReleasePoint = currentReleasePoint;
+
         if (openPalm) {
           _lastDetectedAt = now;
           detected = true;
-          releasePoint = _handReleasePoint(hand);
+          releasePoint = currentReleasePoint;
+          releaseReason = FollowObjectReleaseReason.openPalm;
+          packageGestureType = _currentPackageGestureType;
           _debug(
             'sequence completed -> release point '
             '(${releasePoint.dx.toStringAsFixed(1)}, '
@@ -131,8 +143,56 @@ class FollowObjectSequenceDetector {
     return FollowObjectSequenceResult(
       isActive: isActive || isDetected,
       isDetected: isDetected,
-      packageGestureType: _currentPackageGestureType,
+      isTargetSelectionActive: _isTargetSelectionActive,
+      packageGestureType: packageGestureType ?? _currentPackageGestureType,
       releasePoint: releasePoint,
+      releaseReason: releaseReason,
+    );
+  }
+
+  bool get isTargetSelectionActive => _isTargetSelectionActive;
+
+  FollowObjectSequenceResult releaseFromLastVisiblePoint(DateTime now) {
+    if (!_isTargetSelectionActive) {
+      if (_phase != FollowObjectSequencePhase.idle) {
+        clear();
+      }
+
+      return const FollowObjectSequenceResult(
+        isActive: false,
+        isDetected: false,
+        isTargetSelectionActive: false,
+      );
+    }
+
+    final releasePoint = _lastVisibleReleasePoint;
+    if (releasePoint == null) {
+      _debug('hand lost without a saved release point; reset sequence');
+      clear();
+
+      return const FollowObjectSequenceResult(
+        isActive: false,
+        isDetected: false,
+        isTargetSelectionActive: false,
+      );
+    }
+
+    _lastDetectedAt = now;
+    final packageGestureType = _currentPackageGestureType;
+    _debug(
+      'hand lost -> release from last visible point '
+      '(${releasePoint.dx.toStringAsFixed(1)}, '
+      '${releasePoint.dy.toStringAsFixed(1)})',
+    );
+    clear(keepLastDetected: true);
+
+    return FollowObjectSequenceResult(
+      isActive: true,
+      isDetected: true,
+      isTargetSelectionActive: false,
+      packageGestureType: packageGestureType,
+      releasePoint: releasePoint,
+      releaseReason: FollowObjectReleaseReason.handLost,
     );
   }
 
@@ -146,6 +206,7 @@ class FollowObjectSequenceDetector {
 
     _phase = FollowObjectSequencePhase.idle;
     _firstOpenPalmStartedAt = null;
+    _lastVisibleReleasePoint = null;
     _currentPackageGestureType = null;
     _lastOpenPalmDebugValue = null;
     _lastClosedFistDebugValue = null;
@@ -209,6 +270,9 @@ class FollowObjectSequenceDetector {
         now.difference(lastDetectedAt) <=
             HandGestureThresholds.followObjectMessageHoldDuration;
   }
+
+  bool get _isTargetSelectionActive =>
+      _phase == FollowObjectSequencePhase.waitingForFinalOpen;
 
   Offset _handReleasePoint(Hand hand) {
     final box = hand.boundingBox;

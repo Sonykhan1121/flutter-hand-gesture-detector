@@ -108,11 +108,12 @@ extension on _AdminHandGestureLiveScreenState {
         selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup: Platform.isIOS
-            ? ImageFormatGroup.bgra8888
-            : Platform.isAndroid
-            ? ImageFormatGroup.yuv420
-            : ImageFormatGroup.bgra8888,
+        imageFormatGroup:
+            Platform.isIOS
+                ? ImageFormatGroup.bgra8888
+                : Platform.isAndroid
+                ? ImageFormatGroup.yuv420
+                : ImageFormatGroup.bgra8888,
       );
 
       _controller = controller;
@@ -146,6 +147,8 @@ extension on _AdminHandGestureLiveScreenState {
         _focusedHandBox = null;
         _focusImageSize = null;
         _lockedFollowTarget = null;
+        _followObjectCandidateFaces = const [];
+        _followObjectCandidateObjects = const [];
         _lockedFollowTargetLostAt = null;
         _lastFrameProcessedAt = null;
       });
@@ -318,6 +321,7 @@ extension on _AdminHandGestureLiveScreenState {
 
     _zoomGestureDetector.clearState();
     _followObjectSequenceDetector.clear();
+    _clearFollowObjectTargetCandidates();
     _clearLockedFollowTarget();
     _clearRecordingGestureHold();
     _clearFaceDetectGestureHold();
@@ -349,9 +353,10 @@ extension on _AdminHandGestureLiveScreenState {
       _pendingZoomLevel = null;
     });
 
-    _currentLensDirection = _currentLensDirection == CameraLensDirection.front
-        ? CameraLensDirection.back
-        : CameraLensDirection.front;
+    _currentLensDirection =
+        _currentLensDirection == CameraLensDirection.front
+            ? CameraLensDirection.back
+            : CameraLensDirection.front;
 
     await _initializeCamera();
 
@@ -397,6 +402,7 @@ extension on _AdminHandGestureLiveScreenState {
 
     _zoomGestureDetector.clearState();
     _followObjectSequenceDetector.clear();
+    _clearFollowObjectTargetCandidates();
     _clearLockedFollowTarget();
     _clearRecordingGestureHold();
     _clearFaceDetectGestureHold();

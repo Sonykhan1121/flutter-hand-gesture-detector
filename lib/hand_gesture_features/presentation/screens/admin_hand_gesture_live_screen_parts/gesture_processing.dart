@@ -106,15 +106,50 @@ extension on _AdminHandGestureLiveScreenState {
     if (!mounted) return;
 
     if (hands.isEmpty) {
+      final followObjectRelease =
+          await _releaseFollowObjectFromLastVisiblePoint(
+            image: image,
+            rotation: rotation,
+            detectionImageSize: detectionImageSize,
+            now: now,
+          );
+      if (!mounted) return;
+
+      if (followObjectRelease != null) {
+        final selectedTarget = followObjectRelease.target;
+        _zoomGestureDetector.markPoseInvalid(now);
+        _clearRecordingGestureHold();
+        _clearFaceDetectGestureHold();
+
+        _setScreenState(() {
+          _gestureText =
+              selectedTarget == null
+                  ? 'No face or object selected'
+                  : _followTargetText(selectedTarget);
+          _handText = '';
+          _gestureConfidence = selectedTarget == null ? 0 : 1;
+          _detectedHandsCount = 0;
+          _hands = const [];
+          _detectionImageSize = detectionImageSize;
+          _isFollowingHand = false;
+          _focusedHandBox = null;
+          _focusImageSize = null;
+          _lockedFollowTarget = selectedTarget;
+        });
+        return;
+      }
+
       _zoomGestureDetector.markPoseInvalid(now);
       _followObjectSequenceDetector.clear();
+      _clearFollowObjectTargetCandidates();
       _clearRecordingGestureHold();
       _clearFaceDetectGestureHold();
 
       _setScreenState(() {
-        _gestureText = trackedFollowTarget == null
-            ? 'No hand detected'
-            : _followTargetText(trackedFollowTarget);
+        _gestureText =
+            trackedFollowTarget == null
+                ? 'No hand detected'
+                : _followTargetText(trackedFollowTarget);
         _handText = '';
         _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
         _detectedHandsCount = 0;
@@ -133,6 +168,39 @@ extension on _AdminHandGestureLiveScreenState {
         .toList(growable: false);
 
     if (reliableHands.isEmpty) {
+      final followObjectRelease =
+          await _releaseFollowObjectFromLastVisiblePoint(
+            image: image,
+            rotation: rotation,
+            detectionImageSize: detectionImageSize,
+            now: now,
+          );
+      if (!mounted) return;
+
+      if (followObjectRelease != null) {
+        final selectedTarget = followObjectRelease.target;
+        _zoomGestureDetector.markPoseInvalid(now);
+        _clearRecordingGestureHold();
+        _clearFaceDetectGestureHold();
+
+        _setScreenState(() {
+          _hands = hands;
+          _detectionImageSize = detectionImageSize;
+          _detectedHandsCount = hands.length;
+          _handText = '';
+          _gestureText =
+              selectedTarget == null
+                  ? 'No face or object selected'
+                  : _followTargetText(selectedTarget);
+          _gestureConfidence = selectedTarget == null ? 0 : 1;
+          _isFollowingHand = false;
+          _focusedHandBox = null;
+          _focusImageSize = null;
+          _lockedFollowTarget = selectedTarget;
+        });
+        return;
+      }
+
       if (_isFollowingHand && trackedFollowTarget == null) {
         final trackedHand = _selectTrackedHand(hands);
         _updateFocusedHand(hand: trackedHand, imageSize: detectionImageSize);
@@ -150,6 +218,7 @@ extension on _AdminHandGestureLiveScreenState {
 
       _zoomGestureDetector.markPoseInvalid(now);
       _followObjectSequenceDetector.clear();
+      _clearFollowObjectTargetCandidates();
       _clearRecordingGestureHold();
       _clearFaceDetectGestureHold();
 
@@ -158,9 +227,10 @@ extension on _AdminHandGestureLiveScreenState {
         _detectionImageSize = detectionImageSize;
         _detectedHandsCount = hands.length;
         _handText = '';
-        _gestureText = trackedFollowTarget == null
-            ? 'Move hand closer'
-            : _followTargetText(trackedFollowTarget);
+        _gestureText =
+            trackedFollowTarget == null
+                ? 'Move hand closer'
+                : _followTargetText(trackedFollowTarget);
         _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
         _isFollowingHand = false;
         _focusedHandBox = null;
@@ -170,12 +240,13 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final bestHand = _isFollowingHand && trackedFollowTarget == null
-        ? _selectTrackedHand(hands)
-        : reliableHands.reduce(
-            (currentBest, next) =>
-                next.score > currentBest.score ? next : currentBest,
-          );
+    final bestHand =
+        _isFollowingHand && trackedFollowTarget == null
+            ? _selectTrackedHand(hands)
+            : reliableHands.reduce(
+              (currentBest, next) =>
+                  next.score > currentBest.score ? next : currentBest,
+            );
 
     final mirrorDirectionalGestureCoordinates =
         _shouldMirrorDirectionalGestureCoordinates(_controller);
@@ -222,6 +293,7 @@ extension on _AdminHandGestureLiveScreenState {
       if (holdProgress < 1) {
         _zoomGestureDetector.clearState();
         _followObjectSequenceDetector.clear();
+        _clearFollowObjectTargetCandidates();
         _clearRecordingGestureHold();
 
         _setScreenState(() {
@@ -263,9 +335,10 @@ extension on _AdminHandGestureLiveScreenState {
         _lockedFollowTarget = faceTarget;
         _detectedHandsCount = hands.length;
         _handText = bestHand.handedness.displayLabel;
-        _gestureText = faceTarget == null
-            ? 'No face detected'
-            : _followTargetText(faceTarget);
+        _gestureText =
+            faceTarget == null
+                ? 'No face detected'
+                : _followTargetText(faceTarget);
         _gestureConfidence = faceTarget == null ? 0 : 1;
       });
       return;
@@ -299,14 +372,25 @@ extension on _AdminHandGestureLiveScreenState {
       if (lockedFollowTarget == null) {
         releaseHadNoTarget = true;
         _clearLockedFollowTarget();
+        _clearFollowObjectTargetCandidates();
       } else {
         _lockedFollowTarget = lockedFollowTarget;
         _lockedFollowTargetLostAt = null;
         _isFollowingHand = false;
         _focusedHandBox = null;
         _focusImageSize = null;
+        _clearFollowObjectTargetCandidates();
         unawaited(_updateCameraFocusPointForTarget(lockedFollowTarget));
       }
+    } else if (followObjectSequence.isTargetSelectionActive) {
+      await _refreshFollowObjectTargetCandidates(
+        image: image,
+        rotation: rotation,
+        now: now,
+      );
+      if (!mounted) return;
+    } else {
+      _clearFollowObjectTargetCandidates();
     }
 
     final followObjectSequenceActive = followObjectSequence.isActive;
@@ -324,9 +408,10 @@ extension on _AdminHandGestureLiveScreenState {
         gesture.type != GestureType.openPalm &&
         gesture.confidence >= HandGestureThresholds.minPackageGestureConfidence;
 
-    final customGestureResult = followTrackingActive
-        ? CustomGestureDetectionResult.empty
-        : rawCustomGestureResult;
+    final customGestureResult =
+        followTrackingActive
+            ? CustomGestureDetectionResult.empty
+            : rawCustomGestureResult;
 
     final customGestureLabels = customGestureResult.labels;
     final hasSingleCustomGesture = customGestureLabels.length == 1;
@@ -348,34 +433,48 @@ extension on _AdminHandGestureLiveScreenState {
     );
     final recordingGestureActive = recordingGestureFeedback != null;
 
-    final moveDirection =
+    final packageGestureBlocksZoom =
+        hasKnownGesture && gesture.type != GestureType.pointingUp;
+
+    final canDetectZoom =
         !followTrackingActive &&
-            customGestureLabels.isEmpty &&
-            !recordingGestureActive
-        ? _directionGestureDetector.detect(
-            hand: bestHand,
-            imageSize: detectionImageSize,
-            mirrorHorizontally: mirrorDirectionalGestureCoordinates,
-          )
-        : HandMoveDirection.none;
+        customGestureLabels.isEmpty &&
+        !recordingGestureActive &&
+        !packageGestureBlocksZoom;
+
+    var zoomDirection = ZoomDirection.none;
+    if (canDetectZoom) {
+      zoomDirection = _zoomGestureDetector.detect(
+        hand: bestHand,
+        imageSize: detectionImageSize,
+        allowPartialZoomOut: _shouldAllowPartialZoomOutRecovery,
+      );
+    } else {
+      _zoomGestureDetector.clearState();
+    }
+
+    final zoomGestureActive =
+        zoomDirection != ZoomDirection.none ||
+        _zoomGestureDetector.isGestureActive;
+
+    var moveDirection = HandMoveDirection.none;
+    if (!followTrackingActive &&
+        customGestureLabels.isEmpty &&
+        !recordingGestureActive &&
+        !zoomGestureActive &&
+        !hasKnownGesture) {
+      moveDirection = _directionGestureDetector.detect(
+        hand: bestHand,
+        imageSize: detectionImageSize,
+        mirrorHorizontally: mirrorDirectionalGestureCoordinates,
+      );
+    }
 
     final hasDirectionGesture = moveDirection != HandMoveDirection.none;
 
     if (hasDirectionGesture) {
       _zoomGestureDetector.clearState();
     }
-
-    final zoomDirection =
-        !followTrackingActive &&
-            customGestureLabels.isEmpty &&
-            !recordingGestureActive &&
-            !hasDirectionGesture
-        ? _zoomGestureDetector.detect(
-            hand: bestHand,
-            imageSize: detectionImageSize,
-            allowPartialZoomOut: _shouldAllowPartialZoomOutRecovery,
-          )
-        : ZoomDirection.none;
 
     _handleZoomDirection(zoomDirection);
 
@@ -429,18 +528,6 @@ extension on _AdminHandGestureLiveScreenState {
       } else if (hasOverlappingCustomGestures) {
         _gestureText = 'Hand detected';
         _gestureConfidence = 0;
-      } else if (moveDirection == HandMoveDirection.left) {
-        _gestureText = 'Moving left';
-        _gestureConfidence = 1;
-      } else if (moveDirection == HandMoveDirection.right) {
-        _gestureText = 'Moving right';
-        _gestureConfidence = 1;
-      } else if (moveDirection == HandMoveDirection.up) {
-        _gestureText = 'Moving up';
-        _gestureConfidence = 1;
-      } else if (moveDirection == HandMoveDirection.down) {
-        _gestureText = 'Moving down';
-        _gestureConfidence = 1;
       } else if (zoomDirection == ZoomDirection.zoomIn) {
         _gestureText = _isCameraZoomSupported ? 'Zoom in' : 'Zoom unavailable';
         _gestureConfidence = _isCameraZoomSupported ? 1 : 0;
@@ -457,6 +544,18 @@ extension on _AdminHandGestureLiveScreenState {
         }
 
         _gestureConfidence = gesture.confidence;
+      } else if (moveDirection == HandMoveDirection.left) {
+        _gestureText = 'Moving left';
+        _gestureConfidence = 1;
+      } else if (moveDirection == HandMoveDirection.right) {
+        _gestureText = 'Moving right';
+        _gestureConfidence = 1;
+      } else if (moveDirection == HandMoveDirection.up) {
+        _gestureText = 'Moving up';
+        _gestureConfidence = 1;
+      } else if (moveDirection == HandMoveDirection.down) {
+        _gestureText = 'Moving down';
+        _gestureConfidence = 1;
       } else {
         _gestureText = 'Hand detected';
         _gestureConfidence = 0;
@@ -516,6 +615,24 @@ extension on _AdminHandGestureLiveScreenState {
     required CameraFrameRotation? rotation,
     required DateTime now,
   }) async {
+    final detections = await _refreshFollowObjectTargetCandidates(
+      image: image,
+      rotation: rotation,
+      now: now,
+    );
+
+    return _followTargetSelector.selectNearest(
+      releasePoint: releasePoint,
+      faces: detections.faces,
+      objects: detections.objects,
+    );
+  }
+
+  Future<_FollowTargetDetections> _refreshFollowObjectTargetCandidates({
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+    required DateTime now,
+  }) async {
     final detections = await _detectFollowTargets(
       image: image,
       rotation: rotation,
@@ -523,13 +640,69 @@ extension on _AdminHandGestureLiveScreenState {
       includeFaces: true,
       includeObjects: true,
     );
-    if (detections == null) return null;
 
-    return _followTargetSelector.select(
-      releasePoint: releasePoint,
-      faces: detections.faces,
-      objects: detections.objects,
+    if (detections != null) {
+      _followObjectCandidateFaces = detections.faces;
+      _followObjectCandidateObjects = detections.objects;
+    }
+
+    return _FollowTargetDetections(
+      faces: _followObjectCandidateFaces,
+      objects: _followObjectCandidateObjects,
     );
+  }
+
+  void _clearFollowObjectTargetCandidates() {
+    _followObjectCandidateFaces = const [];
+    _followObjectCandidateObjects = const [];
+  }
+
+  Future<_FollowObjectReleaseSelection?>
+  _releaseFollowObjectFromLastVisiblePoint({
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+    required Size detectionImageSize,
+    required DateTime now,
+  }) async {
+    if (!_followObjectSequenceDetector.isTargetSelectionActive) {
+      return null;
+    }
+
+    final releaseResult = _followObjectSequenceDetector
+        .releaseFromLastVisiblePoint(now);
+    final releasePoint = releaseResult.releasePoint;
+
+    if (releasePoint == null) {
+      _clearFollowObjectTargetCandidates();
+      return null;
+    }
+
+    final releaseDisplayPoint = _handPointToDisplayPoint(
+      releasePoint,
+      detectionImageSize,
+    );
+    final target = await _selectFollowTargetAtReleasePoint(
+      releaseDisplayPoint,
+      image: image,
+      rotation: rotation,
+      now: now,
+    );
+
+    if (target == null) {
+      _clearLockedFollowTarget();
+      _clearFollowObjectTargetCandidates();
+      return const _FollowObjectReleaseSelection(target: null);
+    }
+
+    _lockedFollowTarget = target;
+    _lockedFollowTargetLostAt = null;
+    _isFollowingHand = false;
+    _focusedHandBox = null;
+    _focusImageSize = null;
+    _clearFollowObjectTargetCandidates();
+    unawaited(_updateCameraFocusPointForTarget(target));
+
+    return _FollowObjectReleaseSelection(target: target);
   }
 
   Future<FollowTarget?> _selectBestFaceTarget({
@@ -571,9 +744,10 @@ extension on _AdminHandGestureLiveScreenState {
     );
     if (detections == null) return _keepOrClearLostFollowTarget(now);
 
-    final candidates = previous.type == FollowTargetType.face
-        ? detections.faces
-        : detections.objects;
+    final candidates =
+        previous.type == FollowTargetType.face
+            ? detections.faces
+            : detections.objects;
     final updated = _followTargetSelector.track(
       previous: previous,
       candidates: candidates,
@@ -849,15 +1023,17 @@ extension on _AdminHandGestureLiveScreenState {
       (point.dy / imageSize.height).clamp(0.0, 1.0),
     );
     final controller = _controller;
-    final rotatedPoint = controller == null
-        ? normalizedPoint
-        : _rotateNormalizedPoint(
-            normalizedPoint,
-            _previewQuarterTurnsForOverlays(controller),
-          );
-    final displayPoint = _shouldMirrorPreviewCoordinates(controller)
-        ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
-        : rotatedPoint;
+    final rotatedPoint =
+        controller == null
+            ? normalizedPoint
+            : _rotateNormalizedPoint(
+              normalizedPoint,
+              _previewQuarterTurnsForOverlays(controller),
+            );
+    final displayPoint =
+        _shouldMirrorPreviewCoordinates(controller)
+            ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
+            : rotatedPoint;
 
     return Offset(
       displayPoint.dx.clamp(0.0, 1.0),
@@ -923,6 +1099,7 @@ extension on _AdminHandGestureLiveScreenState {
   void _clearAllActiveGestureTasks({required bool resetCameraZoom}) {
     _zoomGestureDetector.clearState();
     _followObjectSequenceDetector.clear();
+    _clearFollowObjectTargetCandidates();
     _clearLockedFollowTarget();
     _clearRecordingGestureHold();
     _clearFaceDetectGestureHold();
@@ -1000,4 +1177,10 @@ class _FollowTargetDetections {
 
   final List<FollowTarget> faces;
   final List<FollowTarget> objects;
+}
+
+class _FollowObjectReleaseSelection {
+  const _FollowObjectReleaseSelection({required this.target});
+
+  final FollowTarget? target;
 }

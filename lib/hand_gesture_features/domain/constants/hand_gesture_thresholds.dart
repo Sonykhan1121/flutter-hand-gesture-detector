@@ -5,7 +5,7 @@ import 'package:hand_detection/hand_detection.dart';
 abstract final class HandGestureThresholds {
   static const int maxDetectionDimension = 640;
 
-  static const double minHandScore = 0.60;
+  static const double minHandScore = 0.45;
   static const double minPackageGestureConfidence = 0.50;
 
   static const double openPalmEnterConfidence = 0.55;
@@ -32,7 +32,7 @@ abstract final class HandGestureThresholds {
   );
   static const Duration faceDetectHoldDuration = Duration(seconds: 2);
 
-  static const double minLandmarkVisibility = 0.60;
+  static const double minLandmarkVisibility = 0.35;
 
   static const List<HandLandmarkType> directionFingerTipTypes = [
     HandLandmarkType.indexFingerTip,
@@ -107,17 +107,18 @@ abstract final class HandGestureThresholds {
   static const double punchGestureMinPackageConfidence = 0.60;
 
   static const int indexCircleHistoryMaxLength = 36;
+  static const int indexCircleMinSampleCount = 5;
   static const Duration indexCircleWindow = Duration(milliseconds: 1400);
   static const Duration cancelEverythingHoldDuration = Duration(
     milliseconds: 900,
   );
   static const double indexCircleMinAngleRadians = math.pi * 0.90;
-  static const double indexCircleMinRadiusRatio = 0.025;
+  static const double indexCircleMinImageRadiusRatio = 0.006;
+  static const double indexCircleMinRadiusRatio = 0.015;
   static const double indexCircleMaxRadiusVariationRatio = 1.60;
 
-  static const double indexUpperFacingMinDistanceRatio = 0.20;
-  static const double indexUpperSideCircleMinDistanceRatio = 0.10;
-  static const double indexUprightMaxSideOffsetRatio = 0.34;
+  static const double indexUpperFacingMinDistanceRatio = 0.08;
+  static const double indexUprightMaxSideOffsetRatio = 0.50;
 
   static const double closedThumbMaxPalmDistanceRatio = 0.30;
   static const double closedThumbTipIpPalmRatio = 1.00;

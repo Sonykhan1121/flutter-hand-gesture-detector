@@ -1,0 +1,104 @@
+import 'package:flutter/material.dart';
+
+import '../../domain/models/follow_target.dart';
+
+class FollowTargetDebugOverlayPainter extends CustomPainter {
+  const FollowTargetDebugOverlayPainter({required this.targets});
+
+  final List<FollowTarget> targets;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (targets.isEmpty) return;
+
+    final borderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = Colors.red;
+
+    final labelBackgroundPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = Colors.black.withValues(alpha: 0.62);
+
+    for (final target in targets) {
+      final rect = _displayRect(target, size);
+      if (rect.isEmpty) continue;
+
+      canvas.drawRect(rect, borderPaint);
+      _drawLabel(
+        canvas: canvas,
+        size: size,
+        rect: rect,
+        label: target.displayLabel,
+        backgroundPaint: labelBackgroundPaint,
+      );
+    }
+  }
+
+  Rect _displayRect(FollowTarget target, Size size) {
+    final box = target.displayBox;
+    final rect = Rect.fromLTRB(
+      box.left * size.width,
+      box.top * size.height,
+      box.right * size.width,
+      box.bottom * size.height,
+    );
+
+    return Rect.fromLTRB(
+      rect.left.clamp(0, size.width),
+      rect.top.clamp(0, size.height),
+      rect.right.clamp(0, size.width),
+      rect.bottom.clamp(0, size.height),
+    );
+  }
+
+  void _drawLabel({
+    required Canvas canvas,
+    required Size size,
+    required Rect rect,
+    required String label,
+    required Paint backgroundPaint,
+  }) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(
+          color: Colors.red,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          height: 1.15,
+        ),
+      ),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: (size.width - 8).clamp(0.0, size.width).toDouble());
+
+    const padding = EdgeInsets.symmetric(horizontal: 5, vertical: 3);
+    final labelSize = Size(
+      textPainter.width + padding.horizontal,
+      textPainter.height + padding.vertical,
+    );
+    final maxLabelLeft = (size.width - labelSize.width).clamp(0.0, size.width);
+    final labelLeft = rect.left.clamp(0.0, maxLabelLeft).toDouble();
+    final preferredTop = rect.top - labelSize.height - 2;
+    final maxLabelTop = (size.height - labelSize.height).clamp(
+      0.0,
+      size.height,
+    );
+    final labelTop = preferredTop >= 0
+        ? preferredTop
+        : (rect.top + 2).clamp(0.0, maxLabelTop).toDouble();
+    final labelRect = Offset(labelLeft, labelTop) & labelSize;
+
+    canvas.drawRect(labelRect, backgroundPaint);
+    textPainter.paint(
+      canvas,
+      labelRect.topLeft + Offset(padding.left, padding.top),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant FollowTargetDebugOverlayPainter oldDelegate) {
+    return oldDelegate.targets != targets;
+  }
+}

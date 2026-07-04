@@ -26,6 +26,12 @@ class ZoomGestureDetector {
   DateTime? _startPoseStartedAt;
   double? _startPoseDistanceRatio;
 
+  bool get isGestureActive =>
+      _phase != ZoomGesturePhase.idle ||
+      _isPartialZoomOutPhase ||
+      _directionLock != ZoomDirection.none ||
+      _startPoseDirection != ZoomDirection.none;
+
   ZoomDirection detect({
     required Hand hand,
     required Size imageSize,

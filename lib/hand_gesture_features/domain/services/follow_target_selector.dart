@@ -16,6 +16,33 @@ class FollowTargetSelector {
         _bestAtPoint(releasePoint, objects);
   }
 
+  FollowTarget? selectNearest({
+    required Offset releasePoint,
+    required List<FollowTarget> faces,
+    required List<FollowTarget> objects,
+  }) {
+    FollowTarget? bestCandidate;
+    var bestDistance = double.infinity;
+    var bestArea = double.infinity;
+
+    for (final candidate in [...faces, ...objects]) {
+      final distance = _centerDistance(
+        releasePoint,
+        candidate.displayBox.center,
+      );
+      final area = candidate.displayBox.width * candidate.displayBox.height;
+
+      if (distance < bestDistance ||
+          (distance == bestDistance && area < bestArea)) {
+        bestDistance = distance;
+        bestArea = area;
+        bestCandidate = candidate;
+      }
+    }
+
+    return bestCandidate;
+  }
+
   FollowTarget? track({
     required FollowTarget previous,
     required List<FollowTarget> candidates,

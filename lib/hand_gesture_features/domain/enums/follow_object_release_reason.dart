@@ -1,0 +1,1 @@
+enum FollowObjectReleaseReason { openPalm, handLost }

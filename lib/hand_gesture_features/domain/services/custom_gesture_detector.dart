@@ -41,7 +41,7 @@ class CustomGestureDetector {
   }) {
     final now = DateTime.now();
 
-    if (!_isIndexOnlyUpperGesture(hand)) {
+    if (!_isIndexOnlyNearUpperGesture(hand)) {
       return _recentCancelEverythingDetected(now);
     }
 
@@ -49,24 +49,12 @@ class CustomGestureDetector {
       hand,
       HandLandmarkType.indexFingerTip,
     );
-    final palmCenter = geometry.palmCenter(hand);
 
-    if (indexTip == null ||
-        palmCenter == null ||
-        imageSize.width <= 0 ||
-        imageSize.height <= 0) {
+    if (indexTip == null || imageSize.width <= 0 || imageSize.height <= 0) {
       return _recentCancelEverythingDetected(now);
     }
 
     final handSize = _handSize(hand);
-
-    if (!_isPointOnUpperPalmSide(
-      pointY: indexTip.y,
-      palmCenterY: palmCenter.dy,
-      handSize: handSize,
-    )) {
-      return _recentCancelEverythingDetected(now);
-    }
 
     final point = Offset(
       mirrorHorizontally ? imageSize.width - indexTip.x : indexTip.x,
@@ -86,23 +74,12 @@ class CustomGestureDetector {
       _indexCircleHistory.removeFirst();
     }
 
-    if (_indexCircleHistory.length < 7) {
+    if (_indexCircleHistory.length <
+        HandGestureThresholds.indexCircleMinSampleCount) {
       return _recentCancelEverythingDetected(now);
     }
 
     final points = _indexCircleHistory.map((sample) => sample.point).toList();
-
-    final allPointsStayUpper = points.every(
-      (point) => _isPointOnUpperPalmSide(
-        pointY: point.dy,
-        palmCenterY: palmCenter.dy,
-        handSize: handSize,
-      ),
-    );
-
-    if (!allPointsStayUpper) {
-      return _recentCancelEverythingDetected(now);
-    }
 
     final minX = points.map((point) => point.dx).reduce(math.min);
     final maxX = points.map((point) => point.dx).reduce(math.max);
@@ -113,7 +90,8 @@ class CustomGestureDetector {
     final circleHeight = maxY - minY;
 
     final minCircleRadius = math.max(
-      math.min(imageSize.width, imageSize.height) * 0.010,
+      math.min(imageSize.width, imageSize.height) *
+          HandGestureThresholds.indexCircleMinImageRadiusRatio,
       handSize * HandGestureThresholds.indexCircleMinRadiusRatio,
     );
 
@@ -127,21 +105,12 @@ class CustomGestureDetector {
       geometry.average(points.map((point) => point.dy)),
     );
 
-    if (!_isPointOnUpperPalmSide(
-      pointY: center.dy,
-      palmCenterY: palmCenter.dy,
-      handSize: handSize,
-    )) {
-      return _recentCancelEverythingDetected(now);
-    }
+    final radii = points
+        .map((point) => geometry.distanceBetweenOffsets(point, center))
+        .where((radius) => radius > 0)
+        .toList();
 
-    final radii =
-        points
-            .map((point) => geometry.distanceBetweenOffsets(point, center))
-            .where((radius) => radius > 0)
-            .toList();
-
-    if (radii.length < 7) {
+    if (radii.length < HandGestureThresholds.indexCircleMinSampleCount) {
       return _recentCancelEverythingDetected(now);
     }
 
@@ -169,7 +138,7 @@ class CustomGestureDetector {
     return _recentCancelEverythingDetected(now);
   }
 
-  bool _isIndexOnlyUpperGesture(Hand hand) {
+  bool _isIndexOnlyNearUpperGesture(Hand hand) {
     if (!hand.hasLandmarks) return false;
 
     final thumbTip = geometry.visibleLandmark(hand, HandLandmarkType.thumbTip);
@@ -256,14 +225,12 @@ class CustomGestureDetector {
       handSize: handSize,
     );
 
-    final indexFacesUp =
-        indexTip.y < indexDip.y &&
-        indexDip.y < indexPip.y &&
+    final indexFacesNearUp =
+        indexTip.y < indexPip.y &&
         indexTip.y <
             palmCenter.dy -
                 handSize *
                     HandGestureThresholds.indexUpperFacingMinDistanceRatio &&
-        indexPip.y < palmCenter.dy - handSize * 0.04 &&
         (indexTip.x - indexMcp.x).abs() <=
             handSize * HandGestureThresholds.indexUprightMaxSideOffsetRatio;
 
@@ -296,7 +263,7 @@ class CustomGestureDetector {
     );
 
     return indexIsOpen &&
-        indexFacesUp &&
+        indexFacesNearUp &&
         thumbIsClosed &&
         middleIsClosed &&
         ringIsClosed &&
@@ -716,17 +683,6 @@ class CustomGestureDetector {
     return lastDetectedAt != null &&
         now.difference(lastDetectedAt) <=
             HandGestureThresholds.cancelEverythingHoldDuration;
-  }
-
-  bool _isPointOnUpperPalmSide({
-    required double pointY,
-    required double palmCenterY,
-    required double handSize,
-  }) {
-    return pointY <=
-        palmCenterY -
-            handSize *
-                HandGestureThresholds.indexUpperSideCircleMinDistanceRatio;
   }
 
   double _handSize(Hand hand) {

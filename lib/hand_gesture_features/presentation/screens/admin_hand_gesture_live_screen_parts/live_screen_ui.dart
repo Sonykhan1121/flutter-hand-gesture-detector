@@ -151,6 +151,12 @@ extension on _AdminHandGestureLiveScreenState {
 
   Widget _buildLiveScreen(BuildContext context) {
     final controller = _controller;
+    final followTargetDebugOverlayTargets = _showFollowTargetDebugOverlay
+        ? <FollowTarget>[
+            ..._followObjectCandidateFaces,
+            ..._followObjectCandidateObjects,
+          ]
+        : const <FollowTarget>[];
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -201,6 +207,12 @@ extension on _AdminHandGestureLiveScreenState {
                                 CustomPaint(
                                   painter: FollowTargetOverlayPainter(
                                     target: _lockedFollowTarget!,
+                                  ),
+                                ),
+                              if (followTargetDebugOverlayTargets.isNotEmpty)
+                                CustomPaint(
+                                  painter: FollowTargetDebugOverlayPainter(
+                                    targets: followTargetDebugOverlayTargets,
                                   ),
                                 ),
                             ],

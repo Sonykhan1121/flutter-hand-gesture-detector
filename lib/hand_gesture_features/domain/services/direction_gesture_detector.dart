@@ -48,14 +48,24 @@ class DirectionGestureDetector {
         if (landmark == null) return HandMoveDirection.none;
 
         chain.add(landmark);
+      }
+
+      if (!_isFingerChainExtended(chain)) continue;
+
+      fingerChains.add(chain);
+
+      for (final landmark in chain) {
         pointXs.add(visibleX(landmark.x));
         pointYs.add(landmark.y);
       }
-
-      fingerChains.add(chain);
     }
 
-    if (pointXs.isEmpty || pointYs.isEmpty) return HandMoveDirection.none;
+    if (fingerChains.length <
+            HandGestureThresholds.directionFingerChainMinAlignedCount ||
+        pointXs.isEmpty ||
+        pointYs.isEmpty) {
+      return HandMoveDirection.none;
+    }
 
     final fingerPointWidth =
         pointXs.reduce(math.max) - pointXs.reduce(math.min);
@@ -131,20 +141,20 @@ class DirectionGestureDetector {
 
     final horizontalDirection =
         leftPointingFingerCount >=
-            HandGestureThresholds.directionFingerChainMinAlignedCount
-        ? HandMoveDirection.left
-        : rightPointingFingerCount >=
-              HandGestureThresholds.directionFingerChainMinAlignedCount
-        ? HandMoveDirection.right
-        : HandMoveDirection.none;
+                HandGestureThresholds.directionFingerChainMinAlignedCount
+            ? HandMoveDirection.left
+            : rightPointingFingerCount >=
+                HandGestureThresholds.directionFingerChainMinAlignedCount
+            ? HandMoveDirection.right
+            : HandMoveDirection.none;
     final verticalDirection =
         upPointingFingerCount >=
-            HandGestureThresholds.directionFingerChainMinAlignedCount
-        ? HandMoveDirection.up
-        : downPointingFingerCount >=
-              HandGestureThresholds.directionFingerChainMinAlignedCount
-        ? HandMoveDirection.down
-        : HandMoveDirection.none;
+                HandGestureThresholds.directionFingerChainMinAlignedCount
+            ? HandMoveDirection.up
+            : downPointingFingerCount >=
+                HandGestureThresholds.directionFingerChainMinAlignedCount
+            ? HandMoveDirection.down
+            : HandMoveDirection.none;
 
     if (horizontalDirection != HandMoveDirection.none &&
         verticalDirection != HandMoveDirection.none) {
@@ -158,5 +168,14 @@ class DirectionGestureDetector {
     }
 
     return verticalDirection;
+  }
+
+  bool _isFingerChainExtended(List<HandLandmark> chain) {
+    return geometry.fingerJointAngleDegrees(
+          mcp: chain[0],
+          pip: chain[1],
+          tip: chain[3],
+        ) >=
+        HandGestureThresholds.fingerExtendedMinAngleDegrees;
   }
 }

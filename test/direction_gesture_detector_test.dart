@@ -201,6 +201,20 @@ void main() {
       expect(_detect(detector, hand), HandMoveDirection.none);
     });
 
+    test('returns none when folded finger chains point up', () {
+      final hand = _handWithFingerChainVectors(
+        [
+          const Offset(0, -90),
+          const Offset(0, -90),
+          const Offset(0, -90),
+          const Offset(0, -90),
+        ],
+        foldedFingerIndexes: {0, 1, 2, 3},
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+    });
+
     test('returns up or down with only the 16 finger-chain points', () {
       final upHand = _handWithFingerChainVectors([
         const Offset(0, -90),
@@ -265,6 +279,7 @@ Hand _handWithFingerChainVectors(
   List<Offset> vectors, {
   Set<HandLandmarkType> missingTypes = const {},
   Set<HandLandmarkType> lowVisibilityTypes = const {},
+  Set<int> foldedFingerIndexes = const {},
 }) {
   final landmarks = <HandLandmark>[];
   final bases = [
@@ -278,15 +293,16 @@ Hand _handWithFingerChainVectors(
     final chainTypes = _fingerChains[fingerIndex];
     final base = bases[fingerIndex];
     final vector = vectors[fingerIndex];
+    final points =
+        foldedFingerIndexes.contains(fingerIndex)
+            ? _foldedChainPoints(base, vector)
+            : _straightChainPoints(base, vector);
 
     for (var pointIndex = 0; pointIndex < chainTypes.length; pointIndex++) {
       final type = chainTypes[pointIndex];
       if (missingTypes.contains(type)) continue;
 
-      final point = Offset(
-        base.dx + vector.dx * pointIndex / 3,
-        base.dy + vector.dy * pointIndex / 3,
-      );
+      final point = points[pointIndex];
 
       landmarks.add(
         HandLandmark(
@@ -308,4 +324,27 @@ Hand _handWithFingerChainVectors(
     imageHeight: _imageSize.height.toInt(),
     handedness: Handedness.right,
   );
+}
+
+List<Offset> _straightChainPoints(Offset base, Offset vector) {
+  return List.generate(
+    4,
+    (pointIndex) => Offset(
+      base.dx + vector.dx * pointIndex / 3,
+      base.dy + vector.dy * pointIndex / 3,
+    ),
+  );
+}
+
+List<Offset> _foldedChainPoints(Offset base, Offset vector) {
+  final tip = base + vector;
+  final vectorLength = vector.distance;
+  final bendOffset =
+      vectorLength == 0
+          ? Offset.zero
+          : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 45;
+  final pip = Offset.lerp(base, tip, 0.5)! + bendOffset;
+  final dip = Offset.lerp(pip, tip, 0.5)!;
+
+  return [base, pip, dip, tip];
 }

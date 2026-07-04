@@ -24,6 +24,7 @@ import '../../domain/services/direction_gesture_detector.dart';
 import '../../domain/services/follow_object_sequence_detector.dart';
 import '../../domain/services/follow_target_selector.dart';
 import '../../domain/services/zoom_gesture_detector.dart';
+import '../painters/follow_target_debug_overlay_painter.dart';
 import '../painters/follow_target_overlay_painter.dart';
 import '../painters/hand_focus_overlay_painter.dart';
 import '../painters/hand_landmark_overlay_painter.dart';
@@ -84,6 +85,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   bool _isRecordingPreviewCorrectionActive = false;
   bool _isZoomControlVisible = false;
   bool _isManualZoomInteractionActive = false;
+  // Set true to show red face/object detection boxes for follow-object debug.
+  final bool _showFollowTargetDebugOverlay = true;
 
   String _gestureText = 'Show your hand';
   String _handText = '';
@@ -99,6 +102,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   int _detectedHandsCount = 0;
 
   List<Hand> _hands = const [];
+  List<FollowTarget> _followObjectCandidateFaces = const [];
+  List<FollowTarget> _followObjectCandidateObjects = const [];
   Size? _detectionImageSize;
   Rect? _focusedHandBox;
   Size? _focusImageSize;
