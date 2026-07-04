@@ -99,6 +99,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   double _currentZoomLevel = 1;
   double? _pendingZoomLevel;
   DateTime? _gestureZoomSuppressedUntil;
+  DateTime? _lastGestureZoomAppliedAt;
   int _detectedHandsCount = 0;
 
   List<Hand> _hands = const [];

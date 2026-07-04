@@ -140,6 +140,7 @@ extension on _AdminHandGestureLiveScreenState {
         _handText = '';
         _gestureConfidence = 0;
         _lastAppliedZoomDirection = ZoomDirection.none;
+        _lastGestureZoomAppliedAt = null;
         _detectedHandsCount = 0;
         _hands = const [];
         _detectionImageSize = null;
@@ -327,6 +328,7 @@ extension on _AdminHandGestureLiveScreenState {
     _clearFaceDetectGestureHold();
     _zoomControlAutoHideTimer?.cancel();
     _gestureZoomSuppressedUntil = null;
+    _lastGestureZoomAppliedAt = null;
 
     _setScreenState(() {
       _isSwitchingCamera = true;
@@ -340,6 +342,7 @@ extension on _AdminHandGestureLiveScreenState {
       _handText = '';
       _gestureConfidence = 0;
       _lastAppliedZoomDirection = ZoomDirection.none;
+      _lastGestureZoomAppliedAt = null;
       _detectedHandsCount = 0;
       _hands = const [];
       _detectionImageSize = null;
@@ -397,6 +400,7 @@ extension on _AdminHandGestureLiveScreenState {
     _isZoomControlVisible = false;
     _pendingZoomLevel = null;
     _gestureZoomSuppressedUntil = null;
+    _lastGestureZoomAppliedAt = null;
     _isManualZoomInteractionActive = false;
     _zoomControlAutoHideTimer?.cancel();
 
@@ -418,6 +422,7 @@ extension on _AdminHandGestureLiveScreenState {
       _handText = '';
       _gestureConfidence = 0;
       _lastAppliedZoomDirection = ZoomDirection.none;
+      _lastGestureZoomAppliedAt = null;
       _detectedHandsCount = 0;
       _hands = const [];
       _detectionImageSize = null;

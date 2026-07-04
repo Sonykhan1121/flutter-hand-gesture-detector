@@ -58,6 +58,7 @@ extension on _AdminHandGestureLiveScreenState {
     _currentZoomLevel = 1;
     _pendingZoomLevel = null;
     _gestureZoomSuppressedUntil = null;
+    _lastGestureZoomAppliedAt = null;
     _isManualZoomInteractionActive = false;
     _isApplyingZoom = false;
     _lastAppliedZoomDirection = ZoomDirection.none;
@@ -68,28 +69,41 @@ extension on _AdminHandGestureLiveScreenState {
   void _handleZoomDirection(ZoomDirection direction) {
     if (direction == ZoomDirection.none) {
       _lastAppliedZoomDirection = ZoomDirection.none;
+      _lastGestureZoomAppliedAt = null;
       return;
     }
 
     if (_shouldIgnoreGestureZoomForManualControl) {
       _lastAppliedZoomDirection = ZoomDirection.none;
+      _lastGestureZoomAppliedAt = null;
       return;
     }
-
-    if (direction == _lastAppliedZoomDirection) {
-      _showZoomControlOverlay();
-      return;
-    }
-
-    _lastAppliedZoomDirection = direction;
 
     if (!_isCameraZoomSupported) return;
 
     _showZoomControlOverlay();
-    unawaited(_applyCameraZoom(direction));
+    final now = DateTime.now();
+    final lastAppliedAt = _lastGestureZoomAppliedAt;
+    final canApplyZoom =
+        direction != _lastAppliedZoomDirection ||
+        lastAppliedAt == null ||
+        now.difference(lastAppliedAt) >=
+            HandGestureThresholds.gestureZoomRepeatInterval;
+
+    _lastAppliedZoomDirection = direction;
+
+    if (!canApplyZoom) return;
+
+    _lastGestureZoomAppliedAt = now;
+    unawaited(
+      _applyCameraZoom(direction, step: HandGestureThresholds.gestureZoomStep),
+    );
   }
 
-  Future<void> _applyCameraZoom(ZoomDirection direction) async {
+  Future<void> _applyCameraZoom(
+    ZoomDirection direction, {
+    double step = HandGestureThresholds.zoomStep,
+  }) async {
     final controller = _controller;
 
     if (controller == null ||
@@ -99,10 +113,7 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final zoomDelta =
-        direction == ZoomDirection.zoomIn
-            ? HandGestureThresholds.zoomStep
-            : -HandGestureThresholds.zoomStep;
+    final zoomDelta = direction == ZoomDirection.zoomIn ? step : -step;
     final nextZoomLevel =
         (_currentZoomLevel + zoomDelta)
             .clamp(_minZoomLevel, _maxZoomLevel)
@@ -224,6 +235,8 @@ extension on _AdminHandGestureLiveScreenState {
     _zoomControlAutoHideTimer?.cancel();
     _isManualZoomInteractionActive = true;
     _gestureZoomSuppressedUntil = null;
+    _lastGestureZoomAppliedAt = null;
+    _lastAppliedZoomDirection = ZoomDirection.none;
   }
 
   void _endManualZoomInteraction() {
@@ -231,6 +244,8 @@ extension on _AdminHandGestureLiveScreenState {
     _gestureZoomSuppressedUntil = DateTime.now().add(
       const Duration(milliseconds: 700),
     );
+    _lastGestureZoomAppliedAt = null;
+    _lastAppliedZoomDirection = ZoomDirection.none;
     _scheduleZoomControlAutoHide();
   }
 
@@ -251,6 +266,8 @@ extension on _AdminHandGestureLiveScreenState {
     _gestureZoomSuppressedUntil = DateTime.now().add(
       const Duration(milliseconds: 700),
     );
+    _lastGestureZoomAppliedAt = null;
+    _lastAppliedZoomDirection = ZoomDirection.none;
     _showZoomControlOverlay();
 
     final nextZoomLevel =
@@ -265,6 +282,8 @@ extension on _AdminHandGestureLiveScreenState {
     _gestureZoomSuppressedUntil = DateTime.now().add(
       const Duration(milliseconds: 700),
     );
+    _lastGestureZoomAppliedAt = null;
+    _lastAppliedZoomDirection = ZoomDirection.none;
     _showZoomControlOverlay();
     unawaited(_setCameraZoomLevel(_minZoomLevel, revealZoomControl: true));
   }

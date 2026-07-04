@@ -35,11 +35,10 @@ extension on _AdminHandGestureLiveScreenState {
         maxDim: HandGestureThresholds.maxDetectionDimension,
       );
 
-      final hands = await detector.detectFromCameraImage(
-        image,
+      final hands = await _detectHandsFromCameraImage(
+        detector: detector,
+        image: image,
         rotation: rotation,
-        isBgra: Platform.isMacOS || Platform.isIOS,
-        maxDim: HandGestureThresholds.maxDetectionDimension,
       );
 
       if (!mounted) return;
@@ -55,6 +54,37 @@ extension on _AdminHandGestureLiveScreenState {
     } finally {
       _isProcessing = false;
     }
+  }
+
+  Future<List<Hand>> _detectHandsFromCameraImage({
+    required HandDetector detector,
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+  }) {
+    if (Platform.isIOS && image.planes.length == 1) {
+      final plane = image.planes.first;
+      final strideCols = plane.bytesPerRow ~/ 4;
+      if (strideCols <= 0) return Future.value(const <Hand>[]);
+
+      return detector.detectFromCameraFrame(
+        CameraFrame(
+          bytes: plane.bytes,
+          width: image.width,
+          height: image.height,
+          strideCols: strideCols,
+          conversion: CameraFrameConversion.bgra2bgr,
+          rotation: rotation,
+        ),
+        maxDim: HandGestureThresholds.maxDetectionDimension,
+      );
+    }
+
+    return detector.detectFromCameraImage(
+      image,
+      rotation: rotation,
+      isBgra: Platform.isMacOS,
+      maxDim: HandGestureThresholds.maxDetectionDimension,
+    );
   }
 
   CameraFrameRotation? _cameraFrameRotation(CameraImage image) {
@@ -122,10 +152,9 @@ extension on _AdminHandGestureLiveScreenState {
         _clearFaceDetectGestureHold();
 
         _setScreenState(() {
-          _gestureText =
-              selectedTarget == null
-                  ? 'No face or object selected'
-                  : _followTargetText(selectedTarget);
+          _gestureText = selectedTarget == null
+              ? 'No face or object selected'
+              : _followTargetText(selectedTarget);
           _handText = '';
           _gestureConfidence = selectedTarget == null ? 0 : 1;
           _detectedHandsCount = 0;
@@ -146,10 +175,9 @@ extension on _AdminHandGestureLiveScreenState {
       _clearFaceDetectGestureHold();
 
       _setScreenState(() {
-        _gestureText =
-            trackedFollowTarget == null
-                ? 'No hand detected'
-                : _followTargetText(trackedFollowTarget);
+        _gestureText = trackedFollowTarget == null
+            ? 'No hand detected'
+            : _followTargetText(trackedFollowTarget);
         _handText = '';
         _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
         _detectedHandsCount = 0;
@@ -188,10 +216,9 @@ extension on _AdminHandGestureLiveScreenState {
           _detectionImageSize = detectionImageSize;
           _detectedHandsCount = hands.length;
           _handText = '';
-          _gestureText =
-              selectedTarget == null
-                  ? 'No face or object selected'
-                  : _followTargetText(selectedTarget);
+          _gestureText = selectedTarget == null
+              ? 'No face or object selected'
+              : _followTargetText(selectedTarget);
           _gestureConfidence = selectedTarget == null ? 0 : 1;
           _isFollowingHand = false;
           _focusedHandBox = null;
@@ -227,10 +254,9 @@ extension on _AdminHandGestureLiveScreenState {
         _detectionImageSize = detectionImageSize;
         _detectedHandsCount = hands.length;
         _handText = '';
-        _gestureText =
-            trackedFollowTarget == null
-                ? 'Move hand closer'
-                : _followTargetText(trackedFollowTarget);
+        _gestureText = trackedFollowTarget == null
+            ? 'Move hand closer'
+            : _followTargetText(trackedFollowTarget);
         _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
         _isFollowingHand = false;
         _focusedHandBox = null;
@@ -240,13 +266,12 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final bestHand =
-        _isFollowingHand && trackedFollowTarget == null
-            ? _selectTrackedHand(hands)
-            : reliableHands.reduce(
-              (currentBest, next) =>
-                  next.score > currentBest.score ? next : currentBest,
-            );
+    final bestHand = _isFollowingHand && trackedFollowTarget == null
+        ? _selectTrackedHand(hands)
+        : reliableHands.reduce(
+            (currentBest, next) =>
+                next.score > currentBest.score ? next : currentBest,
+          );
 
     final mirrorDirectionalGestureCoordinates =
         _shouldMirrorDirectionalGestureCoordinates(_controller);
@@ -335,10 +360,9 @@ extension on _AdminHandGestureLiveScreenState {
         _lockedFollowTarget = faceTarget;
         _detectedHandsCount = hands.length;
         _handText = bestHand.handedness.displayLabel;
-        _gestureText =
-            faceTarget == null
-                ? 'No face detected'
-                : _followTargetText(faceTarget);
+        _gestureText = faceTarget == null
+            ? 'No face detected'
+            : _followTargetText(faceTarget);
         _gestureConfidence = faceTarget == null ? 0 : 1;
       });
       return;
@@ -408,10 +432,9 @@ extension on _AdminHandGestureLiveScreenState {
         gesture.type != GestureType.openPalm &&
         gesture.confidence >= HandGestureThresholds.minPackageGestureConfidence;
 
-    final customGestureResult =
-        followTrackingActive
-            ? CustomGestureDetectionResult.empty
-            : rawCustomGestureResult;
+    final customGestureResult = followTrackingActive
+        ? CustomGestureDetectionResult.empty
+        : rawCustomGestureResult;
 
     final customGestureLabels = customGestureResult.labels;
     final hasSingleCustomGesture = customGestureLabels.length == 1;
@@ -744,10 +767,9 @@ extension on _AdminHandGestureLiveScreenState {
     );
     if (detections == null) return _keepOrClearLostFollowTarget(now);
 
-    final candidates =
-        previous.type == FollowTargetType.face
-            ? detections.faces
-            : detections.objects;
+    final candidates = previous.type == FollowTargetType.face
+        ? detections.faces
+        : detections.objects;
     final updated = _followTargetSelector.track(
       previous: previous,
       candidates: candidates,
@@ -1023,17 +1045,15 @@ extension on _AdminHandGestureLiveScreenState {
       (point.dy / imageSize.height).clamp(0.0, 1.0),
     );
     final controller = _controller;
-    final rotatedPoint =
-        controller == null
-            ? normalizedPoint
-            : _rotateNormalizedPoint(
-              normalizedPoint,
-              _previewQuarterTurnsForOverlays(controller),
-            );
-    final displayPoint =
-        _shouldMirrorPreviewCoordinates(controller)
-            ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
-            : rotatedPoint;
+    final rotatedPoint = controller == null
+        ? normalizedPoint
+        : _rotateNormalizedPoint(
+            normalizedPoint,
+            _previewQuarterTurnsForOverlays(controller),
+          );
+    final displayPoint = _shouldMirrorPreviewCoordinates(controller)
+        ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
+        : rotatedPoint;
 
     return Offset(
       displayPoint.dx.clamp(0.0, 1.0),
@@ -1107,6 +1127,7 @@ extension on _AdminHandGestureLiveScreenState {
     _focusedHandBox = null;
     _focusImageSize = null;
     _lastAppliedZoomDirection = ZoomDirection.none;
+    _lastGestureZoomAppliedAt = null;
     _pendingZoomLevel = null;
     _gestureZoomSuppressedUntil = null;
     _isManualZoomInteractionActive = false;
