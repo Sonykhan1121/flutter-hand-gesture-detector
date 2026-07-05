@@ -130,7 +130,8 @@ abstract final class HandGestureThresholds {
 
   static const double zoomClosedMaxDistanceRatio = 0.26;
   static const double zoomOpenMinDistanceRatio = 0.27;
-  static const double zoomMinChangeRatio = 0.035;
+  static const double zoomMinChangeRatio = 0.025;
+  static const double zoomMaxPalmMovementRatio = 0.08;
   static const double partialZoomOutOpenMinImageRatio = 0.045;
   static const double partialZoomOutMinChangeImageRatio = 0.018;
   static const double partialZoomOutClosedMaxStartDistanceFactor = 0.72;
