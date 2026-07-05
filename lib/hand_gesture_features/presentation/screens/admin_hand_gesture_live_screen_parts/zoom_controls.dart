@@ -8,6 +8,7 @@ extension on _AdminHandGestureLiveScreenState {
   }
 
   bool get _shouldIgnoreGestureZoomForManualControl {
+    if (_isTouchZoomGuideEnabled && _isTouchZoomInteractionActive) return true;
     if (_isManualZoomInteractionActive) return true;
 
     final suppressedUntil = _gestureZoomSuppressedUntil;
@@ -23,6 +24,15 @@ extension on _AdminHandGestureLiveScreenState {
         !_isStoppingVideoRecording;
   }
 
+  bool get _shouldShowTouchZoomGuideOverlay {
+    return _isTouchZoomGuideEnabled &&
+        _isTouchZoomGuideVisible &&
+        _isCameraZoomSupported &&
+        _currentZoomLevel > _minZoomLevel + 0.001 &&
+        !_isStartingVideoRecording &&
+        !_isStoppingVideoRecording;
+  }
+
   Future<void> _initializeZoomLevels(CameraController controller) async {
     _resetCameraZoomState();
 
@@ -30,14 +40,12 @@ extension on _AdminHandGestureLiveScreenState {
       final rawMinZoomLevel = await controller.getMinZoomLevel();
       final rawMaxZoomLevel = await controller.getMaxZoomLevel();
 
-      final minZoomLevel =
-          rawMinZoomLevel <= rawMaxZoomLevel
-              ? rawMinZoomLevel
-              : rawMaxZoomLevel;
-      final maxZoomLevel =
-          rawMaxZoomLevel >= rawMinZoomLevel
-              ? rawMaxZoomLevel
-              : rawMinZoomLevel;
+      final minZoomLevel = rawMinZoomLevel <= rawMaxZoomLevel
+          ? rawMinZoomLevel
+          : rawMaxZoomLevel;
+      final maxZoomLevel = rawMaxZoomLevel >= rawMinZoomLevel
+          ? rawMaxZoomLevel
+          : rawMinZoomLevel;
 
       _minZoomLevel = minZoomLevel;
       _maxZoomLevel = maxZoomLevel;
@@ -60,6 +68,8 @@ extension on _AdminHandGestureLiveScreenState {
     _gestureZoomSuppressedUntil = null;
     _lastGestureZoomAppliedAt = null;
     _isManualZoomInteractionActive = false;
+    _isTouchZoomGuideVisible = false;
+    _isTouchZoomInteractionActive = false;
     _isApplyingZoom = false;
     _lastAppliedZoomDirection = ZoomDirection.none;
     _isZoomControlVisible = false;
@@ -80,6 +90,10 @@ extension on _AdminHandGestureLiveScreenState {
     }
 
     if (!_isCameraZoomSupported) return;
+
+    if (direction == ZoomDirection.zoomIn) {
+      _showTouchZoomGuideOverlay();
+    }
 
     _showZoomControlOverlay();
     final now = DateTime.now();
@@ -114,10 +128,9 @@ extension on _AdminHandGestureLiveScreenState {
     }
 
     final zoomDelta = direction == ZoomDirection.zoomIn ? step : -step;
-    final nextZoomLevel =
-        (_currentZoomLevel + zoomDelta)
-            .clamp(_minZoomLevel, _maxZoomLevel)
-            .toDouble();
+    final nextZoomLevel = (_currentZoomLevel + zoomDelta)
+        .clamp(_minZoomLevel, _maxZoomLevel)
+        .toDouble();
 
     if (nextZoomLevel == _currentZoomLevel) {
       _showZoomControlOverlay();
@@ -139,8 +152,9 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final targetZoomLevel =
-        zoomLevel.clamp(_minZoomLevel, _maxZoomLevel).toDouble();
+    final targetZoomLevel = zoomLevel
+        .clamp(_minZoomLevel, _maxZoomLevel)
+        .toDouble();
 
     _pendingZoomLevel = targetZoomLevel;
 
@@ -152,9 +166,11 @@ extension on _AdminHandGestureLiveScreenState {
       if (mounted) {
         _setScreenState(() {
           _currentZoomLevel = targetZoomLevel;
+          _updateTouchZoomGuideForZoomLevelState(targetZoomLevel);
         });
       } else {
         _currentZoomLevel = targetZoomLevel;
+        _updateTouchZoomGuideForZoomLevelState(targetZoomLevel);
       }
       return;
     }
@@ -163,8 +179,9 @@ extension on _AdminHandGestureLiveScreenState {
 
     try {
       while (_pendingZoomLevel != null && _controller == controller) {
-        final nextZoomLevel =
-            _pendingZoomLevel!.clamp(_minZoomLevel, _maxZoomLevel).toDouble();
+        final nextZoomLevel = _pendingZoomLevel!
+            .clamp(_minZoomLevel, _maxZoomLevel)
+            .toDouble();
         _pendingZoomLevel = null;
 
         await controller.setZoomLevel(nextZoomLevel);
@@ -174,9 +191,11 @@ extension on _AdminHandGestureLiveScreenState {
         if (mounted) {
           _setScreenState(() {
             _currentZoomLevel = nextZoomLevel;
+            _updateTouchZoomGuideForZoomLevelState(nextZoomLevel);
           });
         } else {
           _currentZoomLevel = nextZoomLevel;
+          _updateTouchZoomGuideForZoomLevelState(nextZoomLevel);
         }
       }
     } catch (e) {
@@ -204,6 +223,25 @@ extension on _AdminHandGestureLiveScreenState {
     if (autoHide) {
       _scheduleZoomControlAutoHide();
     }
+  }
+
+  void _showTouchZoomGuideOverlay() {
+    if (!_isTouchZoomGuideEnabled || !_isCameraZoomSupported) return;
+
+    if (mounted) {
+      _setScreenState(() {
+        _isTouchZoomGuideVisible = true;
+      });
+    } else {
+      _isTouchZoomGuideVisible = true;
+    }
+  }
+
+  void _updateTouchZoomGuideForZoomLevelState(double zoomLevel) {
+    if (zoomLevel > _minZoomLevel + 0.001) return;
+
+    _isTouchZoomGuideVisible = false;
+    _isTouchZoomInteractionActive = false;
   }
 
   void _scheduleZoomControlAutoHide() {
@@ -254,6 +292,31 @@ extension on _AdminHandGestureLiveScreenState {
     unawaited(_setCameraZoomLevel(zoomLevel, revealZoomControl: false));
   }
 
+  void _beginTouchZoomInteraction() {
+    if (!_isTouchZoomGuideEnabled) return;
+
+    _zoomControlAutoHideTimer?.cancel();
+    _isTouchZoomInteractionActive = true;
+    _gestureZoomSuppressedUntil = null;
+    _lastGestureZoomAppliedAt = null;
+    _lastAppliedZoomDirection = ZoomDirection.none;
+  }
+
+  void _endTouchZoomInteraction() {
+    _isTouchZoomInteractionActive = false;
+    _gestureZoomSuppressedUntil = DateTime.now().add(
+      const Duration(milliseconds: 700),
+    );
+    _lastGestureZoomAppliedAt = null;
+    _lastAppliedZoomDirection = ZoomDirection.none;
+  }
+
+  void _handleTouchZoomChanged(double zoomLevel) {
+    if (!_isTouchZoomGuideEnabled) return;
+
+    unawaited(_setCameraZoomLevel(zoomLevel, revealZoomControl: false));
+  }
+
   void _handleManualZoomIncrease() {
     _applyManualZoomDelta(HandGestureThresholds.zoomStep);
   }
@@ -270,10 +333,9 @@ extension on _AdminHandGestureLiveScreenState {
     _lastAppliedZoomDirection = ZoomDirection.none;
     _showZoomControlOverlay();
 
-    final nextZoomLevel =
-        (_currentZoomLevel + delta)
-            .clamp(_minZoomLevel, _maxZoomLevel)
-            .toDouble();
+    final nextZoomLevel = (_currentZoomLevel + delta)
+        .clamp(_minZoomLevel, _maxZoomLevel)
+        .toDouble();
 
     unawaited(_setCameraZoomLevel(nextZoomLevel, revealZoomControl: true));
   }
@@ -284,6 +346,8 @@ extension on _AdminHandGestureLiveScreenState {
     );
     _lastGestureZoomAppliedAt = null;
     _lastAppliedZoomDirection = ZoomDirection.none;
+    _isTouchZoomGuideVisible = false;
+    _isTouchZoomInteractionActive = false;
     _showZoomControlOverlay();
     unawaited(_setCameraZoomLevel(_minZoomLevel, revealZoomControl: true));
   }

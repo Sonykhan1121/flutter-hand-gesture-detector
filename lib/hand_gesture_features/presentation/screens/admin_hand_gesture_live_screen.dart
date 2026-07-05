@@ -33,6 +33,7 @@ import '../utils/hand_gesture_label_mapper.dart';
 import '../widgets/gesture_status_panel.dart';
 import '../widgets/hand_camera_loading_view.dart';
 import '../widgets/round_icon_button.dart';
+import '../widgets/touch_zoom_guide_overlay.dart';
 import '../widgets/zoom_control_overlay.dart';
 
 part 'admin_hand_gesture_live_screen_parts/camera_lifecycle.dart';
@@ -85,6 +86,11 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   bool _isRecordingPreviewCorrectionActive = false;
   bool _isZoomControlVisible = false;
   bool _isManualZoomInteractionActive = false;
+  // Set false to disable the two-circle touch zoom guide.
+  // ignore: prefer_final_fields
+  bool _isTouchZoomGuideEnabled = false;
+  bool _isTouchZoomGuideVisible = false;
+  bool _isTouchZoomInteractionActive = false;
   // Set true to show red face/object detection boxes for follow-object debug.
   final bool _showFollowTargetDebugOverlay = true;
 

@@ -137,7 +137,7 @@ abstract final class HandGestureThresholds {
   static const double partialZoomOutClosedMaxStartDistanceFactor = 0.72;
 
   static const Duration zoomStartPoseHoldDuration = Duration(
-    milliseconds: 1000,
+    milliseconds: 300,
   );
   static const double zoomActiveTipMinPalmDistanceRatio = 0.06;
   static const double zoomMinLandmarkVisibility = 0.30;

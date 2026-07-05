@@ -1131,6 +1131,8 @@ extension on _AdminHandGestureLiveScreenState {
     _pendingZoomLevel = null;
     _gestureZoomSuppressedUntil = null;
     _isManualZoomInteractionActive = false;
+    _isTouchZoomGuideVisible = false;
+    _isTouchZoomInteractionActive = false;
     _isZoomControlVisible = false;
     _zoomControlAutoHideTimer?.cancel();
 
