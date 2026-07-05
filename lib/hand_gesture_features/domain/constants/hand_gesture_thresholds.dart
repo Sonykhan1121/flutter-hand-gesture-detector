@@ -132,14 +132,14 @@ abstract final class HandGestureThresholds {
   static const double partialZoomOutMinChangeImageRatio = 0.018;
   static const double partialZoomOutClosedMaxStartDistanceFactor = 0.72;
 
-  static const Duration zoomStartPoseHoldDuration = Duration(milliseconds: 300);
+  static const Duration zoomStartPoseHoldDuration = Duration(milliseconds: 1000);
   static const double zoomActiveTipMinPalmDistanceRatio = 0.06;
   static const double zoomMinLandmarkVisibility = 0.30;
 
   static const Duration zoomReleaseResetDuration = Duration(milliseconds: 650);
   static const Duration zoomMaxGestureDuration = Duration(milliseconds: 2600);
   static const Duration zoomMinGestureDuration = Duration(milliseconds: 90);
-  static const Duration zoomHoldDuration = Duration(milliseconds: 650);
+  static const Duration zoomHoldDuration = Duration(milliseconds: 1200);
   static const Duration gestureZoomRepeatInterval = Duration(milliseconds: 100);
 
   static const Duration minFrameProcessInterval = Duration(milliseconds: 100);

@@ -61,7 +61,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   ml_object.ObjectDetector? _objectDetector;
 
   final _customGestureDetector = CustomGestureDetector();
-  final _directionGestureDetector = const DirectionGestureDetector();
+  final _directionGestureDetector = DirectionGestureDetector();
   final _zoomGestureDetector = ZoomGestureDetector();
   final _followTargetSelector = const FollowTargetSelector();
 

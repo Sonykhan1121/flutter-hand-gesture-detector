@@ -10,9 +10,9 @@ class HandDetectorFactory {
     return HandDetector.create(
       mode: HandMode.boxesAndLandmarks,
       landmarkModel: HandLandmarkModel.full,
-      detectorConf: 0.45,
+      detectorConf: 0.60,
       maxDetections: 1,
-      minLandmarkScore: 0.4,
+      minLandmarkScore: 0.6,
       performanceConfig: useIosSafeInterpreter
           ? const PerformanceConfig.xnnpack()
           : const PerformanceConfig(),
