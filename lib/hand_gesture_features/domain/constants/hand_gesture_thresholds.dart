@@ -78,10 +78,13 @@ abstract final class HandGestureThresholds {
   static const int directionFingerChainMinAlignedCount = 3;
   static const double directionFingerChainMinHorizontalImageRatio = 0.025;
   static const double directionFingerChainMinHorizontalSpanRatio = 0.18;
-  static const double directionFingerChainHorizontalDominanceRatio = 0.45;
+  static const double directionFingerChainHorizontalDominanceRatio = 1.25;
+  static const double directionFingerChainRightDominanceRatio = 1.10;
+  static const double directionFingerChainUpDiagonalHorizontalRatio = 0.45;
   static const double directionFingerChainMinVerticalImageRatio = 0.025;
   static const double directionFingerChainMinVerticalSpanRatio = 0.18;
-  static const double directionFingerChainVerticalDominanceRatio = 0.45;
+  static const double directionFingerChainVerticalDominanceRatio = 1.25;
+  static const double directionMovingUpMinBackSideConfidence = 0.35;
 
   static const double fingerTipVerticalMaxSpreadRatio = 0.22;
   static const double fingerTipHorizontalMaxSpreadRatio = 0.22;
@@ -132,7 +135,9 @@ abstract final class HandGestureThresholds {
   static const double partialZoomOutMinChangeImageRatio = 0.018;
   static const double partialZoomOutClosedMaxStartDistanceFactor = 0.72;
 
-  static const Duration zoomStartPoseHoldDuration = Duration(milliseconds: 1000);
+  static const Duration zoomStartPoseHoldDuration = Duration(
+    milliseconds: 1000,
+  );
   static const double zoomActiveTipMinPalmDistanceRatio = 0.06;
   static const double zoomMinLandmarkVisibility = 0.30;
 

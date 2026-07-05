@@ -33,6 +33,8 @@ const _fingerChains = [
   ],
 ];
 
+enum _VisibleHandSide { none, palm, back }
+
 void main() {
   group('DirectionGestureDetector finger chains', () {
     const detector = DirectionGestureDetector();
@@ -59,15 +61,29 @@ void main() {
       expect(_detect(detector, hand), HandMoveDirection.right);
     });
 
-    test('returns up when at least three finger chains point up', () {
+    test(
+      'returns up when at least three finger chains point up with back side visible',
+      () {
+        final hand = _handWithFingerChainVectors([
+          const Offset(0, -90),
+          const Offset(0, -90),
+          const Offset(0, -90),
+          const Offset(0, 90),
+        ], visibleHandSide: _VisibleHandSide.back);
+
+        expect(_detect(detector, hand), HandMoveDirection.up);
+      },
+    );
+
+    test('returns none when up-pointing chains show palm side', () {
       final hand = _handWithFingerChainVectors([
         const Offset(0, -90),
         const Offset(0, -90),
         const Offset(0, -90),
-        const Offset(0, 90),
-      ]);
+        const Offset(0, -90),
+      ], visibleHandSide: _VisibleHandSide.palm);
 
-      expect(_detect(detector, hand), HandMoveDirection.up);
+      expect(_detect(detector, hand), HandMoveDirection.none);
     });
 
     test('returns down when at least three finger chains point down', () {
@@ -96,12 +112,16 @@ void main() {
     });
 
     test('mirroring does not flip up or down', () {
-      final hand = _handWithFingerChainVectors([
-        const Offset(50, -90),
-        const Offset(50, -90),
-        const Offset(50, -90),
-        const Offset(50, -90),
-      ]);
+      final hand = _handWithFingerChainVectors(
+        [
+          const Offset(20, -90),
+          const Offset(20, -90),
+          const Offset(20, -90),
+          const Offset(20, -90),
+        ],
+        visibleHandSide: _VisibleHandSide.back,
+        mirrorHorizontally: true,
+      );
 
       expect(
         _detect(detector, hand, mirrorHorizontally: true),
@@ -109,10 +129,68 @@ void main() {
       );
     });
 
+    test('returns right when horizontal movement has small upward drift', () {
+      final hand = _handWithFingerChainVectors([
+        const Offset(90, -20),
+        const Offset(90, -20),
+        const Offset(90, -20),
+        const Offset(90, -20),
+      ]);
+
+      expect(_detect(detector, hand), HandMoveDirection.right);
+    });
+
     test(
-      'returns up or down for diagonal chains with stronger vertical movement',
+      'returns right when horizontal movement has moderate upward drift',
       () {
-        final upHand = _handWithFingerChainVectors([
+        final hand = _handWithFingerChainVectors([
+          const Offset(90, -78),
+          const Offset(90, -78),
+          const Offset(90, -78),
+          const Offset(90, -78),
+        ]);
+
+        expect(_detect(detector, hand), HandMoveDirection.right);
+      },
+    );
+
+    test('returns up when vertical movement has small rightward drift', () {
+      final hand = _handWithFingerChainVectors([
+        const Offset(20, -90),
+        const Offset(20, -90),
+        const Offset(20, -90),
+        const Offset(20, -90),
+      ], visibleHandSide: _VisibleHandSide.back);
+
+      expect(_detect(detector, hand), HandMoveDirection.up);
+    });
+
+    test('returns right for bottom-left to top-right diagonal movement', () {
+      final hand = _handWithFingerChainVectors([
+        const Offset(90, -84),
+        const Offset(90, -84),
+        const Offset(90, -84),
+        const Offset(90, -84),
+      ]);
+
+      expect(_detect(detector, hand), HandMoveDirection.right);
+    });
+
+    test('returns left for bottom-right to top-left diagonal movement', () {
+      final hand = _handWithFingerChainVectors([
+        const Offset(-50, -90),
+        const Offset(-50, -90),
+        const Offset(-50, -90),
+        const Offset(-50, -90),
+      ]);
+
+      expect(_detect(detector, hand), HandMoveDirection.left);
+    });
+
+    test(
+      'returns right or down for diagonal chains with stronger vertical movement',
+      () {
+        final rightHand = _handWithFingerChainVectors([
           const Offset(50, -90),
           const Offset(50, -90),
           const Offset(50, -90),
@@ -125,7 +203,7 @@ void main() {
           const Offset(-50, 90),
         ]);
 
-        expect(_detect(detector, upHand), HandMoveDirection.up);
+        expect(_detect(detector, rightHand), HandMoveDirection.right);
         expect(_detect(detector, downHand), HandMoveDirection.down);
       },
     );
@@ -215,13 +293,17 @@ void main() {
       expect(_detect(detector, hand), HandMoveDirection.none);
     });
 
-    test('returns up or down with only the 16 finger-chain points', () {
+    test('returns none for up with only the 16 finger-chain points', () {
       final upHand = _handWithFingerChainVectors([
         const Offset(0, -90),
         const Offset(0, -90),
         const Offset(0, -90),
         const Offset(0, -90),
       ]);
+      expect(_detect(detector, upHand), HandMoveDirection.none);
+    });
+
+    test('returns down with only the 16 finger-chain points', () {
       final downHand = _handWithFingerChainVectors([
         const Offset(0, 90),
         const Offset(0, 90),
@@ -229,7 +311,6 @@ void main() {
         const Offset(0, 90),
       ]);
 
-      expect(_detect(detector, upHand), HandMoveDirection.up);
       expect(_detect(detector, downHand), HandMoveDirection.down);
     });
 
@@ -280,6 +361,8 @@ Hand _handWithFingerChainVectors(
   Set<HandLandmarkType> missingTypes = const {},
   Set<HandLandmarkType> lowVisibilityTypes = const {},
   Set<int> foldedFingerIndexes = const {},
+  _VisibleHandSide visibleHandSide = _VisibleHandSide.none,
+  bool mirrorHorizontally = false,
 }) {
   final landmarks = <HandLandmark>[];
   final bases = [
@@ -293,10 +376,9 @@ Hand _handWithFingerChainVectors(
     final chainTypes = _fingerChains[fingerIndex];
     final base = bases[fingerIndex];
     final vector = vectors[fingerIndex];
-    final points =
-        foldedFingerIndexes.contains(fingerIndex)
-            ? _foldedChainPoints(base, vector)
-            : _straightChainPoints(base, vector);
+    final points = foldedFingerIndexes.contains(fingerIndex)
+        ? _foldedChainPoints(base, vector)
+        : _straightChainPoints(base, vector);
 
     for (var pointIndex = 0; pointIndex < chainTypes.length; pointIndex++) {
       final type = chainTypes[pointIndex];
@@ -316,6 +398,14 @@ Hand _handWithFingerChainVectors(
     }
   }
 
+  _addVisibleHandSideLandmarks(
+    landmarks,
+    visibleHandSide: visibleHandSide,
+    mirrorHorizontally: mirrorHorizontally,
+    missingTypes: missingTypes,
+    lowVisibilityTypes: lowVisibilityTypes,
+  );
+
   return Hand(
     boundingBox: BoundingBox.ltrb(0, 0, _imageSize.width, _imageSize.height),
     score: 1,
@@ -324,6 +414,42 @@ Hand _handWithFingerChainVectors(
     imageHeight: _imageSize.height.toInt(),
     handedness: Handedness.right,
   );
+}
+
+void _addVisibleHandSideLandmarks(
+  List<HandLandmark> landmarks, {
+  required _VisibleHandSide visibleHandSide,
+  required bool mirrorHorizontally,
+  required Set<HandLandmarkType> missingTypes,
+  required Set<HandLandmarkType> lowVisibilityTypes,
+}) {
+  if (visibleHandSide == _VisibleHandSide.none) return;
+
+  final expectedSide = mirrorHorizontally ? -1.0 : 1.0;
+  final rawSide = visibleHandSide == _VisibleHandSide.back
+      ? -expectedSide
+      : expectedSide;
+  final wrist = rawSide < 0 ? const Offset(300, 270) : const Offset(140, 270);
+  final thumbTip = rawSide < 0
+      ? const Offset(260, 180)
+      : const Offset(180, 180);
+
+  void addLandmark(HandLandmarkType type, Offset point) {
+    if (missingTypes.contains(type)) return;
+
+    landmarks.add(
+      HandLandmark(
+        type: type,
+        x: point.dx,
+        y: point.dy,
+        z: 0,
+        visibility: lowVisibilityTypes.contains(type) ? 0.2 : 1,
+      ),
+    );
+  }
+
+  addLandmark(HandLandmarkType.wrist, wrist);
+  addLandmark(HandLandmarkType.thumbTip, thumbTip);
 }
 
 List<Offset> _straightChainPoints(Offset base, Offset vector) {
@@ -339,10 +465,9 @@ List<Offset> _straightChainPoints(Offset base, Offset vector) {
 List<Offset> _foldedChainPoints(Offset base, Offset vector) {
   final tip = base + vector;
   final vectorLength = vector.distance;
-  final bendOffset =
-      vectorLength == 0
-          ? Offset.zero
-          : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 45;
+  final bendOffset = vectorLength == 0
+      ? Offset.zero
+      : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 45;
   final pip = Offset.lerp(base, tip, 0.5)! + bendOffset;
   final dip = Offset.lerp(pip, tip, 0.5)!;
 

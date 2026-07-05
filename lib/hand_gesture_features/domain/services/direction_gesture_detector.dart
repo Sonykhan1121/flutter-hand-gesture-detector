@@ -114,14 +114,27 @@ class DirectionGestureDetector {
       totalDeltaX += deltaX;
       totalDeltaY += deltaY;
 
-      if (deltaX.abs() >= minHorizontalDistance &&
-          deltaX.abs() >=
-              deltaY.abs() *
-                  HandGestureThresholds
-                      .directionFingerChainHorizontalDominanceRatio) {
-        if (deltaX < 0) {
+      if (deltaX.abs() >= minHorizontalDistance) {
+        final isUpwardDiagonal =
+            deltaY < 0 &&
+            deltaX.abs() >=
+                deltaY.abs() *
+                    HandGestureThresholds
+                        .directionFingerChainUpDiagonalHorizontalRatio;
+
+        if (deltaX < 0 &&
+            (isUpwardDiagonal ||
+                deltaX.abs() >=
+                    deltaY.abs() *
+                        HandGestureThresholds
+                            .directionFingerChainHorizontalDominanceRatio)) {
           leftPointingFingerCount += 1;
-        } else {
+        } else if (deltaX > 0 &&
+            (isUpwardDiagonal ||
+                deltaX.abs() >=
+                    deltaY.abs() *
+                        HandGestureThresholds
+                            .directionFingerChainRightDominanceRatio)) {
           rightPointingFingerCount += 1;
         }
       }
@@ -141,33 +154,44 @@ class DirectionGestureDetector {
 
     final horizontalDirection =
         leftPointingFingerCount >=
-                HandGestureThresholds.directionFingerChainMinAlignedCount
-            ? HandMoveDirection.left
-            : rightPointingFingerCount >=
-                HandGestureThresholds.directionFingerChainMinAlignedCount
-            ? HandMoveDirection.right
-            : HandMoveDirection.none;
+            HandGestureThresholds.directionFingerChainMinAlignedCount
+        ? HandMoveDirection.left
+        : rightPointingFingerCount >=
+              HandGestureThresholds.directionFingerChainMinAlignedCount
+        ? HandMoveDirection.right
+        : HandMoveDirection.none;
     final verticalDirection =
         upPointingFingerCount >=
-                HandGestureThresholds.directionFingerChainMinAlignedCount
-            ? HandMoveDirection.up
-            : downPointingFingerCount >=
-                HandGestureThresholds.directionFingerChainMinAlignedCount
-            ? HandMoveDirection.down
-            : HandMoveDirection.none;
+            HandGestureThresholds.directionFingerChainMinAlignedCount
+        ? HandMoveDirection.up
+        : downPointingFingerCount >=
+              HandGestureThresholds.directionFingerChainMinAlignedCount
+        ? HandMoveDirection.down
+        : HandMoveDirection.none;
 
+    final HandMoveDirection selectedDirection;
     if (horizontalDirection != HandMoveDirection.none &&
         verticalDirection != HandMoveDirection.none) {
-      return totalDeltaY.abs() > totalDeltaX.abs()
+      selectedDirection = verticalDirection == HandMoveDirection.up
+          ? horizontalDirection
+          : totalDeltaY.abs() > totalDeltaX.abs()
           ? verticalDirection
           : horizontalDirection;
+    } else if (horizontalDirection != HandMoveDirection.none) {
+      selectedDirection = horizontalDirection;
+    } else {
+      selectedDirection = verticalDirection;
     }
 
-    if (horizontalDirection != HandMoveDirection.none) {
-      return horizontalDirection;
+    if (selectedDirection == HandMoveDirection.up &&
+        !_isBackSideVisible(
+          hand: hand,
+          mirrorHorizontally: mirrorHorizontally,
+        )) {
+      return HandMoveDirection.none;
     }
 
-    return verticalDirection;
+    return selectedDirection;
   }
 
   bool _isFingerChainExtended(List<HandLandmark> chain) {
@@ -177,5 +201,83 @@ class DirectionGestureDetector {
           tip: chain[3],
         ) >=
         HandGestureThresholds.fingerExtendedMinAngleDegrees;
+  }
+
+  bool _isBackSideVisible({
+    required Hand hand,
+    required bool mirrorHorizontally,
+  }) {
+    final handedness = hand.handedness;
+    final wrist = geometry.visibleLandmark(hand, HandLandmarkType.wrist);
+    final indexMcp = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerMCP,
+    );
+    final pinkyMcp = geometry.visibleLandmark(hand, HandLandmarkType.pinkyMCP);
+    final thumbTip = geometry.visibleLandmark(hand, HandLandmarkType.thumbTip);
+
+    if (handedness == null ||
+        wrist == null ||
+        indexMcp == null ||
+        pinkyMcp == null ||
+        thumbTip == null) {
+      return false;
+    }
+
+    var expectedPalmSide = handedness == Handedness.right ? 1.0 : -1.0;
+    if (mirrorHorizontally) {
+      expectedPalmSide *= -1;
+    }
+
+    final knuckleSide = _normalizedCross(
+      origin: wrist,
+      first: indexMcp,
+      second: pinkyMcp,
+    );
+    final thumbSide = _normalizedCross(
+      origin: indexMcp,
+      first: pinkyMcp,
+      second: thumbTip,
+    );
+
+    final knuckleBackSideScore = _inverseLerp(
+      0.10,
+      0.35,
+      -knuckleSide * expectedPalmSide,
+    );
+    final thumbBackSideScore = _inverseLerp(
+      0.08,
+      0.25,
+      -thumbSide * expectedPalmSide,
+    );
+    final confidence = (knuckleBackSideScore * 0.75 + thumbBackSideScore * 0.25)
+        .clamp(0.0, 1.0);
+
+    return confidence >=
+        HandGestureThresholds.directionMovingUpMinBackSideConfidence;
+  }
+
+  double _normalizedCross({
+    required HandLandmark origin,
+    required HandLandmark first,
+    required HandLandmark second,
+  }) {
+    final firstX = first.x - origin.x;
+    final firstY = first.y - origin.y;
+    final secondX = second.x - origin.x;
+    final secondY = second.y - origin.y;
+    final firstLength = math.sqrt(firstX * firstX + firstY * firstY);
+    final secondLength = math.sqrt(secondX * secondX + secondY * secondY);
+
+    if (firstLength == 0 || secondLength == 0) return 0;
+
+    return ((firstX * secondY - firstY * secondX) /
+            (firstLength * secondLength))
+        .clamp(-1.0, 1.0);
+  }
+
+  double _inverseLerp(double start, double end, double value) {
+    if (start == end) return value >= end ? 1 : 0;
+    return ((value - start) / (end - start)).clamp(0.0, 1.0);
   }
 }
