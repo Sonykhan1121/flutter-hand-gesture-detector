@@ -27,10 +27,9 @@ class OpenPalmGestureDetector {
       mirrorHorizontally: mirrorHorizontally,
       allowOppositePalmSide: allowOppositePalmSide,
     );
-    final confidenceThreshold =
-        _wasDetected
-            ? HandGestureThresholds.openPalmExitConfidence
-            : HandGestureThresholds.openPalmEnterConfidence;
+    final confidenceThreshold = _wasDetected
+        ? HandGestureThresholds.openPalmExitConfidence
+        : HandGestureThresholds.openPalmEnterConfidence;
     final currentFrameDetected = confidence >= confidenceThreshold;
 
     _samples.addLast(
@@ -38,8 +37,9 @@ class OpenPalmGestureDetector {
     );
     _trimSamples(now);
 
-    final positiveSamples =
-        _samples.where((sample) => sample.isDetected).length;
+    final positiveSamples = _samples
+        .where((sample) => sample.isDetected)
+        .length;
     final hasEnoughPositiveSamples =
         positiveSamples >=
         HandGestureThresholds.openPalmSmoothingMinPositiveSamples;
@@ -119,18 +119,21 @@ class OpenPalmGestureDetector {
       mirrorHorizontally: mirrorHorizontally,
     );
     // Back-camera handedness can arrive in the opposite horizontal convention.
-    final palmSideScore =
-        allowOppositePalmSide
-            ? math.max(
-              primaryPalmSideScore,
-              _palmSideScore(
-                hand: hand,
-                landmarks: landmarks,
-                mirrorHorizontally: !mirrorHorizontally,
-              ),
-            )
-            : primaryPalmSideScore;
+    final palmSideScore = allowOppositePalmSide
+        ? math.max(
+            primaryPalmSideScore,
+            _palmSideScore(
+              hand: hand,
+              landmarks: landmarks,
+              mirrorHorizontally: !mirrorHorizontally,
+            ),
+          )
+        : primaryPalmSideScore;
     final yAxisScore = _fingerYAxisScore(landmarks);
+    final upperFingerChainScore = _upperFingerChainScore(
+      landmarks: landmarks,
+      handSize: handSize,
+    );
 
     final fingerScores = [
       indexScore,
@@ -161,6 +164,11 @@ class OpenPalmGestureDetector {
 
     if (yAxisScore < HandGestureThresholds.openPalmMinYAxisConfidence) {
       return math.min(confidence, yAxisScore);
+    }
+
+    if (upperFingerChainScore <
+        HandGestureThresholds.openPalmMinUpperFingerChainConfidence) {
+      return math.min(confidence, upperFingerChainScore);
     }
 
     return confidence.clamp(0.0, 1.0);
@@ -336,6 +344,50 @@ class OpenPalmGestureDetector {
     return scores.reduce(math.min);
   }
 
+  double _upperFingerChainScore({
+    required _OpenPalmLandmarks landmarks,
+    required double handSize,
+  }) {
+    final scores = [
+      _singleUpperFingerChainScore(
+        mcp: landmarks.indexMcp,
+        pip: landmarks.indexPip,
+        dip: landmarks.indexDip,
+        tip: landmarks.indexTip,
+        handSize: handSize,
+      ),
+      _singleUpperFingerChainScore(
+        mcp: landmarks.middleMcp,
+        pip: landmarks.middlePip,
+        dip: landmarks.middleDip,
+        tip: landmarks.middleTip,
+        handSize: handSize,
+      ),
+    ];
+
+    return scores.reduce(math.min);
+  }
+
+  double _singleUpperFingerChainScore({
+    required HandLandmark mcp,
+    required HandLandmark pip,
+    required HandLandmark dip,
+    required HandLandmark tip,
+    required double handSize,
+  }) {
+    if (handSize <= 0) return 0;
+
+    final mcpToPip = (mcp.y - pip.y) / handSize;
+    final pipToDip = (pip.y - dip.y) / handSize;
+    final dipToTip = (dip.y - tip.y) / handSize;
+
+    return [
+      _inverseLerp(0.00, 0.03, mcpToPip),
+      _inverseLerp(0.00, 0.03, pipToDip),
+      _inverseLerp(0.00, 0.03, dipToTip),
+    ].reduce(math.min);
+  }
+
   double _singleFingerYAxisScore({
     required HandLandmark mcp,
     required HandLandmark tip,
@@ -408,9 +460,11 @@ class _OpenPalmLandmarks {
     required this.thumbMcp,
     required this.indexTip,
     required this.indexPip,
+    required this.indexDip,
     required this.indexMcp,
     required this.middleTip,
     required this.middlePip,
+    required this.middleDip,
     required this.middleMcp,
     required this.ringTip,
     required this.ringPip,
@@ -426,9 +480,11 @@ class _OpenPalmLandmarks {
   final HandLandmark thumbMcp;
   final HandLandmark indexTip;
   final HandLandmark indexPip;
+  final HandLandmark indexDip;
   final HandLandmark indexMcp;
   final HandLandmark middleTip;
   final HandLandmark middlePip;
+  final HandLandmark middleDip;
   final HandLandmark middleMcp;
   final HandLandmark ringTip;
   final HandLandmark ringPip;
@@ -452,6 +508,10 @@ class _OpenPalmLandmarks {
       hand,
       HandLandmarkType.indexFingerPIP,
     );
+    final indexDip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerDIP,
+    );
     final indexMcp = geometry.visibleLandmark(
       hand,
       HandLandmarkType.indexFingerMCP,
@@ -464,6 +524,10 @@ class _OpenPalmLandmarks {
     final middlePip = geometry.visibleLandmark(
       hand,
       HandLandmarkType.middleFingerPIP,
+    );
+    final middleDip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerDIP,
     );
     final middleMcp = geometry.visibleLandmark(
       hand,
@@ -493,9 +557,11 @@ class _OpenPalmLandmarks {
         thumbMcp == null ||
         indexTip == null ||
         indexPip == null ||
+        indexDip == null ||
         indexMcp == null ||
         middleTip == null ||
         middlePip == null ||
+        middleDip == null ||
         middleMcp == null ||
         ringTip == null ||
         ringPip == null ||
@@ -513,9 +579,11 @@ class _OpenPalmLandmarks {
       thumbMcp: thumbMcp,
       indexTip: indexTip,
       indexPip: indexPip,
+      indexDip: indexDip,
       indexMcp: indexMcp,
       middleTip: middleTip,
       middlePip: middlePip,
+      middleDip: middleDip,
       middleMcp: middleMcp,
       ringTip: ringTip,
       ringPip: ringPip,

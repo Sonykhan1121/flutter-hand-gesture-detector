@@ -30,11 +30,13 @@ extension on _AdminHandGestureLiveScreenState {
       return _RecordingGestureAction.start;
     }
 
-    if (hasSingleCustomGesture && customGestureResult.isPunch) {
+    if (hasSingleCustomGesture &&
+        customGestureResult.isPunch &&
+        _isVideoRecording) {
       return _RecordingGestureAction.togglePause;
     }
 
-    if (hasVictoryGesture) {
+    if (hasVictoryGesture && _isVideoRecording) {
       return _RecordingGestureAction.stop;
     }
 
@@ -68,6 +70,16 @@ extension on _AdminHandGestureLiveScreenState {
       return _RecordingGestureFeedback(
         text: _recordingUnavailableText(action),
         confidence: 0,
+      );
+    }
+
+    if (action == _RecordingGestureAction.togglePause) {
+      _recordingGestureTriggered = true;
+      unawaited(_runRecordingGestureAction(action));
+
+      return _RecordingGestureFeedback(
+        text: _recordingTriggeredText(action),
+        confidence: 1,
       );
     }
 

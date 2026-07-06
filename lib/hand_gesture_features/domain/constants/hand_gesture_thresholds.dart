@@ -14,6 +14,7 @@ abstract final class HandGestureThresholds {
   static const double openPalmMinSpreadConfidence = 0.50;
   static const double openPalmMinPalmSideConfidence = 0.35;
   static const double openPalmMinYAxisConfidence = 0.55;
+  static const double openPalmMinUpperFingerChainConfidence = 0.50;
   static const int openPalmSmoothingSampleCount = 4;
   static const int openPalmSmoothingMinPositiveSamples = 2;
   static const Duration openPalmSmoothingMaxAge = Duration(milliseconds: 500);
@@ -77,10 +78,10 @@ abstract final class HandGestureThresholds {
 
   static const int directionFingerChainMinAlignedCount = 3;
   static const double directionFingerChainMinHorizontalImageRatio = 0.025;
-  static const double directionFingerChainMinHorizontalSpanRatio = 0.18;
+  static const double directionFingerChainMinHorizontalSpanRatio = 0.12;
   static const double directionFingerChainHorizontalDominanceRatio = 1.25;
   static const double directionFingerChainRightDominanceRatio = 1.10;
-  static const double directionFingerChainUpDiagonalHorizontalRatio = 0.45;
+  static const double directionFingerChainUpDiagonalHorizontalRatio = 0.25;
   static const double directionFingerChainMinVerticalImageRatio = 0.025;
   static const double directionFingerChainMinVerticalSpanRatio = 0.18;
   static const double directionFingerChainVerticalDominanceRatio = 1.25;
@@ -136,9 +137,7 @@ abstract final class HandGestureThresholds {
   static const double partialZoomOutMinChangeImageRatio = 0.018;
   static const double partialZoomOutClosedMaxStartDistanceFactor = 0.72;
 
-  static const Duration zoomStartPoseHoldDuration = Duration(
-    milliseconds: 300,
-  );
+  static const Duration zoomStartPoseHoldDuration = Duration(milliseconds: 300);
   static const double zoomActiveTipMinPalmDistanceRatio = 0.06;
   static const double zoomMinLandmarkVisibility = 0.30;
 

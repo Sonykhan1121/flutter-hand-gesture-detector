@@ -439,12 +439,31 @@ extension on _AdminHandGestureLiveScreenState {
     final customGestureLabels = customGestureResult.labels;
     final hasSingleCustomGesture = customGestureLabels.length == 1;
     final hasOverlappingCustomGestures = customGestureLabels.length > 1;
+    final hasPunchGesture =
+        !followTrackingActive &&
+        hasSingleCustomGesture &&
+        customGestureResult.isPunch;
     final hasVictoryGesture =
         !followTrackingActive &&
         customGestureLabels.isEmpty &&
         gesture != null &&
         gesture.type == GestureType.victory &&
         gesture.confidence >= HandGestureThresholds.minPackageGestureConfidence;
+
+    if (hasVictoryGesture && !_isVideoRecording) {
+      _showVictoryToast(now);
+    }
+
+    if (hasPunchGesture && !_isVideoRecording) {
+      _showPunchOnScreen(now);
+    }
+
+    final shouldShowPunchOnScreen =
+        !_isVideoRecording &&
+        _lastPunchScreenShownAt != null &&
+        (customGestureLabels.isEmpty || customGestureResult.isPunch) &&
+        now.difference(_lastPunchScreenShownAt!) <= const Duration(seconds: 1);
+
     final recordingGestureFeedback = _updateRecordingGestureHold(
       action: _recordingGestureAction(
         followTrackingActive: followTrackingActive,
@@ -545,6 +564,9 @@ extension on _AdminHandGestureLiveScreenState {
       } else if (recordingGestureFeedback != null) {
         _gestureText = recordingGestureFeedback.text;
         _gestureConfidence = recordingGestureFeedback.confidence;
+      } else if (shouldShowPunchOnScreen) {
+        _gestureText = 'Punch';
+        _gestureConfidence = 1;
       } else if (hasSingleCustomGesture) {
         _gestureText = customGestureLabels.first;
         _gestureConfidence = 1;
@@ -561,7 +583,7 @@ extension on _AdminHandGestureLiveScreenState {
         if (gesture.type == GestureType.thumbUp) {
           _gestureText = 'Stop & Continue Action';
         } else if (gesture.type == GestureType.victory) {
-          _gestureText = 'End record video';
+          _gestureText = _isVideoRecording ? 'End record video' : 'Victory';
         } else {
           _gestureText = gesture.type.displayLabel;
         }
@@ -1116,6 +1138,20 @@ extension on _AdminHandGestureLiveScreenState {
     _faceDetectGestureStartedAt = null;
   }
 
+  void _showVictoryToast(DateTime now) {
+    final lastShownAt = _lastVictoryToastShownAt;
+    if (lastShownAt != null && now.difference(lastShownAt).inSeconds < 3) {
+      return;
+    }
+
+    _lastVictoryToastShownAt = now;
+    // _showSnackBar("It's victory");
+  }
+
+  void _showPunchOnScreen(DateTime now) {
+    _lastPunchScreenShownAt = now;
+  }
+
   void _clearAllActiveGestureTasks({required bool resetCameraZoom}) {
     _zoomGestureDetector.clearState();
     _followObjectSequenceDetector.clear();
@@ -1123,6 +1159,7 @@ extension on _AdminHandGestureLiveScreenState {
     _clearLockedFollowTarget();
     _clearRecordingGestureHold();
     _clearFaceDetectGestureHold();
+    _lastPunchScreenShownAt = null;
     _isFollowingHand = false;
     _focusedHandBox = null;
     _focusImageSize = null;

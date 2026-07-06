@@ -176,6 +176,20 @@ void main() {
       expect(_detect(detector, hand), HandMoveDirection.right);
     });
 
+    test(
+      'returns right for narrow bottom-left to top-right diagonal movement',
+      () {
+        final hand = _handWithFingerChainVectors([
+          const Offset(25, -90),
+          const Offset(25, -90),
+          const Offset(25, -90),
+          const Offset(25, -90),
+        ]);
+
+        expect(_detect(detector, hand), HandMoveDirection.right);
+      },
+    );
+
     test('returns left for bottom-right to top-left diagonal movement', () {
       final hand = _handWithFingerChainVectors([
         const Offset(-50, -90),

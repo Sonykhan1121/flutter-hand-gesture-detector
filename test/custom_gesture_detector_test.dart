@@ -47,6 +47,50 @@ void main() {
       }
     });
   });
+
+  group('CustomGestureDetector punch', () {
+    test('detects punch immediately when all fingers are closed', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isTrue);
+    });
+
+    test('does not punch when fingers are open', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(fingersCurled: false),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
+    });
+
+    test('package closed fist support still requires closed fingers', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(
+          fingersCurled: false,
+          gesture: const GestureResult(
+            type: GestureType.closedFist,
+            confidence: 1,
+          ),
+        ),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
+    });
+  });
 }
 
 List<Offset> _circlePoints({required Offset center, required double radius}) {
@@ -96,6 +140,104 @@ Hand _indexOnlyHand({required Offset indexTip}) {
     imageWidth: _imageSize.width.toInt(),
     imageHeight: _imageSize.height.toInt(),
     handedness: Handedness.right,
+  );
+}
+
+Hand _punchHand({
+  bool fingersCurled = true,
+  bool thumbTucked = true,
+  double scale = 1,
+  Offset palmOffset = Offset.zero,
+  GestureResult? gesture,
+}) {
+  const basePalmCenter = Offset(204, 220);
+
+  Offset point(Offset base) {
+    return Offset(
+      basePalmCenter.dx + (base.dx - basePalmCenter.dx) * scale + palmOffset.dx,
+      basePalmCenter.dy + (base.dy - basePalmCenter.dy) * scale + palmOffset.dy,
+    );
+  }
+
+  const wrist = Offset(200, 300);
+  const thumbMcp = Offset(230, 230);
+  const thumbIp = Offset(210, 238);
+  final thumbTip = thumbTucked
+      ? const Offset(190, 240)
+      : const Offset(300, 235);
+  const indexMcp = Offset(160, 200);
+  const middleMcp = Offset(190, 200);
+  const ringMcp = Offset(220, 200);
+  const pinkyMcp = Offset(250, 200);
+
+  final indexPip = fingersCurled
+      ? const Offset(160, 245)
+      : const Offset(160, 150);
+  final indexTip = fingersCurled
+      ? const Offset(205, 265)
+      : const Offset(160, 90);
+  final middlePip = fingersCurled
+      ? const Offset(190, 245)
+      : const Offset(190, 145);
+  final middleTip = fingersCurled
+      ? const Offset(230, 260)
+      : const Offset(190, 80);
+  final ringPip = fingersCurled
+      ? const Offset(220, 245)
+      : const Offset(220, 145);
+  final ringTip = fingersCurled
+      ? const Offset(180, 260)
+      : const Offset(220, 80);
+  final pinkyPip = fingersCurled
+      ? const Offset(250, 245)
+      : const Offset(250, 150);
+  final pinkyTip = fingersCurled
+      ? const Offset(205, 260)
+      : const Offset(250, 90);
+
+  final landmarks = <HandLandmark>[
+    _landmark(HandLandmarkType.wrist, point(wrist)),
+    _landmark(HandLandmarkType.thumbMCP, point(thumbMcp)),
+    _landmark(HandLandmarkType.thumbIP, point(thumbIp)),
+    _landmark(HandLandmarkType.thumbTip, point(thumbTip)),
+    _landmark(HandLandmarkType.indexFingerMCP, point(indexMcp)),
+    _landmark(HandLandmarkType.indexFingerPIP, point(indexPip)),
+    _landmark(
+      HandLandmarkType.indexFingerDIP,
+      Offset.lerp(point(indexPip), point(indexTip), 0.5)!,
+    ),
+    _landmark(HandLandmarkType.indexFingerTip, point(indexTip)),
+    _landmark(HandLandmarkType.middleFingerMCP, point(middleMcp)),
+    _landmark(HandLandmarkType.middleFingerPIP, point(middlePip)),
+    _landmark(
+      HandLandmarkType.middleFingerDIP,
+      Offset.lerp(point(middlePip), point(middleTip), 0.5)!,
+    ),
+    _landmark(HandLandmarkType.middleFingerTip, point(middleTip)),
+    _landmark(HandLandmarkType.ringFingerMCP, point(ringMcp)),
+    _landmark(HandLandmarkType.ringFingerPIP, point(ringPip)),
+    _landmark(
+      HandLandmarkType.ringFingerDIP,
+      Offset.lerp(point(ringPip), point(ringTip), 0.5)!,
+    ),
+    _landmark(HandLandmarkType.ringFingerTip, point(ringTip)),
+    _landmark(HandLandmarkType.pinkyMCP, point(pinkyMcp)),
+    _landmark(HandLandmarkType.pinkyPIP, point(pinkyPip)),
+    _landmark(
+      HandLandmarkType.pinkyDIP,
+      Offset.lerp(point(pinkyPip), point(pinkyTip), 0.5)!,
+    ),
+    _landmark(HandLandmarkType.pinkyTip, point(pinkyTip)),
+  ];
+
+  return Hand(
+    boundingBox: BoundingBox.ltrb(40, 40, 360, 360),
+    score: 1,
+    landmarks: landmarks,
+    imageWidth: _imageSize.width.toInt(),
+    imageHeight: _imageSize.height.toInt(),
+    handedness: Handedness.right,
+    gesture: gesture,
   );
 }
 

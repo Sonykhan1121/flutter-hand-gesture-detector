@@ -21,12 +21,16 @@ class CustomGestureDetector {
     required Hand hand,
     required Size imageSize,
     required bool mirrorHorizontally,
+    DateTime? now,
   }) {
+    final frameTime = now ?? DateTime.now();
+
     return CustomGestureDetectionResult(
       isCancelEverything: _detectCancelEverythingGesture(
         hand: hand,
         imageSize: imageSize,
         mirrorHorizontally: mirrorHorizontally,
+        now: frameTime,
       ),
       isOk: _isOkGesture(hand),
       isCallMe: _isCallMeGesture(hand),
@@ -38,9 +42,8 @@ class CustomGestureDetector {
     required Hand hand,
     required Size imageSize,
     required bool mirrorHorizontally,
+    required DateTime now,
   }) {
-    final now = DateTime.now();
-
     if (!_isIndexOnlyNearUpperGesture(hand)) {
       return _recentCancelEverythingDetected(now);
     }
