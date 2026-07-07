@@ -1,7 +1,6 @@
 import 'dart:collection';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
 import 'package:hand_detection/hand_detection.dart';
 
 import '../constants/hand_gesture_thresholds.dart';
@@ -70,7 +69,7 @@ class OpenPalmGestureDetector {
     final landmarks = _OpenPalmLandmarks.fromHand(hand, geometry);
     if (landmarks == null) return 0;
 
-    final palmCenter = geometry.palmCenter(hand);
+    final palmCenter = geometry.palmCenter3D(hand);
     if (palmCenter == null) return 0;
 
     final handSize = _handSize(hand);
@@ -178,14 +177,14 @@ class OpenPalmGestureDetector {
     required HandLandmark mcp,
     required HandLandmark pip,
     required HandLandmark tip,
-    required Offset palmCenter,
+    required HandPoint3D palmCenter,
     required double handSize,
   }) {
-    final tipDistance = geometry.distance(tip, palmCenter);
-    final pipDistance = geometry.distance(pip, palmCenter);
+    final tipDistance = geometry.distanceToPoint3D(tip, palmCenter);
+    final pipDistance = geometry.distanceToPoint3D(pip, palmCenter);
     if (pipDistance <= 0) return 0;
 
-    final angle = geometry.fingerJointAngleDegrees(
+    final angle = geometry.fingerJointAngleDegrees3D(
       mcp: mcp,
       pip: pip,
       tip: tip,
@@ -203,23 +202,29 @@ class OpenPalmGestureDetector {
 
   double _thumbExtensionScore({
     required _OpenPalmLandmarks landmarks,
-    required Offset palmCenter,
+    required HandPoint3D palmCenter,
     required double handSize,
   }) {
-    final thumbTipToPalm = geometry.distance(landmarks.thumbTip, palmCenter);
-    final thumbIpToPalm = geometry.distance(landmarks.thumbIp, palmCenter);
+    final thumbTipToPalm = geometry.distanceToPoint3D(
+      landmarks.thumbTip,
+      palmCenter,
+    );
+    final thumbIpToPalm = geometry.distanceToPoint3D(
+      landmarks.thumbIp,
+      palmCenter,
+    );
     if (thumbIpToPalm <= 0) return 0;
 
-    final thumbAngle = geometry.fingerJointAngleDegrees(
+    final thumbAngle = geometry.fingerJointAngleDegrees3D(
       mcp: landmarks.thumbMcp,
       pip: landmarks.thumbIp,
       tip: landmarks.thumbTip,
     );
-    final thumbTipToIndexMcp = geometry.distanceBetweenLandmarks(
+    final thumbTipToIndexMcp = geometry.distanceBetweenLandmarks3D(
       landmarks.thumbTip,
       landmarks.indexMcp,
     );
-    final thumbTipToIndexTip = geometry.distanceBetweenLandmarks(
+    final thumbTipToIndexTip = geometry.distanceBetweenLandmarks3D(
       landmarks.thumbTip,
       landmarks.indexTip,
     );
@@ -257,23 +262,29 @@ class OpenPalmGestureDetector {
     required _OpenPalmLandmarks landmarks,
     required double handSize,
   }) {
-    final tipSpread = geometry.distanceBetweenLandmarks(
+    final tipSpread = geometry.distanceBetweenLandmarks3D(
       landmarks.indexTip,
       landmarks.pinkyTip,
     );
-    final mcpSpread = geometry.distanceBetweenLandmarks(
+    final mcpSpread = geometry.distanceBetweenLandmarks3D(
       landmarks.indexMcp,
       landmarks.pinkyMcp,
     );
     if (mcpSpread <= 0) return 0;
 
     final adjacentTipDistances = [
-      geometry.distanceBetweenLandmarks(
+      geometry.distanceBetweenLandmarks3D(
         landmarks.indexTip,
         landmarks.middleTip,
       ),
-      geometry.distanceBetweenLandmarks(landmarks.middleTip, landmarks.ringTip),
-      geometry.distanceBetweenLandmarks(landmarks.ringTip, landmarks.pinkyTip),
+      geometry.distanceBetweenLandmarks3D(
+        landmarks.middleTip,
+        landmarks.ringTip,
+      ),
+      geometry.distanceBetweenLandmarks3D(
+        landmarks.ringTip,
+        landmarks.pinkyTip,
+      ),
     ];
 
     final tipSpreadScore = _inverseLerp(0.24, 0.38, tipSpread / handSize);

@@ -34,6 +34,7 @@ abstract final class HandGestureThresholds {
   static const Duration faceDetectHoldDuration = Duration(seconds: 2);
 
   static const double minLandmarkVisibility = 0.35;
+  static const double landmarkDepthWeight = 0.65;
 
   static const List<HandLandmarkType> directionFingerTipTypes = [
     HandLandmarkType.indexFingerTip,
@@ -86,6 +87,8 @@ abstract final class HandGestureThresholds {
   static const double directionFingerChainMinVerticalSpanRatio = 0.18;
   static const double directionFingerChainVerticalDominanceRatio = 1.25;
   static const double directionMovingUpMinBackSideConfidence = 0.35;
+  static const double directionFingerChainMaxDepthProjectionRatio = 1.35;
+  static const int directionDownRejectFoldedLongFingerCount = 3;
 
   static const double fingerTipVerticalMaxSpreadRatio = 0.22;
   static const double fingerTipHorizontalMaxSpreadRatio = 0.22;
@@ -108,7 +111,9 @@ abstract final class HandGestureThresholds {
   static const double okTouchMaxDistanceRatio = 0.11;
 
   static const double punchKnuckleMaxYSpreadRatio = 0.12;
+  static const double punchKnuckleMaxDepthSpreadRatio = 0.22;
   static const double punchGestureMinPackageConfidence = 0.60;
+  static const int punchMaxDownExtendedFingerChainCount = 1;
 
   static const int indexCircleHistoryMaxLength = 36;
   static const int indexCircleMinSampleCount = 5;
@@ -120,6 +125,7 @@ abstract final class HandGestureThresholds {
   static const double indexCircleMinImageRadiusRatio = 0.006;
   static const double indexCircleMinRadiusRatio = 0.015;
   static const double indexCircleMaxRadiusVariationRatio = 1.60;
+  static const double indexCircleMaxDepthVariationRatio = 0.32;
 
   static const double indexUpperFacingMinDistanceRatio = 0.08;
   static const double indexUprightMaxSideOffsetRatio = 0.50;

@@ -21,7 +21,7 @@ class ZoomGestureDetector {
   ZoomDirection _directionLock = ZoomDirection.none;
   bool _isPartialZoomOutPhase = false;
   double? _startDistanceRatio;
-  Offset? _startPalmCenter;
+  HandPoint3D? _startPalmCenter;
   double? _startHandSize;
   DateTime? _phaseStartedAt;
   DateTime? _poseInvalidStartedAt;
@@ -31,7 +31,7 @@ class ZoomGestureDetector {
   ZoomDirection _startPoseDirection = ZoomDirection.none;
   DateTime? _startPoseStartedAt;
   double? _startPoseDistanceRatio;
-  Offset? _startPosePalmCenter;
+  HandPoint3D? _startPosePalmCenter;
   double? _startPoseHandSize;
 
   bool get isGestureActive =>
@@ -323,7 +323,7 @@ class ZoomGestureDetector {
     required ZoomDirection direction,
     required double distanceRatio,
     required DateTime now,
-    Offset? palmCenter,
+    HandPoint3D? palmCenter,
     double? handSize,
   }) {
     if (_startPoseDirection != direction) {
@@ -385,7 +385,7 @@ class ZoomGestureDetector {
     required ZoomDirection direction,
     required double distanceRatio,
     required DateTime now,
-    Offset? palmCenter,
+    HandPoint3D? palmCenter,
     double? handSize,
   }) {
     _startPoseDirection = direction;
@@ -549,19 +549,19 @@ class ZoomGestureDetector {
       return false;
     }
 
-    final middleIsClosed = geometry.isFingerFoldedByAngle(
+    final middleIsClosed = geometry.isFingerFoldedByAngle3D(
       mcp: middleMcp,
       pip: middlePip,
       tip: middleTip,
     );
 
-    final ringIsClosed = geometry.isFingerFoldedByAngle(
+    final ringIsClosed = geometry.isFingerFoldedByAngle3D(
       mcp: ringMcp,
       pip: ringPip,
       tip: ringTip,
     );
 
-    final pinkyIsClosed = geometry.isFingerFoldedByAngle(
+    final pinkyIsClosed = geometry.isFingerFoldedByAngle3D(
       mcp: pinkyMcp,
       pip: pinkyPip,
       tip: pinkyTip,
@@ -585,7 +585,7 @@ class ZoomGestureDetector {
 
     if (thumbTip == null || indexTip == null) return null;
 
-    final palmCenter = geometry.palmCenter(hand);
+    final palmCenter = geometry.palmCenter3D(hand);
     if (palmCenter == null) return null;
 
     final box = hand.boundingBox;
@@ -595,19 +595,20 @@ class ZoomGestureDetector {
 
     if (handSize <= 0) return null;
 
-    final tipCenter = Offset(
-      (thumbTip.x + indexTip.x) / 2,
-      (thumbTip.y + indexTip.y) / 2,
+    final tipCenter = HandPoint3D(
+      x: (thumbTip.x + indexTip.x) / 2,
+      y: (thumbTip.y + indexTip.y) / 2,
+      z: (thumbTip.z + indexTip.z) / 2,
     );
 
-    if (geometry.distanceBetweenOffsets(tipCenter, palmCenter) <=
+    if (geometry.distanceBetweenPoints3D(tipCenter, palmCenter) <=
         handSize * HandGestureThresholds.zoomActiveTipMinPalmDistanceRatio) {
       return null;
     }
 
     return _ZoomPose(
       distanceRatio:
-          geometry.distanceBetweenLandmarks(thumbTip, indexTip) / handSize,
+          geometry.distanceBetweenLandmarks3D(thumbTip, indexTip) / handSize,
       palmCenter: palmCenter,
       handSize: handSize,
     );
@@ -632,7 +633,8 @@ class ZoomGestureDetector {
     final imageMaxSide = math.max(imageSize.width, imageSize.height);
     if (imageMaxSide <= 0) return null;
 
-    return geometry.distanceBetweenLandmarks(thumbTip, indexTip) / imageMaxSide;
+    return geometry.distanceBetweenLandmarks3D(thumbTip, indexTip) /
+        imageMaxSide;
   }
 
   HandLandmark? _zoomVisibleLandmark(Hand hand, HandLandmarkType type) {
@@ -660,7 +662,7 @@ class ZoomGestureDetector {
   }
 
   bool _isPalmStableForStartPose({
-    required Offset? palmCenter,
+    required HandPoint3D? palmCenter,
     required double? handSize,
   }) {
     final startPalmCenter = _startPosePalmCenter;
@@ -696,9 +698,9 @@ class ZoomGestureDetector {
   }
 
   bool _isPalmMovementWithinLimit({
-    required Offset startPalmCenter,
+    required HandPoint3D startPalmCenter,
     required double startHandSize,
-    required Offset currentPalmCenter,
+    required HandPoint3D currentPalmCenter,
     required double currentHandSize,
   }) {
     final referenceHandSize = math.max(startHandSize, currentHandSize);
@@ -707,7 +709,7 @@ class ZoomGestureDetector {
     final maxPalmMovement =
         referenceHandSize * HandGestureThresholds.zoomMaxPalmMovementRatio;
 
-    return geometry.distanceBetweenOffsets(
+    return geometry.distanceBetweenPoints3D(
           startPalmCenter,
           currentPalmCenter,
         ) <=
@@ -723,6 +725,6 @@ class _ZoomPose {
   });
 
   final double distanceRatio;
-  final Offset palmCenter;
+  final HandPoint3D palmCenter;
   final double handSize;
 }

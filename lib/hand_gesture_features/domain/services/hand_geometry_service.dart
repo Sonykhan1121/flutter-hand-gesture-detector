@@ -5,6 +5,16 @@ import 'package:hand_detection/hand_detection.dart';
 
 import '../constants/hand_gesture_thresholds.dart';
 
+class HandPoint3D {
+  const HandPoint3D({required this.x, required this.y, required this.z});
+
+  final double x;
+  final double y;
+  final double z;
+
+  Offset get offset => Offset(x, y);
+}
+
 class HandGeometryService {
   const HandGeometryService();
 
@@ -40,6 +50,29 @@ class HandGeometryService {
     );
   }
 
+  HandPoint3D? palmCenter3D(Hand hand) {
+    final points = <HandLandmark>[];
+
+    for (final type in const [
+      HandLandmarkType.wrist,
+      HandLandmarkType.indexFingerMCP,
+      HandLandmarkType.middleFingerMCP,
+      HandLandmarkType.ringFingerMCP,
+      HandLandmarkType.pinkyMCP,
+    ]) {
+      final landmark = visibleLandmark(hand, type);
+      if (landmark != null) points.add(landmark);
+    }
+
+    if (points.isEmpty) return null;
+
+    return HandPoint3D(
+      x: average(points.map((point) => point.x)),
+      y: average(points.map((point) => point.y)),
+      z: average(points.map((point) => point.z)),
+    );
+  }
+
   bool isFingerExtended({
     required HandLandmark tip,
     required HandLandmark pip,
@@ -54,6 +87,20 @@ class HandGeometryService {
         tipDistance > handSize * 0.30;
   }
 
+  bool isFingerExtended3D({
+    required HandLandmark tip,
+    required HandLandmark pip,
+    required HandPoint3D palmCenter,
+    required double handSize,
+  }) {
+    final tipDistance = distanceToPoint3D(tip, palmCenter);
+    final pipDistance = distanceToPoint3D(pip, palmCenter);
+
+    return tipDistance >
+            pipDistance * HandGestureThresholds.extendedFingerRatio &&
+        tipDistance > handSize * 0.30;
+  }
+
   bool isFingerFolded({
     required HandLandmark tip,
     required HandLandmark pip,
@@ -62,6 +109,20 @@ class HandGeometryService {
   }) {
     final tipDistance = distance(tip, palmCenter);
     final pipDistance = distance(pip, palmCenter);
+
+    return tipDistance <=
+            pipDistance * HandGestureThresholds.foldedFingerRatio ||
+        tipDistance < handSize * 0.26;
+  }
+
+  bool isFingerFolded3D({
+    required HandLandmark tip,
+    required HandLandmark pip,
+    required HandPoint3D palmCenter,
+    required double handSize,
+  }) {
+    final tipDistance = distanceToPoint3D(tip, palmCenter);
+    final pipDistance = distanceToPoint3D(pip, palmCenter);
 
     return tipDistance <=
             pipDistance * HandGestureThresholds.foldedFingerRatio ||
@@ -96,12 +157,52 @@ class HandGeometryService {
     return math.acos(cosValue) * 180 / math.pi;
   }
 
+  double fingerJointAngleDegrees3D({
+    required HandLandmark mcp,
+    required HandLandmark pip,
+    required HandLandmark tip,
+  }) {
+    final mcpToPipX = mcp.x - pip.x;
+    final mcpToPipY = mcp.y - pip.y;
+    final mcpToPipZ = weightedDepthDelta(mcp, pip);
+    final tipToPipX = tip.x - pip.x;
+    final tipToPipY = tip.y - pip.y;
+    final tipToPipZ = weightedDepthDelta(tip, pip);
+
+    final dot =
+        mcpToPipX * tipToPipX + mcpToPipY * tipToPipY + mcpToPipZ * tipToPipZ;
+    final mcpVectorLength = math.sqrt(
+      mcpToPipX * mcpToPipX + mcpToPipY * mcpToPipY + mcpToPipZ * mcpToPipZ,
+    );
+    final tipVectorLength = math.sqrt(
+      tipToPipX * tipToPipX + tipToPipY * tipToPipY + tipToPipZ * tipToPipZ,
+    );
+
+    if (mcpVectorLength == 0 || tipVectorLength == 0) return 180;
+
+    final cosValue = (dot / (mcpVectorLength * tipVectorLength)).clamp(
+      -1.0,
+      1.0,
+    );
+
+    return math.acos(cosValue) * 180 / math.pi;
+  }
+
   bool isFingerFoldedByAngle({
     required HandLandmark mcp,
     required HandLandmark pip,
     required HandLandmark tip,
   }) {
     return fingerJointAngleDegrees(mcp: mcp, pip: pip, tip: tip) <=
+        HandGestureThresholds.fingerFoldedMaxAngleDegrees;
+  }
+
+  bool isFingerFoldedByAngle3D({
+    required HandLandmark mcp,
+    required HandLandmark pip,
+    required HandLandmark tip,
+  }) {
+    return fingerJointAngleDegrees3D(mcp: mcp, pip: pip, tip: tip) <=
         HandGestureThresholds.fingerFoldedMaxAngleDegrees;
   }
 
@@ -117,10 +218,275 @@ class HandGeometryService {
         distance(tip, palmCenter) > handSize * 0.30;
   }
 
+  bool isFingerExtendedByAngle3D({
+    required HandLandmark mcp,
+    required HandLandmark pip,
+    required HandLandmark tip,
+    required HandPoint3D palmCenter,
+    required double handSize,
+  }) {
+    return fingerJointAngleDegrees3D(mcp: mcp, pip: pip, tip: tip) >=
+            HandGestureThresholds.fingerExtendedMinAngleDegrees &&
+        distanceToPoint3D(tip, palmCenter) > handSize * 0.30;
+  }
+
+  List<HandLandmark>? visibleFingerChain(
+    Hand hand,
+    List<HandLandmarkType> chainTypes,
+  ) {
+    final chain = <HandLandmark>[];
+
+    for (final type in chainTypes) {
+      final landmark = visibleLandmark(hand, type);
+      if (landmark == null) return null;
+      chain.add(landmark);
+    }
+
+    return chain;
+  }
+
+  bool isFingerChainExtended3D(List<HandLandmark> chain) {
+    return chain.length >= 4 &&
+        fingerJointAngleDegrees3D(
+              mcp: chain[0],
+              pip: chain[1],
+              tip: chain[3],
+            ) >=
+            HandGestureThresholds.fingerExtendedMinAngleDegrees;
+  }
+
+  bool isFingerChainFolded3D({
+    required List<HandLandmark> chain,
+    required HandPoint3D palmCenter,
+    required double handSize,
+  }) {
+    return chain.length >= 4 &&
+        isFingerFolded3D(
+          tip: chain[3],
+          pip: chain[1],
+          palmCenter: palmCenter,
+          handSize: handSize,
+        ) &&
+        isFingerFoldedByAngle3D(mcp: chain[0], pip: chain[1], tip: chain[3]);
+  }
+
+  int foldedLongFingerCount3D({
+    required Hand hand,
+    required HandPoint3D palmCenter,
+    required double handSize,
+  }) {
+    var foldedCount = 0;
+
+    for (final chainTypes in HandGestureThresholds.directionFingerChainTypes) {
+      final chain = visibleFingerChain(hand, chainTypes);
+      if (chain == null) continue;
+
+      if (isFingerChainFolded3D(
+        chain: chain,
+        palmCenter: palmCenter,
+        handSize: handSize,
+      )) {
+        foldedCount += 1;
+      }
+    }
+
+    return foldedCount;
+  }
+
+  int downwardExtendedFingerChainCount({
+    required Hand hand,
+    required Size imageSize,
+    required bool mirrorHorizontally,
+  }) {
+    if (imageSize.width <= 0 || imageSize.height <= 0) return 0;
+
+    double visibleX(double rawX) =>
+        mirrorHorizontally ? imageSize.width - rawX : rawX;
+
+    final fingerChains = <List<HandLandmark>>[];
+    final pointXs = <double>[];
+    final pointYs = <double>[];
+
+    for (final chainTypes in HandGestureThresholds.directionFingerChainTypes) {
+      final chain = visibleFingerChain(hand, chainTypes);
+      if (chain == null || !isFingerChainExtended3D(chain)) continue;
+
+      fingerChains.add(chain);
+
+      for (final landmark in chain) {
+        pointXs.add(visibleX(landmark.x));
+        pointYs.add(landmark.y);
+      }
+    }
+
+    if (fingerChains.isEmpty || pointXs.isEmpty || pointYs.isEmpty) return 0;
+
+    final fingerPointWidth =
+        pointXs.reduce(math.max) - pointXs.reduce(math.min);
+    final fingerPointHeight =
+        pointYs.reduce(math.max) - pointYs.reduce(math.min);
+    final fingerPointSpan = math.max(fingerPointWidth, fingerPointHeight);
+
+    if (fingerPointSpan <= 0) return 0;
+
+    final minVerticalDistance = math.max(
+      imageSize.height *
+          HandGestureThresholds.directionFingerChainMinVerticalImageRatio,
+      fingerPointSpan *
+          HandGestureThresholds.directionFingerChainMinVerticalSpanRatio,
+    );
+
+    var downPointingFingerCount = 0;
+
+    for (final chain in fingerChains) {
+      final deltaX = fingerChainDeltaX(
+        chain,
+        imageSize: imageSize,
+        mirrorHorizontally: mirrorHorizontally,
+      );
+      final deltaY = fingerChainDeltaY(chain);
+
+      if (isFingerChainDepthDominant(
+        chain: chain,
+        deltaX: deltaX,
+        deltaY: deltaY,
+      )) {
+        continue;
+      }
+
+      if (deltaY >= minVerticalDistance &&
+          deltaY >=
+              deltaX.abs() *
+                  HandGestureThresholds
+                      .directionFingerChainVerticalDominanceRatio) {
+        downPointingFingerCount += 1;
+      }
+    }
+
+    return downPointingFingerCount;
+  }
+
+  double fingerChainDeltaX(
+    List<HandLandmark> chain, {
+    required Size imageSize,
+    required bool mirrorHorizontally,
+  }) {
+    double visibleX(double rawX) =>
+        mirrorHorizontally ? imageSize.width - rawX : rawX;
+
+    return visibleX(chain[1].x) -
+        visibleX(chain[0].x) +
+        visibleX(chain[2].x) -
+        visibleX(chain[1].x) +
+        visibleX(chain[3].x) -
+        visibleX(chain[2].x);
+  }
+
+  double fingerChainDeltaY(List<HandLandmark> chain) {
+    return chain[1].y -
+        chain[0].y +
+        chain[2].y -
+        chain[1].y +
+        chain[3].y -
+        chain[2].y;
+  }
+
+  double fingerChainDeltaZ(List<HandLandmark> chain) {
+    return weightedDepthDelta(chain[1], chain[0]) +
+        weightedDepthDelta(chain[2], chain[1]) +
+        weightedDepthDelta(chain[3], chain[2]);
+  }
+
+  bool isFingerChainDepthDominant({
+    required List<HandLandmark> chain,
+    required double deltaX,
+    required double deltaY,
+  }) {
+    final projectedDelta = math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    return projectedDelta > 0 &&
+        fingerChainDeltaZ(chain).abs() >
+            projectedDelta *
+                HandGestureThresholds
+                    .directionFingerChainMaxDepthProjectionRatio;
+  }
+
+  bool? isThumbTuckedForFist3D({
+    required Hand hand,
+    required HandPoint3D palmCenter,
+    required double handSize,
+  }) {
+    final thumbTip = visibleLandmark(hand, HandLandmarkType.thumbTip);
+    final thumbIp = visibleLandmark(hand, HandLandmarkType.thumbIP);
+    final thumbMcp = visibleLandmark(hand, HandLandmarkType.thumbMCP);
+    final indexMcp = visibleLandmark(hand, HandLandmarkType.indexFingerMCP);
+    final middleMcp = visibleLandmark(hand, HandLandmarkType.middleFingerMCP);
+
+    if (thumbTip == null ||
+        thumbIp == null ||
+        thumbMcp == null ||
+        indexMcp == null ||
+        middleMcp == null) {
+      return null;
+    }
+
+    return isThumbTucked3D(
+      thumbTip: thumbTip,
+      thumbIp: thumbIp,
+      thumbMcp: thumbMcp,
+      indexMcp: indexMcp,
+      middleMcp: middleMcp,
+      palmCenter: palmCenter,
+      handSize: handSize,
+    );
+  }
+
+  bool isThumbTucked3D({
+    required HandLandmark thumbTip,
+    required HandLandmark thumbIp,
+    required HandLandmark thumbMcp,
+    required HandLandmark indexMcp,
+    required HandLandmark middleMcp,
+    required HandPoint3D palmCenter,
+    required double handSize,
+  }) {
+    final thumbTipToPalm = distanceToPoint3D(thumbTip, palmCenter);
+    final thumbIpToPalm = distanceToPoint3D(thumbIp, palmCenter);
+
+    final thumbTipToIndexMcp = distanceBetweenLandmarks3D(thumbTip, indexMcp);
+    final thumbTipToMiddleMcp = distanceBetweenLandmarks3D(thumbTip, middleMcp);
+    final thumbTipToThumbMcp = distanceBetweenLandmarks3D(thumbTip, thumbMcp);
+
+    final thumbTipCloseToPalm =
+        thumbTipToPalm <=
+        handSize * HandGestureThresholds.closedThumbMaxPalmDistanceRatio;
+    final thumbTipNotPastIp =
+        thumbTipToPalm <=
+        thumbIpToPalm * HandGestureThresholds.closedThumbTipIpPalmRatio;
+    final thumbTipCloseToPalmKnuckles =
+        math.min(thumbTipToIndexMcp, thumbTipToMiddleMcp) <=
+        handSize * HandGestureThresholds.closedThumbMaxKnuckleDistanceRatio;
+    final thumbNotStretchedOut =
+        thumbTipToThumbMcp <=
+        handSize * HandGestureThresholds.closedThumbMaxTipMcpDistanceRatio;
+
+    return thumbTipCloseToPalm &&
+        thumbTipNotPastIp &&
+        thumbTipCloseToPalmKnuckles &&
+        thumbNotStretchedOut;
+  }
+
   double distance(HandLandmark landmark, Offset point) {
     final dx = landmark.x - point.dx;
     final dy = landmark.y - point.dy;
     return math.sqrt(dx * dx + dy * dy);
+  }
+
+  double distanceToPoint3D(HandLandmark landmark, HandPoint3D point) {
+    final dx = landmark.x - point.x;
+    final dy = landmark.y - point.y;
+    final dz = weightedDepthValue(landmark.z - point.z);
+    return math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
   double distanceBetweenLandmarks(HandLandmark first, HandLandmark second) {
@@ -129,10 +495,32 @@ class HandGeometryService {
     return math.sqrt(dx * dx + dy * dy);
   }
 
+  double distanceBetweenLandmarks3D(HandLandmark first, HandLandmark second) {
+    final dx = first.x - second.x;
+    final dy = first.y - second.y;
+    final dz = weightedDepthDelta(first, second);
+    return math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
   double distanceBetweenOffsets(Offset first, Offset second) {
     final dx = first.dx - second.dx;
     final dy = first.dy - second.dy;
     return math.sqrt(dx * dx + dy * dy);
+  }
+
+  double distanceBetweenPoints3D(HandPoint3D first, HandPoint3D second) {
+    final dx = first.x - second.x;
+    final dy = first.y - second.y;
+    final dz = weightedDepthValue(first.z - second.z);
+    return math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  double weightedDepthDelta(HandLandmark first, HandLandmark second) {
+    return weightedDepthValue(first.z - second.z);
+  }
+
+  double weightedDepthValue(double value) {
+    return value * HandGestureThresholds.landmarkDepthWeight;
   }
 
   double average(Iterable<double> values) {

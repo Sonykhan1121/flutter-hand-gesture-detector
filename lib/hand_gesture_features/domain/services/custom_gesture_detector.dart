@@ -34,7 +34,11 @@ class CustomGestureDetector {
       ),
       isOk: _isOkGesture(hand),
       isCallMe: _isCallMeGesture(hand),
-      isPunch: _isPunchGesture(hand),
+      isPunch: _isPunchGesture(
+        hand,
+        imageSize: imageSize,
+        mirrorHorizontally: mirrorHorizontally,
+      ),
     );
   }
 
@@ -58,13 +62,22 @@ class CustomGestureDetector {
     }
 
     final handSize = _handSize(hand);
+    if (handSize <= 0) {
+      return _recentCancelEverythingDetected(now);
+    }
 
     final point = Offset(
       mirrorHorizontally ? imageSize.width - indexTip.x : indexTip.x,
       indexTip.y,
     );
 
-    _indexCircleHistory.addLast(TimedOffset(point: point, time: now));
+    _indexCircleHistory.addLast(
+      TimedOffset(
+        point: point,
+        time: now,
+        depth: geometry.weightedDepthValue(indexTip.z),
+      ),
+    );
 
     while (_indexCircleHistory.length >
         HandGestureThresholds.indexCircleHistoryMaxLength) {
@@ -128,6 +141,16 @@ class CustomGestureDetector {
     if ((radiusMax - radiusMin) >
         averageRadius *
             HandGestureThresholds.indexCircleMaxRadiusVariationRatio) {
+      return _recentCancelEverythingDetected(now);
+    }
+
+    final depths = _indexCircleHistory
+        .map((sample) => sample.depth)
+        .toList(growable: false);
+    final depthRange = depths.reduce(math.max) - depths.reduce(math.min);
+
+    if (depthRange >
+        handSize * HandGestureThresholds.indexCircleMaxDepthVariationRatio) {
       return _recentCancelEverythingDetected(now);
     }
 
@@ -214,13 +237,13 @@ class CustomGestureDetector {
       return false;
     }
 
-    final palmCenter = geometry.palmCenter(hand);
+    final palmCenter = geometry.palmCenter3D(hand);
     if (palmCenter == null) return false;
 
     final handSize = _handSize(hand);
     if (handSize <= 0) return false;
 
-    final indexIsOpen = geometry.isFingerExtendedByAngle(
+    final indexIsOpen = geometry.isFingerExtendedByAngle3D(
       mcp: indexMcp,
       pip: indexPip,
       tip: indexTip,
@@ -231,7 +254,7 @@ class CustomGestureDetector {
     final indexFacesNearUp =
         indexTip.y < indexPip.y &&
         indexTip.y <
-            palmCenter.dy -
+            palmCenter.y -
                 handSize *
                     HandGestureThresholds.indexUpperFacingMinDistanceRatio &&
         (indexTip.x - indexMcp.x).abs() <=
@@ -247,19 +270,19 @@ class CustomGestureDetector {
       handSize: handSize,
     );
 
-    final middleIsClosed = geometry.isFingerFoldedByAngle(
+    final middleIsClosed = geometry.isFingerFoldedByAngle3D(
       mcp: middleMcp,
       pip: middlePip,
       tip: middleTip,
     );
 
-    final ringIsClosed = geometry.isFingerFoldedByAngle(
+    final ringIsClosed = geometry.isFingerFoldedByAngle3D(
       mcp: ringMcp,
       pip: ringPip,
       tip: ringTip,
     );
 
-    final pinkyIsClosed = geometry.isFingerFoldedByAngle(
+    final pinkyIsClosed = geometry.isFingerFoldedByAngle3D(
       mcp: pinkyMcp,
       pip: pinkyPip,
       tip: pinkyTip,
@@ -337,13 +360,13 @@ class CustomGestureDetector {
       return false;
     }
 
-    final palmCenter = geometry.palmCenter(hand);
+    final palmCenter = geometry.palmCenter3D(hand);
     if (palmCenter == null) return false;
 
     final handSize = _handSize(hand);
     if (handSize <= 0) return false;
 
-    final thumbIndexDistance = geometry.distanceBetweenLandmarks(
+    final thumbIndexDistance = geometry.distanceBetweenLandmarks3D(
       thumbTip,
       indexTip,
     );
@@ -354,7 +377,7 @@ class CustomGestureDetector {
 
     final thumbAndIndexTouch = thumbIndexDistance <= maxTouchDistance;
 
-    final indexBendAngle = geometry.fingerJointAngleDegrees(
+    final indexBendAngle = geometry.fingerJointAngleDegrees3D(
       mcp: indexMcp,
       pip: indexPip,
       tip: indexTip,
@@ -362,7 +385,7 @@ class CustomGestureDetector {
 
     final indexIsBentForOk = indexBendAngle <= 150.0;
 
-    final middleIsOpen = geometry.isFingerExtendedByAngle(
+    final middleIsOpen = geometry.isFingerExtendedByAngle3D(
       mcp: middleMcp,
       pip: middlePip,
       tip: middleTip,
@@ -370,7 +393,7 @@ class CustomGestureDetector {
       handSize: handSize,
     );
 
-    final ringIsOpen = geometry.isFingerExtendedByAngle(
+    final ringIsOpen = geometry.isFingerExtendedByAngle3D(
       mcp: ringMcp,
       pip: ringPip,
       tip: ringTip,
@@ -378,7 +401,7 @@ class CustomGestureDetector {
       handSize: handSize,
     );
 
-    final pinkyIsOpen = geometry.isFingerExtendedByAngle(
+    final pinkyIsOpen = geometry.isFingerExtendedByAngle3D(
       mcp: pinkyMcp,
       pip: pinkyPip,
       tip: pinkyTip,
@@ -438,39 +461,39 @@ class CustomGestureDetector {
       return false;
     }
 
-    final palmCenter = geometry.palmCenter(hand);
+    final palmCenter = geometry.palmCenter3D(hand);
     if (palmCenter == null) return false;
 
     final handSize = _handSize(hand);
 
     final thumbIsOpen =
-        geometry.distance(thumbTip, palmCenter) >
-            geometry.distance(thumbIp, palmCenter) *
+        geometry.distanceToPoint3D(thumbTip, palmCenter) >
+            geometry.distanceToPoint3D(thumbIp, palmCenter) *
                 HandGestureThresholds.thumbExtendedRatio &&
-        geometry.distance(thumbTip, palmCenter) > handSize * 0.23;
+        geometry.distanceToPoint3D(thumbTip, palmCenter) > handSize * 0.23;
 
-    final pinkyIsOpen = geometry.isFingerExtended(
+    final pinkyIsOpen = geometry.isFingerExtended3D(
       tip: pinkyTip,
       pip: pinkyPip,
       palmCenter: palmCenter,
       handSize: handSize,
     );
 
-    final indexIsClosed = geometry.isFingerFolded(
+    final indexIsClosed = geometry.isFingerFolded3D(
       tip: indexTip,
       pip: indexPip,
       palmCenter: palmCenter,
       handSize: handSize,
     );
 
-    final middleIsClosed = geometry.isFingerFolded(
+    final middleIsClosed = geometry.isFingerFolded3D(
       tip: middleTip,
       pip: middlePip,
       palmCenter: palmCenter,
       handSize: handSize,
     );
 
-    final ringIsClosed = geometry.isFingerFolded(
+    final ringIsClosed = geometry.isFingerFolded3D(
       tip: ringTip,
       pip: ringPip,
       palmCenter: palmCenter,
@@ -478,7 +501,8 @@ class CustomGestureDetector {
     );
 
     final thumbAndPinkyAreSeparated =
-        geometry.distanceBetweenLandmarks(thumbTip, pinkyTip) > handSize * 0.55;
+        geometry.distanceBetweenLandmarks3D(thumbTip, pinkyTip) >
+        handSize * 0.55;
 
     return thumbIsOpen &&
         pinkyIsOpen &&
@@ -488,121 +512,86 @@ class CustomGestureDetector {
         ringIsClosed;
   }
 
-  bool _isPunchGesture(Hand hand) {
+  bool _isPunchGesture(
+    Hand hand, {
+    required Size imageSize,
+    required bool mirrorHorizontally,
+  }) {
     if (!hand.hasLandmarks) return false;
 
-    final indexTip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.indexFingerTip,
-    );
-    final indexPip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.indexFingerPIP,
-    );
     final indexMcp = geometry.visibleLandmark(
       hand,
       HandLandmarkType.indexFingerMCP,
-    );
-    final middleTip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.middleFingerTip,
-    );
-    final middlePip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.middleFingerPIP,
     );
     final middleMcp = geometry.visibleLandmark(
       hand,
       HandLandmarkType.middleFingerMCP,
     );
-    final ringTip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.ringFingerTip,
-    );
-    final ringPip = geometry.visibleLandmark(
-      hand,
-      HandLandmarkType.ringFingerPIP,
-    );
     final ringMcp = geometry.visibleLandmark(
       hand,
       HandLandmarkType.ringFingerMCP,
     );
-    final pinkyTip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyTip);
-    final pinkyPip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyPIP);
     final pinkyMcp = geometry.visibleLandmark(hand, HandLandmarkType.pinkyMCP);
 
-    if (indexTip == null ||
-        indexPip == null ||
-        indexMcp == null ||
-        middleTip == null ||
-        middlePip == null ||
+    if (indexMcp == null ||
         middleMcp == null ||
-        ringTip == null ||
-        ringPip == null ||
         ringMcp == null ||
-        pinkyTip == null ||
-        pinkyPip == null ||
         pinkyMcp == null) {
       return false;
     }
 
-    final palmCenter = geometry.palmCenter(hand);
+    final palmCenter = geometry.palmCenter3D(hand);
     if (palmCenter == null) return false;
 
     final handSize = _handSize(hand);
     if (handSize <= 0) return false;
 
-    final indexIsClosed = geometry.isFingerFolded(
-      tip: indexTip,
-      pip: indexPip,
+    final downExtendedFingerCount = geometry.downwardExtendedFingerChainCount(
+      hand: hand,
+      imageSize: imageSize,
+      mirrorHorizontally: mirrorHorizontally,
+    );
+
+    if (downExtendedFingerCount >
+        HandGestureThresholds.punchMaxDownExtendedFingerChainCount) {
+      return false;
+    }
+
+    final foldedFingerCount = geometry.foldedLongFingerCount3D(
+      hand: hand,
       palmCenter: palmCenter,
       handSize: handSize,
     );
-    final middleIsClosed = geometry.isFingerFolded(
-      tip: middleTip,
-      pip: middlePip,
-      palmCenter: palmCenter,
-      handSize: handSize,
-    );
-    final ringIsClosed = geometry.isFingerFolded(
-      tip: ringTip,
-      pip: ringPip,
-      palmCenter: palmCenter,
-      handSize: handSize,
-    );
-    final pinkyIsClosed = geometry.isFingerFolded(
-      tip: pinkyTip,
-      pip: pinkyPip,
-      palmCenter: palmCenter,
-      handSize: handSize,
-    );
+
+    final allLongFingersFolded =
+        foldedFingerCount ==
+        HandGestureThresholds.directionFingerChainTypes.length;
 
     final knuckleYs = [indexMcp.y, middleMcp.y, ringMcp.y, pinkyMcp.y];
     final knuckleYSpread =
         knuckleYs.reduce(math.max) - knuckleYs.reduce(math.min);
+    final knuckleDepths = [
+      indexMcp.z,
+      middleMcp.z,
+      ringMcp.z,
+      pinkyMcp.z,
+    ].map(geometry.weightedDepthValue);
+    final knuckleDepthSpread =
+        knuckleDepths.reduce(math.max) - knuckleDepths.reduce(math.min);
     final knucklesAlignedOnXAxis =
         knuckleYSpread <=
-        handSize * HandGestureThresholds.punchKnuckleMaxYSpreadRatio;
+            handSize * HandGestureThresholds.punchKnuckleMaxYSpreadRatio &&
+        knuckleDepthSpread <=
+            handSize * HandGestureThresholds.punchKnuckleMaxDepthSpreadRatio;
 
-    final packageClosedFistSupport =
-        hand.gesture != null &&
-        hand.gesture!.type == GestureType.closedFist &&
-        hand.gesture!.confidence >=
-            HandGestureThresholds.punchGestureMinPackageConfidence;
+    final thumbTucked = geometry.isThumbTuckedForFist3D(
+      hand: hand,
+      palmCenter: palmCenter,
+      handSize: handSize,
+    );
+    final thumbAllowsFist = thumbTucked ?? true;
 
-    final allClosed =
-        indexIsClosed && middleIsClosed && ringIsClosed && pinkyIsClosed;
-
-    final geometryPunchDetected = allClosed && knucklesAlignedOnXAxis;
-
-    final packagePunchDetected =
-        packageClosedFistSupport &&
-        indexIsClosed &&
-        middleIsClosed &&
-        ringIsClosed &&
-        pinkyIsClosed;
-
-    return geometryPunchDetected || packagePunchDetected;
+    return allLongFingersFolded && knucklesAlignedOnXAxis && thumbAllowsFist;
   }
 
   bool _isThumbReallyClosedForIndexOnlyGesture({
@@ -611,42 +600,18 @@ class CustomGestureDetector {
     required HandLandmark thumbMcp,
     required HandLandmark indexMcp,
     required HandLandmark middleMcp,
-    required Offset palmCenter,
+    required HandPoint3D palmCenter,
     required double handSize,
   }) {
-    final thumbTipToPalm = geometry.distance(thumbTip, palmCenter);
-    final thumbIpToPalm = geometry.distance(thumbIp, palmCenter);
-
-    final thumbTipToIndexMcp = geometry.distanceBetweenLandmarks(
-      thumbTip,
-      indexMcp,
+    return geometry.isThumbTucked3D(
+      thumbTip: thumbTip,
+      thumbIp: thumbIp,
+      thumbMcp: thumbMcp,
+      indexMcp: indexMcp,
+      middleMcp: middleMcp,
+      palmCenter: palmCenter,
+      handSize: handSize,
     );
-    final thumbTipToMiddleMcp = geometry.distanceBetweenLandmarks(
-      thumbTip,
-      middleMcp,
-    );
-    final thumbTipToThumbMcp = geometry.distanceBetweenLandmarks(
-      thumbTip,
-      thumbMcp,
-    );
-
-    final thumbTipCloseToPalm =
-        thumbTipToPalm <=
-        handSize * HandGestureThresholds.closedThumbMaxPalmDistanceRatio;
-    final thumbTipNotPastIp =
-        thumbTipToPalm <=
-        thumbIpToPalm * HandGestureThresholds.closedThumbTipIpPalmRatio;
-    final thumbTipCloseToPalmKnuckles =
-        math.min(thumbTipToIndexMcp, thumbTipToMiddleMcp) <=
-        handSize * HandGestureThresholds.closedThumbMaxKnuckleDistanceRatio;
-    final thumbNotStretchedOut =
-        thumbTipToThumbMcp <=
-        handSize * HandGestureThresholds.closedThumbMaxTipMcpDistanceRatio;
-
-    return thumbTipCloseToPalm &&
-        thumbTipNotPastIp &&
-        thumbTipCloseToPalmKnuckles &&
-        thumbNotStretchedOut;
   }
 
   double _totalCircularAngle(List<Offset> points, Offset center) {

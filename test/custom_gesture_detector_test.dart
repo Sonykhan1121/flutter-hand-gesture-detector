@@ -46,6 +46,21 @@ void main() {
         expect(result.isCancelEverything, isFalse);
       }
     });
+
+    test('does not detect a circle when index depth drifts too much', () {
+      final detector = CustomGestureDetector();
+      final points = _circlePoints(center: const Offset(200, 130), radius: 5);
+
+      for (var index = 0; index < points.length; index++) {
+        final result = detector.detect(
+          hand: _indexOnlyHand(indexTip: points[index], indexTipZ: index * 60),
+          imageSize: _imageSize,
+          mirrorHorizontally: false,
+        );
+
+        expect(result.isCancelEverything, isFalse);
+      }
+    });
   });
 
   group('CustomGestureDetector punch', () {
@@ -61,11 +76,63 @@ void main() {
       expect(result.isPunch, isTrue);
     });
 
+    test('does not punch when visible thumb is open', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(
+          thumbTucked: false,
+          gesture: const GestureResult(
+            type: GestureType.closedFist,
+            confidence: 1,
+          ),
+        ),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
+    });
+
     test('does not punch when fingers are open', () {
       final detector = CustomGestureDetector();
 
       final result = detector.detect(
         hand: _punchHand(fingersCurled: false),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
+    });
+
+    test('does not punch when package closed fist has downward fingers', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _downPointingHand(
+          gesture: const GestureResult(
+            type: GestureType.closedFist,
+            confidence: 1,
+          ),
+        ),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
+    });
+
+    test('does not punch for ambiguous half-folded pose', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _halfFoldedHand(
+          gesture: const GestureResult(
+            type: GestureType.closedFist,
+            confidence: 1,
+          ),
+        ),
         imageSize: _imageSize,
         mirrorHorizontally: false,
       );
@@ -103,7 +170,7 @@ List<Offset> _circlePoints({required Offset center, required double radius}) {
   });
 }
 
-Hand _indexOnlyHand({required Offset indexTip}) {
+Hand _indexOnlyHand({required Offset indexTip, double indexTipZ = 0}) {
   const wrist = Offset(200, 260);
   const indexMcp = Offset(200, 220);
   const middleMcp = Offset(210, 225);
@@ -121,7 +188,7 @@ Hand _indexOnlyHand({required Offset indexTip}) {
     _landmark(HandLandmarkType.indexFingerMCP, indexMcp),
     _landmark(HandLandmarkType.indexFingerPIP, indexPip),
     _landmark(HandLandmarkType.indexFingerDIP, indexDip),
-    _landmark(HandLandmarkType.indexFingerTip, indexTip),
+    _landmark(HandLandmarkType.indexFingerTip, indexTip, z: indexTipZ),
     _landmark(HandLandmarkType.middleFingerMCP, middleMcp),
     _landmark(HandLandmarkType.middleFingerPIP, const Offset(216, 238)),
     _landmark(HandLandmarkType.middleFingerTip, const Offset(213, 229)),
@@ -163,7 +230,7 @@ Hand _punchHand({
   const thumbMcp = Offset(230, 230);
   const thumbIp = Offset(210, 238);
   final thumbTip = thumbTucked
-      ? const Offset(190, 240)
+      ? const Offset(205, 232)
       : const Offset(300, 235);
   const indexMcp = Offset(160, 200);
   const middleMcp = Offset(190, 200);
@@ -241,12 +308,122 @@ Hand _punchHand({
   );
 }
 
-HandLandmark _landmark(HandLandmarkType type, Offset point) {
+Hand _downPointingHand({GestureResult? gesture}) {
+  return _handFromLongFingerChains(
+    chains: [
+      _straightChain(const Offset(160, 135), const Offset(0, 115)),
+      _straightChain(const Offset(190, 135), const Offset(0, 115)),
+      _straightChain(const Offset(220, 135), const Offset(0, 115)),
+      _straightChain(const Offset(250, 135), const Offset(0, 115)),
+    ],
+    gesture: gesture,
+  );
+}
+
+Hand _halfFoldedHand({GestureResult? gesture}) {
+  return _handFromLongFingerChains(
+    chains: [
+      _foldedChain(const Offset(160, 180), const Offset(45, 70)),
+      _foldedChain(const Offset(190, 180), const Offset(40, 70)),
+      _straightChain(const Offset(220, 180), const Offset(0, 95)),
+      _straightChain(const Offset(250, 180), const Offset(0, 95)),
+    ],
+    gesture: gesture,
+  );
+}
+
+Hand _handFromLongFingerChains({
+  required List<List<Offset>> chains,
+  GestureResult? gesture,
+}) {
+  final landmarks = <HandLandmark>[
+    _landmark(HandLandmarkType.wrist, const Offset(200, 300)),
+    _landmark(HandLandmarkType.thumbMCP, const Offset(230, 210)),
+    _landmark(HandLandmarkType.thumbIP, const Offset(212, 222)),
+    _landmark(HandLandmarkType.thumbTip, const Offset(202, 216)),
+  ];
+
+  const chainTypes = [
+    [
+      HandLandmarkType.indexFingerMCP,
+      HandLandmarkType.indexFingerPIP,
+      HandLandmarkType.indexFingerDIP,
+      HandLandmarkType.indexFingerTip,
+    ],
+    [
+      HandLandmarkType.middleFingerMCP,
+      HandLandmarkType.middleFingerPIP,
+      HandLandmarkType.middleFingerDIP,
+      HandLandmarkType.middleFingerTip,
+    ],
+    [
+      HandLandmarkType.ringFingerMCP,
+      HandLandmarkType.ringFingerPIP,
+      HandLandmarkType.ringFingerDIP,
+      HandLandmarkType.ringFingerTip,
+    ],
+    [
+      HandLandmarkType.pinkyMCP,
+      HandLandmarkType.pinkyPIP,
+      HandLandmarkType.pinkyDIP,
+      HandLandmarkType.pinkyTip,
+    ],
+  ];
+
+  for (var fingerIndex = 0; fingerIndex < chainTypes.length; fingerIndex++) {
+    for (
+      var pointIndex = 0;
+      pointIndex < chainTypes[fingerIndex].length;
+      pointIndex++
+    ) {
+      landmarks.add(
+        _landmark(
+          chainTypes[fingerIndex][pointIndex],
+          chains[fingerIndex][pointIndex],
+        ),
+      );
+    }
+  }
+
+  return Hand(
+    boundingBox: BoundingBox.ltrb(40, 40, 360, 360),
+    score: 1,
+    landmarks: landmarks,
+    imageWidth: _imageSize.width.toInt(),
+    imageHeight: _imageSize.height.toInt(),
+    handedness: Handedness.right,
+    gesture: gesture,
+  );
+}
+
+List<Offset> _straightChain(Offset base, Offset vector) {
+  return List.generate(
+    4,
+    (pointIndex) => Offset(
+      base.dx + vector.dx * pointIndex / 3,
+      base.dy + vector.dy * pointIndex / 3,
+    ),
+  );
+}
+
+List<Offset> _foldedChain(Offset base, Offset vector) {
+  final tip = base + vector;
+  final vectorLength = vector.distance;
+  final bendOffset = vectorLength == 0
+      ? Offset.zero
+      : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 35;
+  final pip = Offset.lerp(base, tip, 0.5)! + bendOffset;
+  final dip = Offset.lerp(pip, tip, 0.5)!;
+
+  return [base, pip, dip, tip];
+}
+
+HandLandmark _landmark(HandLandmarkType type, Offset point, {double z = 0}) {
   return HandLandmark(
     type: type,
     x: point.dx,
     y: point.dy,
-    z: 0,
+    z: z,
     visibility: 1,
   );
 }

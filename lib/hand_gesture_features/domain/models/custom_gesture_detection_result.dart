@@ -18,6 +18,13 @@ class CustomGestureDetectionResult {
     isPunch: false,
   );
 
+  bool get hasAny => labels.isNotEmpty;
+  bool get hasSingle => labels.length == 1;
+  bool get hasOverlap => labels.length > 1;
+
+  bool get isOnlyCancelEverything => isCancelEverything && hasSingle;
+  bool get isOnlyCallMe => isCallMe && hasSingle;
+
   List<String> get labels => [
     if (isCancelEverything) 'Return to main position',
     if (isOk) 'Start record video',

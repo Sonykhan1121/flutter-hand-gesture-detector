@@ -41,14 +41,8 @@ class DirectionGestureDetector {
     final pointYs = <double>[];
 
     for (final chainTypes in HandGestureThresholds.directionFingerChainTypes) {
-      final chain = <HandLandmark>[];
-
-      for (final type in chainTypes) {
-        final landmark = geometry.visibleLandmark(hand, type);
-        if (landmark == null) return HandMoveDirection.none;
-
-        chain.add(landmark);
-      }
+      final chain = geometry.visibleFingerChain(hand, chainTypes);
+      if (chain == null) return HandMoveDirection.none;
 
       if (!_isFingerChainExtended(chain)) continue;
 
@@ -96,20 +90,20 @@ class DirectionGestureDetector {
     var totalDeltaY = 0.0;
 
     for (final chain in fingerChains) {
-      final deltaX =
-          visibleX(chain[1].x) -
-          visibleX(chain[0].x) +
-          visibleX(chain[2].x) -
-          visibleX(chain[1].x) +
-          visibleX(chain[3].x) -
-          visibleX(chain[2].x);
-      final deltaY =
-          chain[1].y -
-          chain[0].y +
-          chain[2].y -
-          chain[1].y +
-          chain[3].y -
-          chain[2].y;
+      final deltaX = geometry.fingerChainDeltaX(
+        chain,
+        imageSize: imageSize,
+        mirrorHorizontally: mirrorHorizontally,
+      );
+      final deltaY = geometry.fingerChainDeltaY(chain);
+
+      if (geometry.isFingerChainDepthDominant(
+        chain: chain,
+        deltaX: deltaX,
+        deltaY: deltaY,
+      )) {
+        continue;
+      }
 
       totalDeltaX += deltaX;
       totalDeltaY += deltaY;
@@ -191,16 +185,51 @@ class DirectionGestureDetector {
       return HandMoveDirection.none;
     }
 
+    if (selectedDirection == HandMoveDirection.down &&
+        !_hasClearDownShape(
+          hand: hand,
+          imageSize: imageSize,
+          mirrorHorizontally: mirrorHorizontally,
+        )) {
+      return HandMoveDirection.none;
+    }
+
     return selectedDirection;
   }
 
   bool _isFingerChainExtended(List<HandLandmark> chain) {
-    return geometry.fingerJointAngleDegrees(
-          mcp: chain[0],
-          pip: chain[1],
-          tip: chain[3],
-        ) >=
-        HandGestureThresholds.fingerExtendedMinAngleDegrees;
+    return geometry.isFingerChainExtended3D(chain);
+  }
+
+  bool _hasClearDownShape({
+    required Hand hand,
+    required Size imageSize,
+    required bool mirrorHorizontally,
+  }) {
+    final downFingerCount = geometry.downwardExtendedFingerChainCount(
+      hand: hand,
+      imageSize: imageSize,
+      mirrorHorizontally: mirrorHorizontally,
+    );
+
+    if (downFingerCount <
+        HandGestureThresholds.directionFingerChainMinAlignedCount) {
+      return false;
+    }
+
+    final palmCenter = geometry.palmCenter3D(hand);
+    final handSize = _handSize(hand);
+
+    if (palmCenter == null || handSize <= 0) return false;
+
+    final foldedFingerCount = geometry.foldedLongFingerCount3D(
+      hand: hand,
+      palmCenter: palmCenter,
+      handSize: handSize,
+    );
+
+    return foldedFingerCount <
+        HandGestureThresholds.directionDownRejectFoldedLongFingerCount;
   }
 
   bool _isBackSideVisible({
@@ -279,5 +308,12 @@ class DirectionGestureDetector {
   double _inverseLerp(double start, double end, double value) {
     if (start == end) return value >= end ? 1 : 0;
     return ((value - start) / (end - start)).clamp(0.0, 1.0);
+  }
+
+  double _handSize(Hand hand) {
+    final box = hand.boundingBox;
+    final handWidth = (box.right - box.left).abs();
+    final handHeight = (box.bottom - box.top).abs();
+    return math.max(handWidth, handHeight);
   }
 }

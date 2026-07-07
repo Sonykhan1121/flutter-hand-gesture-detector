@@ -61,6 +61,23 @@ void main() {
       expect(detector.isGestureActive, isFalse);
     });
 
+    test('does not zoom in when the whole hand moves through depth', () {
+      var now = DateTime(2026);
+      final detector = ZoomGestureDetector(now: () => now);
+
+      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+
+      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
+      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+
+      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+      expect(
+        _detect(detector, _zoomHand(tipDistance: 80, zOffset: 120)),
+        ZoomDirection.none,
+      );
+      expect(detector.isGestureActive, isFalse);
+    });
+
     test('returns zoom out when pinch closes and palm stays stable', () {
       var now = DateTime(2026);
       final detector = ZoomGestureDetector(now: () => now);
@@ -119,7 +136,11 @@ ZoomDirection _detect(ZoomGestureDetector detector, Hand hand) {
   return detector.detect(hand: hand, imageSize: _imageSize);
 }
 
-Hand _zoomHand({required double tipDistance, Offset offset = Offset.zero}) {
+Hand _zoomHand({
+  required double tipDistance,
+  Offset offset = Offset.zero,
+  double zOffset = 0,
+}) {
   final halfDistance = tipDistance / 2;
   final landmarks = <HandLandmark>[];
 
@@ -129,7 +150,7 @@ Hand _zoomHand({required double tipDistance, Offset offset = Offset.zero}) {
         type: type,
         x: x + offset.dx,
         y: y + offset.dy,
-        z: 0,
+        z: zOffset,
         visibility: 1,
       ),
     );

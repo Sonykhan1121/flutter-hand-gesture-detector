@@ -97,6 +97,26 @@ void main() {
       expect(_detect(detector, hand), HandMoveDirection.down);
     });
 
+    test(
+      'returns down when package says closed fist but fingers point down',
+      () {
+        final hand = _handWithFingerChainVectors(
+          [
+            const Offset(0, 90),
+            const Offset(0, 90),
+            const Offset(0, 90),
+            const Offset(0, 90),
+          ],
+          gesture: const GestureResult(
+            type: GestureType.closedFist,
+            confidence: 1,
+          ),
+        );
+
+        expect(_detect(detector, hand), HandMoveDirection.down);
+      },
+    );
+
     test('flips left and right when coordinates are mirrored', () {
       final hand = _handWithFingerChainVectors([
         const Offset(-90, 0),
@@ -307,6 +327,52 @@ void main() {
       expect(_detect(detector, hand), HandMoveDirection.none);
     });
 
+    test('returns none when folded finger chains point down', () {
+      final hand = _handWithFingerChainVectors(
+        [
+          const Offset(0, 90),
+          const Offset(0, 90),
+          const Offset(0, 90),
+          const Offset(0, 90),
+        ],
+        foldedFingerIndexes: {0, 1, 2, 3},
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+    });
+
+    test('returns none for ambiguous half-folded downward pose', () {
+      final hand = _handWithFingerChainVectors(
+        [
+          const Offset(0, 90),
+          const Offset(0, 90),
+          const Offset(0, 90),
+          const Offset(0, 90),
+        ],
+        foldedFingerIndexes: {0, 1},
+        gesture: const GestureResult(
+          type: GestureType.closedFist,
+          confidence: 1,
+        ),
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+    });
+
+    test('returns none when finger chains move mostly through depth', () {
+      final hand = _handWithFingerChainVectors(
+        [
+          const Offset(20, 0),
+          const Offset(20, 0),
+          const Offset(20, 0),
+          const Offset(20, 0),
+        ],
+        depthVectors: const [220, 220, 220, 220],
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+    });
+
     test('returns none for up with only the 16 finger-chain points', () {
       final upHand = _handWithFingerChainVectors([
         const Offset(0, -90),
@@ -372,11 +438,13 @@ HandMoveDirection _detect(
 
 Hand _handWithFingerChainVectors(
   List<Offset> vectors, {
+  List<double>? depthVectors,
   Set<HandLandmarkType> missingTypes = const {},
   Set<HandLandmarkType> lowVisibilityTypes = const {},
   Set<int> foldedFingerIndexes = const {},
   _VisibleHandSide visibleHandSide = _VisibleHandSide.none,
   bool mirrorHorizontally = false,
+  GestureResult? gesture,
 }) {
   final landmarks = <HandLandmark>[];
   final bases = [
@@ -390,6 +458,7 @@ Hand _handWithFingerChainVectors(
     final chainTypes = _fingerChains[fingerIndex];
     final base = bases[fingerIndex];
     final vector = vectors[fingerIndex];
+    final depthVector = depthVectors == null ? 0.0 : depthVectors[fingerIndex];
     final points = foldedFingerIndexes.contains(fingerIndex)
         ? _foldedChainPoints(base, vector)
         : _straightChainPoints(base, vector);
@@ -405,7 +474,7 @@ Hand _handWithFingerChainVectors(
           type: type,
           x: point.dx,
           y: point.dy,
-          z: 0,
+          z: depthVector * pointIndex / 3,
           visibility: lowVisibilityTypes.contains(type) ? 0.2 : 1,
         ),
       );
@@ -427,6 +496,7 @@ Hand _handWithFingerChainVectors(
     imageWidth: _imageSize.width.toInt(),
     imageHeight: _imageSize.height.toInt(),
     handedness: Handedness.right,
+    gesture: gesture,
   );
 }
 
