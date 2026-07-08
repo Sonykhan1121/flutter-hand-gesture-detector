@@ -73,16 +73,6 @@ extension on _AdminHandGestureLiveScreenState {
       );
     }
 
-    if (action == _RecordingGestureAction.togglePause) {
-      _recordingGestureTriggered = true;
-      unawaited(_runRecordingGestureAction(action));
-
-      return _RecordingGestureFeedback(
-        text: _recordingTriggeredText(action),
-        confidence: 1,
-      );
-    }
-
     final startedAt = _recordingGestureStartedAt ?? now;
     final holdDuration = _recordingHoldDuration(action);
     final holdProgress =

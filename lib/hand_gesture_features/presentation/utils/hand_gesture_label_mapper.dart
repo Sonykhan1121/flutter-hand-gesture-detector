@@ -10,7 +10,7 @@ extension GestureTypeLabelMapper on GestureType {
       case GestureType.pointingUp:
         return 'Pointing up';
       case GestureType.thumbDown:
-        return 'Thumb down';
+        return 'Punch';
       case GestureType.thumbUp:
         return 'Thumb up';
       case GestureType.victory:
