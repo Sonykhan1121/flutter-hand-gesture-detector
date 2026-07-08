@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../painters/mobile_stand_painter.dart';
 import 'hero_chip.dart';
 
+/// Top home-screen hero with the stand illustration and short feature text.
 class StandHeroSection extends StatelessWidget {
   const StandHeroSection({super.key});
 
   @override
+  /// Builds the gradient hero and embedded mobile-stand custom painter.
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),

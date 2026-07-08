@@ -8,6 +8,7 @@ import '../enums/zoom_direction.dart';
 import '../enums/zoom_gesture_phase.dart';
 import 'hand_geometry_service.dart';
 
+/// Detects pinch-open zoom in and pinch-close zoom out gestures.
 class ZoomGestureDetector {
   ZoomGestureDetector({
     this.geometry = const HandGeometryService(),
@@ -42,12 +43,14 @@ class ZoomGestureDetector {
     HandLandmarkType.pinkyTip,
   ];
 
+  /// True while any zoom phase, lock, or start-pose candidate is active.
   bool get isGestureActive =>
       _phase != ZoomGesturePhase.idle ||
       _isPartialZoomOutPhase ||
       _directionLock != ZoomDirection.none ||
       _startPoseDirection != ZoomDirection.none;
 
+  /// Updates the zoom state machine from a single hand frame.
   ZoomDirection detect({
     required Hand hand,
     required Size imageSize,
@@ -56,6 +59,8 @@ class ZoomGestureDetector {
     final now = _now();
     final pose = _zoomPose(hand);
 
+    // Partial zoom-out handles frames where thumb/index are visible but the
+    // stricter zoom pose is missing because other fingers are partially hidden.
     if (pose == null) {
       if (allowPartialZoomOut) {
         final partialZoomOutDistanceRatio = _partialZoomOutDistanceRatio(
@@ -277,6 +282,7 @@ class ZoomGestureDetector {
     }
   }
 
+  /// Handles a missing/invalid pose and clears zoom state after release.
   void markPoseInvalid(DateTime now) {
     _clearActivePhase();
 
@@ -290,6 +296,7 @@ class ZoomGestureDetector {
     }
   }
 
+  /// Clears all active zoom state and recent output holds.
   void clearState() {
     _clearActivePhase();
     _directionLock = ZoomDirection.none;
@@ -298,6 +305,7 @@ class ZoomGestureDetector {
     _lastZoomOutDetectedAt = null;
   }
 
+  /// Stores a completed gesture and locks that direction until a new start pose.
   ZoomDirection _completeGesture(ZoomDirection direction, DateTime now) {
     if (direction == ZoomDirection.zoomIn) {
       _lastZoomInDetectedAt = now;
@@ -313,6 +321,7 @@ class ZoomGestureDetector {
     return direction;
   }
 
+  /// Clears the current armed zoom phase but keeps recent result holds.
   void _clearActivePhase() {
     _phase = ZoomGesturePhase.idle;
     _isPartialZoomOutPhase = false;
@@ -324,6 +333,7 @@ class ZoomGestureDetector {
     _clearStartPoseCandidate();
   }
 
+  /// Clears the candidate pose used before arming a real zoom gesture.
   void _clearStartPoseCandidate() {
     _startPoseDirection = ZoomDirection.none;
     _startPoseStartedAt = null;
@@ -333,6 +343,7 @@ class ZoomGestureDetector {
     _startPoseStableFingerOffsets = null;
   }
 
+  /// Starts or validates a held start pose before arming zoom in/out.
   bool _startOrContinueStartPose({
     required ZoomDirection direction,
     required double distanceRatio,
@@ -405,6 +416,8 @@ class ZoomGestureDetector {
 
     final currentStartDistance = _startPoseDistanceRatio;
 
+    // Keep the most extreme start distance while the start pose is held. This
+    // gives the gesture more room to confirm the later open/close movement.
     if (currentStartDistance == null) {
       _startPoseDistanceRatio = distanceRatio;
     } else if (direction == ZoomDirection.zoomIn) {
@@ -421,6 +434,7 @@ class ZoomGestureDetector {
         HandGestureThresholds.zoomStartPoseHoldDuration;
   }
 
+  /// Saves the current frame as the start-pose candidate.
   void _setStartPoseCandidate({
     required ZoomDirection direction,
     required double distanceRatio,
@@ -437,6 +451,7 @@ class ZoomGestureDetector {
     _startPoseStableFingerOffsets = stableFingerOffsets;
   }
 
+  /// Converts a stable start pose into an active zoom phase.
   void _armGestureFromStartPose({
     required ZoomGesturePhase phase,
     required double distanceRatio,
@@ -459,6 +474,7 @@ class ZoomGestureDetector {
     _phaseStartedAt = now;
   }
 
+  /// Detects zoom out when only thumb/index distance can be trusted.
   ZoomDirection _detectPartialZoomOut({
     required double distanceRatio,
     required _ZoomStableFingerSample? stableFingerSample,
@@ -586,6 +602,7 @@ class ZoomGestureDetector {
     }
   }
 
+  /// Arms the partial zoom-out phase from the held start pose.
   void _armPartialZoomOut({
     required double startDistance,
     required DateTime now,
@@ -605,6 +622,7 @@ class ZoomGestureDetector {
     _phaseStartedAt = now;
   }
 
+  /// Requires middle, ring, and pinky to be closed for the pinch gesture.
   bool _hasOtherFingersClosedByAngle(Hand hand) {
     final middleTip = _zoomVisibleLandmark(
       hand,
@@ -660,6 +678,7 @@ class ZoomGestureDetector {
     return middleIsClosed && ringIsClosed && pinkyIsClosed;
   }
 
+  /// Builds the strict zoom pose used by normal zoom in/out.
   _ZoomPose? _zoomPose(Hand hand) {
     if (!hand.hasLandmarks) return null;
 
@@ -712,6 +731,7 @@ class ZoomGestureDetector {
     );
   }
 
+  /// Captures palm and stable-finger offsets without requiring a full pose.
   _ZoomStableFingerSample? _zoomStableFingerSample(Hand hand) {
     if (!hand.hasLandmarks) return null;
 
@@ -737,12 +757,14 @@ class ZoomGestureDetector {
     );
   }
 
+  /// Uses hand bounding-box size as the zoom ratio denominator.
   double _handSize(BoundingBox box) {
     final handWidth = (box.right - box.left).abs();
     final handHeight = (box.bottom - box.top).abs();
     return math.max(handWidth, handHeight);
   }
 
+  /// Stores stable-finger offsets relative to the palm center.
   Map<HandLandmarkType, HandPoint3D> _stableFingerOffsets({
     required Hand hand,
     required HandPoint3D palmCenter,
@@ -763,6 +785,7 @@ class ZoomGestureDetector {
     return offsets;
   }
 
+  /// Thumb/index distance normalized by image size for partial zoom out.
   double? _partialZoomOutDistanceRatio({
     required Hand hand,
     required Size imageSize,
@@ -786,6 +809,7 @@ class ZoomGestureDetector {
         imageMaxSide;
   }
 
+  /// Returns a landmark using the lower visibility required by zoom logic.
   HandLandmark? _zoomVisibleLandmark(Hand hand, HandLandmarkType type) {
     return geometry.visibleLandmark(
       hand,
@@ -794,6 +818,7 @@ class ZoomGestureDetector {
     );
   }
 
+  /// Holds the last zoom result briefly for repeated UI/application updates.
   ZoomDirection _recentDetected(DateTime now) {
     final lastIn = _lastZoomInDetectedAt;
     if (lastIn != null &&
@@ -810,6 +835,7 @@ class ZoomGestureDetector {
     return ZoomDirection.none;
   }
 
+  /// Checks that the palm did not drift while holding a start pose.
   bool _isPalmStableForStartPose({
     required HandPoint3D? palmCenter,
     required double? handSize,
@@ -832,6 +858,7 @@ class ZoomGestureDetector {
     );
   }
 
+  /// Checks that the palm did not drift during an active zoom gesture.
   bool _isPalmStableForActiveGesture(_ZoomPose pose) {
     final startPalmCenter = _startPalmCenter;
     final startHandSize = _startHandSize;
@@ -846,6 +873,7 @@ class ZoomGestureDetector {
     );
   }
 
+  /// Checks stable fingers against the saved start-pose offsets.
   bool _areStableFingersStableForStartPose({
     required Map<HandLandmarkType, HandPoint3D> currentStableFingerOffsets,
     required double? currentHandSize,
@@ -867,6 +895,7 @@ class ZoomGestureDetector {
     );
   }
 
+  /// Checks stable fingers against the saved active-gesture offsets.
   bool _areStableFingersStableForActiveGesture({
     required Map<HandLandmarkType, HandPoint3D> currentStableFingerOffsets,
     required double currentHandSize,
@@ -886,6 +915,7 @@ class ZoomGestureDetector {
     );
   }
 
+  /// Ensures enough stable-finger landmarks are present to guard the gesture.
   bool _hasEnoughStableFingerOffsets(
     Map<HandLandmarkType, HandPoint3D>? stableFingerOffsets,
   ) {
@@ -894,6 +924,7 @@ class ZoomGestureDetector {
             HandGestureThresholds.zoomStableFingerMinCount;
   }
 
+  /// Compares stable-finger offsets and counts how many stayed in place.
   bool _areStableFingerOffsetsWithinLimit({
     required Map<HandLandmarkType, HandPoint3D> startStableFingerOffsets,
     required double startHandSize,
@@ -924,6 +955,7 @@ class ZoomGestureDetector {
     return stableCount >= HandGestureThresholds.zoomStableFingerMinCount;
   }
 
+  /// Measures weighted 3D distance between two palm-relative offsets.
   double _stableFingerOffsetDistance(HandPoint3D first, HandPoint3D second) {
     final dx = first.x - second.x;
     final dy = first.y - second.y;
@@ -932,6 +964,7 @@ class ZoomGestureDetector {
     return math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
+  /// Returns true when the palm center moved less than the allowed ratio.
   bool _isPalmMovementWithinLimit({
     required HandPoint3D startPalmCenter,
     required double startHandSize,
@@ -952,6 +985,7 @@ class ZoomGestureDetector {
   }
 }
 
+/// Strict zoom pose with thumb/index distance and stability anchors.
 class _ZoomPose {
   const _ZoomPose({
     required this.distanceRatio,
@@ -966,6 +1000,7 @@ class _ZoomPose {
   final Map<HandLandmarkType, HandPoint3D> stableFingerOffsets;
 }
 
+/// Stability-only sample used for partial zoom-out recovery.
 class _ZoomStableFingerSample {
   const _ZoomStableFingerSample({
     required this.palmCenter,

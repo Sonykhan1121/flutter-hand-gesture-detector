@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Circular icon button used on top of the live camera preview.
 class RoundIconButton extends StatelessWidget {
   const RoundIconButton({
     super.key,
@@ -13,6 +14,7 @@ class RoundIconButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
+  /// Builds a small dark circular button with disabled styling.
   Widget build(BuildContext context) {
     return CircleAvatar(
       radius: 20,

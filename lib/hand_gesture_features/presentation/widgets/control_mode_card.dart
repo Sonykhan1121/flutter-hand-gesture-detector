@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Selectable card for one smart-stand control mode.
 class ControlModeCard extends StatelessWidget {
   const ControlModeCard({
     super.key,
@@ -23,6 +24,7 @@ class ControlModeCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  /// Builds the animated card, accessibility label, and selected-state badge.
   Widget build(BuildContext context) {
     final foregroundColor = isEnabled
         ? const Color(0xFF101828)

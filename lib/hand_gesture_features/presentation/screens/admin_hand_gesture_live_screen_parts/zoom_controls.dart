@@ -1,12 +1,15 @@
 part of '../admin_hand_gesture_live_screen.dart';
 
 extension on _AdminHandGestureLiveScreenState {
+  /// True when the active camera reports a real zoom range.
   bool get _isCameraZoomSupported => _maxZoomLevel > _minZoomLevel;
 
+  /// Allows partial zoom-out detection only when there is zoom to reduce.
   bool get _shouldAllowPartialZoomOutRecovery {
     return _isCameraZoomSupported && _currentZoomLevel > _minZoomLevel;
   }
 
+  /// Blocks gesture zoom while the user is manually controlling zoom.
   bool get _shouldIgnoreGestureZoomForManualControl {
     if (_isTouchZoomGuideEnabled && _isTouchZoomInteractionActive) return true;
     if (_isManualZoomInteractionActive) return true;
@@ -17,6 +20,7 @@ extension on _AdminHandGestureLiveScreenState {
     return DateTime.now().isBefore(suppressedUntil);
   }
 
+  /// True when the floating manual zoom control should be visible.
   bool get _shouldShowZoomControlOverlay {
     return _isZoomControlVisible &&
         _isCameraZoomSupported &&
@@ -24,6 +28,7 @@ extension on _AdminHandGestureLiveScreenState {
         !_isStoppingVideoRecording;
   }
 
+  /// True when the two-circle touch zoom guide should be visible.
   bool get _shouldShowTouchZoomGuideOverlay {
     return _isTouchZoomGuideEnabled &&
         _isTouchZoomGuideVisible &&
@@ -33,6 +38,7 @@ extension on _AdminHandGestureLiveScreenState {
         !_isStoppingVideoRecording;
   }
 
+  /// Reads min/max zoom from the controller and resets to minimum zoom.
   Future<void> _initializeZoomLevels(CameraController controller) async {
     _resetCameraZoomState();
 
@@ -60,6 +66,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Clears all zoom-related UI, pending updates, and detector output state.
   void _resetCameraZoomState() {
     _minZoomLevel = 1;
     _maxZoomLevel = 1;
@@ -76,6 +83,7 @@ extension on _AdminHandGestureLiveScreenState {
     _zoomControlAutoHideTimer?.cancel();
   }
 
+  /// Applies a zoom gesture result at a throttled repeat interval.
   void _handleZoomDirection(ZoomDirection direction) {
     if (direction == ZoomDirection.none) {
       _lastAppliedZoomDirection = ZoomDirection.none;
@@ -114,6 +122,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Moves the camera zoom up or down by [step].
   Future<void> _applyCameraZoom(
     ZoomDirection direction, {
     double step = HandGestureThresholds.zoomStep,
@@ -140,6 +149,7 @@ extension on _AdminHandGestureLiveScreenState {
     await _setCameraZoomLevel(nextZoomLevel, revealZoomControl: true);
   }
 
+  /// Serializes camera zoom writes and keeps only the latest pending level.
   Future<void> _setCameraZoomLevel(
     double zoomLevel, {
     bool revealZoomControl = true,
@@ -178,6 +188,8 @@ extension on _AdminHandGestureLiveScreenState {
     _isApplyingZoom = true;
 
     try {
+      // Camera zoom calls can arrive faster than the controller can apply them.
+      // This loop drains only the newest pending value for smoother interaction.
       while (_pendingZoomLevel != null && _controller == controller) {
         final nextZoomLevel = _pendingZoomLevel!
             .clamp(_minZoomLevel, _maxZoomLevel)
@@ -207,6 +219,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Reveals the floating zoom control and optionally schedules auto-hide.
   void _showZoomControlOverlay({bool autoHide = true}) {
     if (!_isCameraZoomSupported) return;
 
@@ -225,6 +238,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Reveals the touch guide after a zoom-in gesture if the feature is enabled.
   void _showTouchZoomGuideOverlay() {
     if (!_isTouchZoomGuideEnabled || !_isCameraZoomSupported) return;
 
@@ -237,6 +251,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Hides the touch guide once zoom returns to minimum.
   void _updateTouchZoomGuideForZoomLevelState(double zoomLevel) {
     if (zoomLevel > _minZoomLevel + 0.001) return;
 
@@ -244,6 +259,7 @@ extension on _AdminHandGestureLiveScreenState {
     _isTouchZoomInteractionActive = false;
   }
 
+  /// Hides the floating zoom control after a short idle delay.
   void _scheduleZoomControlAutoHide() {
     _zoomControlAutoHideTimer?.cancel();
     _zoomControlAutoHideTimer = Timer(const Duration(seconds: 3), () {
@@ -257,6 +273,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Immediately hides the floating zoom control.
   void _hideZoomControlOverlay() {
     _zoomControlAutoHideTimer?.cancel();
 
@@ -269,6 +286,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Marks manual slider/button interaction as active.
   void _beginManualZoomInteraction() {
     _zoomControlAutoHideTimer?.cancel();
     _isManualZoomInteractionActive = true;
@@ -277,6 +295,7 @@ extension on _AdminHandGestureLiveScreenState {
     _lastAppliedZoomDirection = ZoomDirection.none;
   }
 
+  /// Ends manual interaction and briefly suppresses gesture zoom.
   void _endManualZoomInteraction() {
     _isManualZoomInteractionActive = false;
     _gestureZoomSuppressedUntil = DateTime.now().add(
@@ -287,11 +306,13 @@ extension on _AdminHandGestureLiveScreenState {
     _scheduleZoomControlAutoHide();
   }
 
+  /// Applies a zoom level from the manual slider.
   void _handleManualZoomChanged(double zoomLevel) {
     _showZoomControlOverlay(autoHide: false);
     unawaited(_setCameraZoomLevel(zoomLevel, revealZoomControl: false));
   }
 
+  /// Marks the two-circle touch guide as the active zoom input.
   void _beginTouchZoomInteraction() {
     if (!_isTouchZoomGuideEnabled) return;
 
@@ -302,6 +323,7 @@ extension on _AdminHandGestureLiveScreenState {
     _lastAppliedZoomDirection = ZoomDirection.none;
   }
 
+  /// Ends touch zoom and briefly suppresses gesture zoom.
   void _endTouchZoomInteraction() {
     _isTouchZoomInteractionActive = false;
     _gestureZoomSuppressedUntil = DateTime.now().add(
@@ -311,20 +333,24 @@ extension on _AdminHandGestureLiveScreenState {
     _lastAppliedZoomDirection = ZoomDirection.none;
   }
 
+  /// Applies a zoom level from the touch zoom guide.
   void _handleTouchZoomChanged(double zoomLevel) {
     if (!_isTouchZoomGuideEnabled) return;
 
     unawaited(_setCameraZoomLevel(zoomLevel, revealZoomControl: false));
   }
 
+  /// Increases zoom from the manual plus button.
   void _handleManualZoomIncrease() {
     _applyManualZoomDelta(HandGestureThresholds.zoomStep);
   }
 
+  /// Decreases zoom from the manual minus button.
   void _handleManualZoomDecrease() {
     _applyManualZoomDelta(-HandGestureThresholds.zoomStep);
   }
 
+  /// Applies a fixed manual zoom delta and suppresses gesture zoom briefly.
   void _applyManualZoomDelta(double delta) {
     _gestureZoomSuppressedUntil = DateTime.now().add(
       const Duration(milliseconds: 700),
@@ -340,6 +366,7 @@ extension on _AdminHandGestureLiveScreenState {
     unawaited(_setCameraZoomLevel(nextZoomLevel, revealZoomControl: true));
   }
 
+  /// Returns camera zoom to minimum and clears touch-guide state.
   void _resetManualZoom() {
     _gestureZoomSuppressedUntil = DateTime.now().add(
       const Duration(milliseconds: 700),

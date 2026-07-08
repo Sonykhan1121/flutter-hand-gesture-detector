@@ -1,6 +1,7 @@
 part of '../admin_hand_gesture_live_screen.dart';
 
 extension on _AdminHandGestureLiveScreenState {
+  /// Guards camera setup so permission requests cannot overlap.
   Future<void> _requestCameraPermission() async {
     if (_isCameraSetupInProgress) return;
 
@@ -13,6 +14,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Requests permission and moves to camera loading or failure state.
   Future<void> _requestCameraPermissionInternal() async {
     _setCameraLoading(
       title: 'Initializing camera...',
@@ -54,6 +56,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Loads device cameras before creating the selected camera controller.
   Future<void> _loadCameras() async {
     try {
       cameras = await availableCameras();
@@ -68,6 +71,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Lazily creates hand, face, and object detectors used by the live screen.
   Future<void> _initializeDetector() async {
     _handDetector ??= await HandDetectorFactory.create();
     _faceDetector ??= ml_face.FaceDetector(
@@ -85,6 +89,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Creates the active camera controller and starts the image stream.
   Future<void> _initializeCamera() async {
     try {
       if (cameras.isEmpty) {
@@ -99,6 +104,8 @@ extension on _AdminHandGestureLiveScreenState {
       await _disposeCurrentController();
       await _initializeDetector();
 
+      // Pick the requested lens direction when available, otherwise keep the
+      // app usable by falling back to the first camera.
       final selectedCamera = cameras.firstWhere(
         (camera) => camera.lensDirection == _currentLensDirection,
         orElse: () => cameras.first,
@@ -173,6 +180,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Stops any old stream/recording before replacing the camera controller.
   Future<void> _disposeCurrentController() async {
     final controller = _controller;
     if (controller == null) return;
@@ -207,6 +215,7 @@ extension on _AdminHandGestureLiveScreenState {
     _isStreaming = false;
   }
 
+  /// Best-effort cleanup called from widget dispose, where awaiting is unsafe.
   Future<void> _disposeControllerFromWidgetDispose(
     CameraController controller,
   ) async {
@@ -234,6 +243,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Turns flash off on iOS to avoid unwanted torch behavior on startup.
   Future<void> _turnFlashOff() async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
@@ -245,6 +255,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Starts the camera image stream that feeds the gesture detector.
   Future<void> _startCameraStream() async {
     final controller = _controller;
 
@@ -275,6 +286,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Stops live image streaming and clears movement state.
   Future<void> _stopCameraStream() async {
     final controller = _controller;
 
@@ -306,6 +318,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// True when it is safe for the UI to switch front/back cameras.
   bool get _canSwitchCamera {
     return cameras.length > 1 &&
         !_isSwitchingCamera &&
@@ -314,6 +327,7 @@ extension on _AdminHandGestureLiveScreenState {
         !_isStoppingVideoRecording;
   }
 
+  /// Switches lens direction and optionally restarts an interrupted recording.
   Future<void> _switchCamera({bool restartRecordingAfterSwitch = false}) async {
     if (cameras.length < 2 || _isSwitchingCamera) return;
 
@@ -324,6 +338,7 @@ extension on _AdminHandGestureLiveScreenState {
         activeController.value.isInitialized &&
         activeController.value.isRecordingVideo;
 
+    // Reset gesture and overlay state before the preview source changes.
     _zoomGestureDetector.clearState();
     _directionGestureDetector.clearState();
     _moveDirectionDisplayHold.clear();
@@ -383,6 +398,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Cleans camera resources after initialization failure or screen teardown.
   Future<void> _cleanupCamera() async {
     try {
       await _stopCameraStream();
@@ -443,11 +459,13 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Shows a shared snackbar from the live screen.
   void _showSnackBar(String message) {
     if (!mounted) return;
     AppSnackBar.show(context: context, message: message);
   }
 
+  /// Updates camera status text for an in-progress setup state.
   void _setCameraLoading({required String title, required String message}) {
     if (!mounted) return;
 
@@ -460,6 +478,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Updates camera status text for a recoverable or permission failure.
   void _setCameraFailure({
     required String title,
     required String message,
@@ -477,6 +496,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Retries camera setup or opens app settings for permanent denial.
   Future<void> _handleCameraRetry() async {
     if (_shouldOpenSettingsOnRetry) {
       await openAppSettings();

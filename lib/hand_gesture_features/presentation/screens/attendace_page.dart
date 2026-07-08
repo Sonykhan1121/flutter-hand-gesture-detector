@@ -1,3 +1,5 @@
+// Archived attendance-page prototype kept for reference; every line below is
+// commented out, so this file is not part of the active app build.
 // import 'dart:async';
 // import 'dart:convert';
 //

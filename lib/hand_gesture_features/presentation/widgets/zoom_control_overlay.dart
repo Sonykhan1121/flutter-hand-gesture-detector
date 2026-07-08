@@ -32,9 +32,11 @@ class ZoomControlOverlay extends StatelessWidget {
 
   static const _accentColor = Color(0xFF00FB46);
 
+  /// True when the active camera reports more than one zoom level.
   bool get _isZoomSupported => maxZoomLevel > minZoomLevel;
 
   @override
+  /// Builds the floating zoom slider and +/-/reset controls.
   Widget build(BuildContext context) {
     final safeCurrentZoom = currentZoomLevel
         .clamp(minZoomLevel, maxZoomLevel)
@@ -179,6 +181,7 @@ class ZoomControlOverlay extends StatelessWidget {
   }
 }
 
+/// Small circular tap target for zoom increase/decrease buttons.
 class _ZoomCircleButton extends StatelessWidget {
   const _ZoomCircleButton({required this.icon, required this.onTap});
 
@@ -186,6 +189,7 @@ class _ZoomCircleButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  /// Builds the circular icon-only zoom button.
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

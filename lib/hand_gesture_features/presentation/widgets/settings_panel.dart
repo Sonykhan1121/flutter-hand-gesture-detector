@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../domain/enums/stand_control_mode.dart';
 import 'control_mode_card.dart';
 
+/// Panel that lists the available stand-control modes on the home screen.
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({
     super.key,
@@ -16,6 +17,7 @@ class SettingsPanel extends StatelessWidget {
   final ValueChanged<StandControlMode> onSelectMode;
 
   @override
+  /// Builds the settings title and the control-mode card list.
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,

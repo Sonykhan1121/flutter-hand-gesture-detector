@@ -1,6 +1,8 @@
 import 'package:hand_detection/hand_detection.dart';
 
+/// Maps package gesture enum values to user-facing text.
 extension GestureTypeLabelMapper on GestureType {
+  /// Display label used by the live gesture status panel.
   String get displayLabel {
     switch (this) {
       case GestureType.closedFist:
@@ -23,7 +25,9 @@ extension GestureTypeLabelMapper on GestureType {
   }
 }
 
+/// Maps nullable handedness values to short UI labels.
 extension HandednessLabelMapper on Handedness? {
+  /// Display label for the detected hand, or empty when unknown.
   String get displayLabel {
     final handedness = this;
 

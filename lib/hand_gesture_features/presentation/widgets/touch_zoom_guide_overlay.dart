@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+/// Two-circle touch guide that maps finger distance to camera zoom.
 class TouchZoomGuideOverlay extends StatefulWidget {
   const TouchZoomGuideOverlay({
     super.key,
@@ -24,9 +25,11 @@ class TouchZoomGuideOverlay extends StatefulWidget {
   static const secondCircleKey = ValueKey('touchZoomGuideSecondCircle');
 
   @override
+  /// Creates state that tracks the two active touch pointers.
   State<TouchZoomGuideOverlay> createState() => _TouchZoomGuideOverlayState();
 }
 
+/// Tracks touch circles and emits zoom changes while both are dragged.
 class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
   static const double _circleRadius = 25;
   static const double _touchRadius = 58;
@@ -42,6 +45,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
   bool _isTracking = false;
 
   @override
+  /// Stops touch tracking when zoom returns to the minimum level.
   void didUpdateWidget(covariant TouchZoomGuideOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
 
@@ -51,6 +55,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
   }
 
   @override
+  /// Builds the guide line and two draggable circle targets.
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -98,6 +103,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     );
   }
 
+  /// Assigns a pointer to the nearest inactive circle target.
   void _handlePointerDown(PointerDownEvent event) {
     if (_isTracking || _lastSize == Size.zero) return;
 
@@ -125,6 +131,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     _tryStartTracking();
   }
 
+  /// Moves whichever circle owns the pointer and emits a zoom update.
   void _handlePointerMove(PointerMoveEvent event) {
     if (event.pointer != _firstPointer && event.pointer != _secondPointer) {
       return;
@@ -143,18 +150,21 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     }
   }
 
+  /// Ends the two-finger interaction when either pointer lifts.
   void _handlePointerUp(PointerUpEvent event) {
     if (event.pointer == _firstPointer || event.pointer == _secondPointer) {
       _clearTracking(notifyEnd: _isTracking);
     }
   }
 
+  /// Cancels tracking when the system cancels either active pointer.
   void _handlePointerCancel(PointerCancelEvent event) {
     if (event.pointer == _firstPointer || event.pointer == _secondPointer) {
       _clearTracking(notifyEnd: _isTracking);
     }
   }
 
+  /// Starts zoom tracking once both circles have active pointers.
   void _tryStartTracking() {
     final firstCenter = _firstCircleCenter;
     final secondCenter = _secondCircleCenter;
@@ -171,6 +181,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     _emitZoomLevel();
   }
 
+  /// Converts current circle distance into a zoom level callback.
   void _emitZoomLevel() {
     final firstCenter = _firstCircleCenter;
     final secondCenter = _secondCircleCenter;
@@ -191,6 +202,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     widget.onZoomChanged(nextZoomLevel);
   }
 
+  /// Clears pointer ownership and optionally notifies the parent.
   void _clearTracking({required bool notifyEnd}) {
     if (notifyEnd) {
       widget.onInteractionEnd();
@@ -204,6 +216,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     });
   }
 
+  /// Returns either dragged positions or positions derived from current zoom.
   (Offset, Offset) _visibleCirclePositions(Size size) {
     if (size.width <= 0 || size.height <= 0) {
       return (Offset.zero, Offset.zero);
@@ -219,6 +232,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     return _circlePositionsForZoom(size, widget.currentZoomLevel);
   }
 
+  /// Repositions idle circles to match the latest zoom level.
   void _syncCircleCentersToZoom(Size size) {
     _lastSize = size;
 
@@ -230,6 +244,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     _secondCircleCenter = positions.$2;
   }
 
+  /// Calculates resting circle positions for a given zoom level.
   (Offset, Offset) _circlePositionsForZoom(Size size, double zoomLevel) {
     final center = Offset(size.width / 2, size.height * 0.44);
     final guideDistance = _distanceForZoomLevel(zoomLevel, size);
@@ -249,6 +264,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     return (first, second);
   }
 
+  /// Keeps a dragged circle fully inside the overlay bounds.
   Offset _clampToBounds(Offset position) {
     final size = _lastSize;
     if (size.width <= 0 || size.height <= 0) return position;
@@ -259,10 +275,12 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     );
   }
 
+  /// Checks whether the camera is effectively at minimum zoom.
   bool _isAtMinimumZoom(double zoomLevel) {
     return zoomLevel <= widget.minZoomLevel + 0.001;
   }
 
+  /// Converts zoom level to guide distance between the two circles.
   double _distanceForZoomLevel(double zoomLevel, Size size) {
     final minDistance = _minGuideDistance;
     final maxDistance = _maxGuideDistance(size);
@@ -280,6 +298,7 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
     return minDistance + (maxDistance - minDistance) * zoomRatio;
   }
 
+  /// Converts guide distance back to a camera zoom level.
   double _zoomLevelForDistance(double distance, Size size) {
     final minDistance = _minGuideDistance;
     final maxDistance = _maxGuideDistance(size);
@@ -296,14 +315,17 @@ class _TouchZoomGuideOverlayState extends State<TouchZoomGuideOverlay> {
         (widget.maxZoomLevel - widget.minZoomLevel) * distanceRatio;
   }
 
+  /// Minimum distance that keeps the two guide circles from overlapping.
   double get _minGuideDistance => _circleRadius * 2 + _minCircleGap;
 
+  /// Maximum distance available within the current overlay size.
   double _maxGuideDistance(Size size) {
     final maxDistance = math.min(size.width, size.height) - _circleRadius * 2;
     return math.max(_minGuideDistance, maxDistance);
   }
 }
 
+/// Draggable visual target used by the touch zoom guide.
 class _CircleTarget extends StatelessWidget {
   const _CircleTarget({
     super.key,
@@ -317,6 +339,7 @@ class _CircleTarget extends StatelessWidget {
   final bool isActive;
 
   @override
+  /// Builds the positioned circle with active/inactive styling.
   Widget build(BuildContext context) {
     final diameter = radius * 2;
 
@@ -356,6 +379,7 @@ class _CircleTarget extends StatelessWidget {
   }
 }
 
+/// Paints the line between the two zoom-guide circles.
 class _TouchZoomGuidePainter extends CustomPainter {
   const _TouchZoomGuidePainter({
     required this.firstCenter,
@@ -366,6 +390,7 @@ class _TouchZoomGuidePainter extends CustomPainter {
   final Offset secondCenter;
 
   @override
+  /// Draws a shadowed guide line between the two circles.
   void paint(Canvas canvas, Size size) {
     final shadowPaint = Paint()
       ..color = Colors.black.withValues(alpha: 0.35)
@@ -381,6 +406,7 @@ class _TouchZoomGuidePainter extends CustomPainter {
   }
 
   @override
+  /// Repaints when either guide endpoint moves.
   bool shouldRepaint(covariant _TouchZoomGuidePainter oldDelegate) {
     return firstCenter != oldDelegate.firstCenter ||
         secondCenter != oldDelegate.secondCenter;

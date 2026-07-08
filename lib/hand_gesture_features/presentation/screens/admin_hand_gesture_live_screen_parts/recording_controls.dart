@@ -1,7 +1,9 @@
 part of '../admin_hand_gesture_live_screen.dart';
 
+/// Recording action requested by a hand gesture or recording UI button.
 enum _RecordingGestureAction { start, togglePause, stop }
 
+/// UI text and progress/confidence shown while holding a recording gesture.
 class _RecordingGestureFeedback {
   const _RecordingGestureFeedback({
     required this.text,
@@ -13,11 +15,14 @@ class _RecordingGestureFeedback {
 }
 
 extension on _AdminHandGestureLiveScreenState {
+  /// True when the active camera is recording video.
   bool get _isVideoRecording => _controller?.value.isRecordingVideo ?? false;
 
+  /// True when the active camera recording is paused.
   bool get _isVideoRecordingPaused =>
       _controller?.value.isRecordingPaused ?? false;
 
+  /// Converts current gesture state into a recording command, if any.
   _RecordingGestureAction? _recordingGestureAction({
     required bool followTrackingActive,
     required CustomGestureDetectionResult customGestureResult,
@@ -43,6 +48,7 @@ extension on _AdminHandGestureLiveScreenState {
     return null;
   }
 
+  /// Tracks hold progress and triggers the recording action after the delay.
   _RecordingGestureFeedback? _updateRecordingGestureHold({
     required _RecordingGestureAction? action,
     required DateTime now,
@@ -80,6 +86,8 @@ extension on _AdminHandGestureLiveScreenState {
             .clamp(0.0, 1.0)
             .toDouble();
 
+    // Trigger only once per continuous hold, then keep showing the completed
+    // feedback text until the hand pose changes.
     if (holdProgress >= 1) {
       _recordingGestureTriggered = true;
       unawaited(_runRecordingGestureAction(action));
@@ -96,6 +104,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Required hold duration for each recording gesture.
   Duration _recordingHoldDuration(_RecordingGestureAction action) {
     switch (action) {
       case _RecordingGestureAction.start:
@@ -107,6 +116,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Checks whether the requested recording action is valid right now.
   bool _canRunRecordingGestureAction(_RecordingGestureAction action) {
     switch (action) {
       case _RecordingGestureAction.start:
@@ -117,6 +127,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Text shown while the user is still holding the gesture.
   String _recordingHoldText(_RecordingGestureAction action) {
     switch (action) {
       case _RecordingGestureAction.start:
@@ -130,6 +141,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Text shown after the gesture has triggered.
   String _recordingTriggeredText(_RecordingGestureAction action) {
     switch (action) {
       case _RecordingGestureAction.start:
@@ -144,6 +156,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Text shown when a recording gesture cannot run in the current state.
   String _recordingUnavailableText(_RecordingGestureAction action) {
     switch (action) {
       case _RecordingGestureAction.start:
@@ -154,12 +167,14 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Clears any in-progress recording gesture hold.
   void _clearRecordingGestureHold() {
     _activeRecordingGestureAction = null;
     _recordingGestureStartedAt = null;
     _recordingGestureTriggered = false;
   }
 
+  /// Runs the selected recording action with an in-progress guard.
   Future<void> _runRecordingGestureAction(
     _RecordingGestureAction action,
   ) async {
@@ -202,6 +217,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Switches from image streaming into video recording mode.
   Future<void> _startGestureVideoRecording(CameraController controller) async {
     if (controller.value.isRecordingVideo) return;
 
@@ -266,6 +282,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Shows the recording-start transition overlay.
   void _showRecordingStartingOverlay(CameraController controller) {
     if (mounted && _controller == controller) {
       _setScreenState(() {
@@ -283,6 +300,7 @@ extension on _AdminHandGestureLiveScreenState {
     _gestureConfidence = 1;
   }
 
+  /// Waits until the start overlay has had a chance to paint.
   Future<void> _waitForRecordingStartingOverlayToPaint() async {
     if (mounted) {
       await WidgetsBinding.instance.endOfFrame;
@@ -291,10 +309,12 @@ extension on _AdminHandGestureLiveScreenState {
     await Future<void>.delayed(const Duration(milliseconds: 120));
   }
 
+  /// Keeps the start overlay visible long enough for preview frames to settle.
   Future<void> _keepRecordingStartingOverlayVisible() async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
   }
 
+  /// Shows the recording-stop transition overlay.
   void _showRecordingStoppingOverlay(CameraController controller) {
     if (mounted && _controller == controller) {
       _setScreenState(() {
@@ -312,6 +332,7 @@ extension on _AdminHandGestureLiveScreenState {
     _gestureConfidence = 1;
   }
 
+  /// Waits until the stop overlay has had a chance to paint.
   Future<void> _waitForRecordingStoppingOverlayToPaint() async {
     if (mounted) {
       await WidgetsBinding.instance.endOfFrame;
@@ -320,10 +341,12 @@ extension on _AdminHandGestureLiveScreenState {
     await Future<void>.delayed(const Duration(milliseconds: 120));
   }
 
+  /// Keeps the stop overlay visible while normal image streaming restarts.
   Future<void> _keepRecordingStoppingOverlayVisible() async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
   }
 
+  /// Pauses or resumes the current recording.
   Future<void> _toggleGestureVideoPause(CameraController controller) async {
     if (!controller.value.isRecordingVideo) return;
 
@@ -352,6 +375,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Stops recording, saves the file, and returns to live detection mode.
   Future<void> _stopGestureVideoRecording(CameraController controller) async {
     if (!controller.value.isRecordingVideo) return;
 
@@ -422,6 +446,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Locks recording orientation to portrait for stable output.
   Future<void> _lockRecordingOrientation(CameraController controller) async {
     try {
       _debugCameraOrientation(
@@ -435,6 +460,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Unlocks capture orientation after recording ends.
   Future<void> _unlockRecordingOrientation(CameraController controller) async {
     try {
       if (controller.value.isInitialized) {
@@ -453,6 +479,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Prints camera orientation and stream details for recording debugging.
   void _debugCameraOrientation(
     String label, {
     CameraController? controller,
@@ -495,6 +522,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Copies Android recordings to the public Download folder.
   Future<XFile> _copyRecordingToDownloads(XFile file) async {
     if (!Platform.isAndroid) return file;
 
@@ -524,6 +552,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Filename-safe timestamp for saved recordings.
   String _recordingFileTimestamp() {
     return DateTime.now()
         .toIso8601String()
@@ -531,6 +560,7 @@ extension on _AdminHandGestureLiveScreenState {
         .replaceAll('.', '-');
   }
 
+  /// Preserves the source extension, defaulting to mp4 when absent.
   String _recordingFileExtension(String path) {
     final lastSlashIndex = path.lastIndexOf(Platform.pathSeparator);
     final lastDotIndex = path.lastIndexOf('.');
@@ -542,6 +572,7 @@ extension on _AdminHandGestureLiveScreenState {
     return '.mp4';
   }
 
+  /// Starts the elapsed recording timer from zero.
   void _startRecordingTimer() {
     _recordingTimer?.cancel();
     _recordingElapsedBeforePause = Duration.zero;
@@ -552,6 +583,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Pauses elapsed-time tracking when video recording is paused.
   void _pauseRecordingTimer() {
     final segmentStartedAt = _recordingSegmentStartedAt;
     if (segmentStartedAt != null) {
@@ -566,6 +598,7 @@ extension on _AdminHandGestureLiveScreenState {
     _recordingTimer = null;
   }
 
+  /// Resumes elapsed-time tracking after a paused recording continues.
   void _resumeRecordingTimer() {
     _recordingTimer?.cancel();
     _recordingSegmentStartedAt = DateTime.now();
@@ -574,6 +607,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Clears elapsed-time state and cancels the recording timer.
   void _resetRecordingTimer() {
     _recordingTimer?.cancel();
     _recordingTimer = null;
@@ -582,6 +616,7 @@ extension on _AdminHandGestureLiveScreenState {
     _recordingElapsed = Duration.zero;
   }
 
+  /// Updates the elapsed duration from completed and current segments.
   void _updateRecordingElapsed() {
     final segmentStartedAt = _recordingSegmentStartedAt;
     final elapsed =
@@ -600,6 +635,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Formats elapsed recording time for the top recording controls.
   String get _recordingDurationText {
     final totalSeconds = _recordingElapsed.inSeconds;
     final hours = totalSeconds ~/ 3600;
@@ -615,6 +651,7 @@ extension on _AdminHandGestureLiveScreenState {
     return '${twoDigits(minutes)}:${twoDigits(seconds)}';
   }
 
+  /// Builds the recording timer, pause/resume, stop, and switch controls.
   Widget _buildRecordingControls(CameraController controller) {
     final isPaused = controller.value.isRecordingPaused;
 
@@ -686,6 +723,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Builds a circular icon-only button for recording controls.
   Widget _recordingIconButton({
     required IconData icon,
     required String tooltip,
@@ -715,6 +753,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Builds a labeled recording action button.
   Widget _recordingControlButton({
     required IconData icon,
     required String label,

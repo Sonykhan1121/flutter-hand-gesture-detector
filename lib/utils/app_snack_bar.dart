@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+/// Shared snackbar helper so every screen shows messages with one style.
 class AppSnackBar {
   AppSnackBar._(); // Prevent instantiation
 
+  /// Clears any current snackbar and shows a short floating message.
   static void show({
     required BuildContext context,
     required String message,

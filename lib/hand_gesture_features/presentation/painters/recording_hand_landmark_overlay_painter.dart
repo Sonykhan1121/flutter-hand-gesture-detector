@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hand_detection/hand_detection.dart';
 
+/// Landmark painter adjusted for Android recording preview orientation.
 class RecordingHandLandmarkOverlayPainter extends CustomPainter {
   const RecordingHandLandmarkOverlayPainter({
     required this.hands,
@@ -17,6 +18,7 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
   final bool showLandmarkIndices;
 
   @override
+  /// Draws hand landmarks in a cover-fitted recording preview coordinate space.
   void paint(Canvas canvas, Size size) {
     if (hands.isEmpty || imageSize.width <= 0 || imageSize.height <= 0) {
       return;
@@ -47,6 +49,7 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
     final sourceSize = _sourceSizeForTurns(effectiveQuarterTurns);
     final pointRadius = (size.shortestSide * 0.012).clamp(4.5, 6.5);
 
+    // Local helper mirrors the preview fitting logic used by the recording UI.
     Offset mapPoint(double x, double y) {
       final normalizedPoint = Offset(
         (x / imageSize.width).clamp(0.0, 1.0),
@@ -100,6 +103,7 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
     canvas.restore();
   }
 
+  /// Chooses the rotation whose aspect ratio best matches the canvas.
   int _bestQuarterTurnsForCanvas(Size canvasSize) {
     final requestedTurns = recordingQuarterTurns % 4;
     final normalDiff = _aspectDiff(imageSize, canvasSize);
@@ -111,6 +115,7 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
     return rotatedDiff < normalDiff ? requestedTurns : 0;
   }
 
+  /// Measures aspect-ratio difference for rotation selection.
   double _aspectDiff(Size sourceSize, Size canvasSize) {
     if (sourceSize.width <= 0 ||
         sourceSize.height <= 0 ||
@@ -124,6 +129,7 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
         .abs();
   }
 
+  /// Returns the effective source size after quarter-turn rotation.
   Size _sourceSizeForTurns(int quarterTurns) {
     final normalizedTurns = quarterTurns % 4;
     return normalizedTurns.isOdd
@@ -131,6 +137,7 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
         : imageSize;
   }
 
+  /// Rotates a normalized point by quarter turns.
   Offset _rotateNormalizedPoint(Offset point, int quarterTurns) {
     switch (quarterTurns % 4) {
       case 1:
@@ -144,6 +151,7 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
     }
   }
 
+  /// Maps a normalized point through BoxFit.cover-style sizing.
   Offset _mapCoverPoint({
     required Offset normalizedPoint,
     required Size sourceSize,
@@ -164,6 +172,7 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
     );
   }
 
+  /// Draws a small landmark index label for debugging.
   void _drawLandmarkIndex(Canvas canvas, String text, Offset center) {
     final textPainter = TextPainter(
       text: TextSpan(
@@ -182,6 +191,7 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
   }
 
   @override
+  /// Repaints when landmarks or recording preview transform inputs change.
   bool shouldRepaint(
     covariant RecordingHandLandmarkOverlayPainter oldDelegate,
   ) {

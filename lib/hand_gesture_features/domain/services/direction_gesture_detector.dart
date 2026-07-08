@@ -8,6 +8,7 @@ import '../constants/hand_gesture_thresholds.dart';
 import '../enums/hand_move_direction.dart';
 import 'hand_geometry_service.dart';
 
+/// Detects left, right, up, and down movement gestures from finger landmarks.
 class DirectionGestureDetector {
   DirectionGestureDetector({this.geometry = const HandGeometryService()});
 
@@ -19,19 +20,23 @@ class DirectionGestureDetector {
   String _debugSummary = 'direction: idle';
   String? _lastPrintedDebugSummary;
 
+  /// Latest short debug explanation for why direction did or did not fire.
   String get debugSummary => _debugSummary;
 
+  /// Clears direction history after a reset, blocked frame, or invalid frame.
   void clearState({String reason = 'reset'}) {
     _resetWiggleState();
     _setDebugSummary('direction: $reason');
   }
 
+  /// Clears the fingertip-wiggle moving-down state.
   void _resetWiggleState() {
     _smoothedWiggleTips.clear();
     _wiggleStepSigns.clear();
     _wiggleCooldownFramesRemaining = 0;
   }
 
+  /// Stores and optionally prints one compact debug line.
   void _setDebugSummary(String value) {
     _debugSummary = value;
 
@@ -41,6 +46,7 @@ class DirectionGestureDetector {
     debugPrint('[DirectionGestureDetector] $value');
   }
 
+  /// Detects one direction from the current hand frame.
   HandMoveDirection detect({
     required Hand hand,
     required Size imageSize,
@@ -64,6 +70,8 @@ class DirectionGestureDetector {
     );
     final wiggleSummary = _debugSummary;
 
+    // The wiggle path gets priority because it is a deliberate "down" fallback
+    // when finger-chain direction is not clear enough.
     if (wiggleDirection == HandMoveDirection.down) {
       return wiggleDirection;
     }
@@ -78,6 +86,7 @@ class DirectionGestureDetector {
     return HandMoveDirection.none;
   }
 
+  /// Detects direction by checking aligned extended finger chains.
   HandMoveDirection _detectFingerChainDirection({
     required Hand hand,
     required Size imageSize,
@@ -139,6 +148,8 @@ class DirectionGestureDetector {
     var totalDeltaX = 0.0;
     var totalDeltaY = 0.0;
 
+    // Count how many long fingers agree on the same direction. A single finger
+    // can be noisy, so the detector requires several aligned chains.
     for (final chain in fingerChains) {
       final deltaX = geometry.fingerChainDeltaX(
         chain,
@@ -248,10 +259,12 @@ class DirectionGestureDetector {
     return selectedDirection;
   }
 
+  /// Delegates extended-chain testing to the shared 3D geometry service.
   bool _isFingerChainExtended(List<HandLandmark> chain) {
     return geometry.isFingerChainExtended3D(chain);
   }
 
+  /// Ensures "down" is not confused with a folded fist or depth motion.
   bool _hasClearDownShape({
     required Hand hand,
     required Size imageSize,
@@ -283,6 +296,7 @@ class DirectionGestureDetector {
         HandGestureThresholds.directionDownRejectFoldedLongFingerCount;
   }
 
+  /// Detects the small up/down fingertip wiggle used as an alternate down cue.
   HandMoveDirection _detectFingertipWiggleDown({
     required Hand hand,
     required Size imageSize,
@@ -311,6 +325,8 @@ class DirectionGestureDetector {
     var horizontalDriftCount = 0;
     final nextSmoothedTips = <HandLandmarkType, _NormalizedFingerPoint>{};
 
+    // Smooth fingertip positions relative to the palm so tiny frame-to-frame
+    // landmark jitter does not count as a real wiggle.
     for (final type in HandGestureThresholds.directionFingerTipTypes) {
       final current = sample.points[type];
       if (current == null) continue;
@@ -407,6 +423,7 @@ class DirectionGestureDetector {
     return HandMoveDirection.down;
   }
 
+  /// Builds a palm-relative fingertip sample for wiggle detection.
   _FingerWiggleSample? _fingerWiggleSample({
     required Hand hand,
     required Size imageSize,
@@ -443,6 +460,7 @@ class DirectionGestureDetector {
     return _FingerWiggleSample(points);
   }
 
+  /// Records a new up/down step only when it changes direction.
   void _recordWiggleStepSign(int sign) {
     if (_wiggleStepSigns.isNotEmpty && _wiggleStepSigns.last == sign) {
       return;
@@ -456,6 +474,7 @@ class DirectionGestureDetector {
     }
   }
 
+  /// Counts alternating up/down steps in the recent wiggle history.
   int _wiggleDirectionChangeCount() {
     var count = 0;
     for (var i = 1; i < _wiggleStepSigns.length; i++) {
@@ -467,6 +486,7 @@ class DirectionGestureDetector {
     return count;
   }
 
+  /// Confirms the back of the hand is visible before accepting moving up.
   bool _isBackSideVisible({
     required Hand hand,
     required bool mirrorHorizontally,
@@ -521,6 +541,7 @@ class DirectionGestureDetector {
         HandGestureThresholds.directionMovingUpMinBackSideConfidence;
   }
 
+  /// Normalized signed cross product for palm orientation checks.
   double _normalizedCross({
     required HandLandmark origin,
     required HandLandmark first,
@@ -540,11 +561,13 @@ class DirectionGestureDetector {
         .clamp(-1.0, 1.0);
   }
 
+  /// Converts a threshold range into a clamped 0..1 score.
   double _inverseLerp(double start, double end, double value) {
     if (start == end) return value >= end ? 1 : 0;
     return ((value - start) / (end - start)).clamp(0.0, 1.0);
   }
 
+  /// Uses hand bounding-box size as the scale reference for thresholds.
   double _handSize(Hand hand) {
     final box = hand.boundingBox;
     final handWidth = (box.right - box.left).abs();
@@ -553,18 +576,21 @@ class DirectionGestureDetector {
   }
 }
 
+/// Snapshot of normalized fingertip positions for wiggle detection.
 class _FingerWiggleSample {
   const _FingerWiggleSample(this.points);
 
   final Map<HandLandmarkType, _NormalizedFingerPoint> points;
 }
 
+/// Palm-relative fingertip coordinate normalized by hand size.
 class _NormalizedFingerPoint {
   const _NormalizedFingerPoint({required this.x, required this.y});
 
   final double x;
   final double y;
 
+  /// Moves this point toward [other] by [amount] for exponential smoothing.
   _NormalizedFingerPoint lerp(_NormalizedFingerPoint other, double amount) {
     return _NormalizedFingerPoint(
       x: x + (other.x - x) * amount,

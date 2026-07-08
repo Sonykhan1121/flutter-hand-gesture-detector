@@ -1,6 +1,7 @@
 part of '../admin_hand_gesture_live_screen.dart';
 
 extension on _AdminHandGestureLiveScreenState {
+  /// Receives camera frames, throttles them, and starts gesture processing.
   Future<void> _processCameraImage(CameraImage image) async {
     final controller = _controller;
     final detector = _handDetector;
@@ -56,6 +57,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Runs the hand detector with the platform-specific camera frame format.
   Future<List<Hand>> _detectHandsFromCameraImage({
     required HandDetector detector,
     required CameraImage image,
@@ -87,6 +89,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Calculates the rotation that makes detector coordinates match the preview.
   CameraFrameRotation? _cameraFrameRotation(CameraImage image) {
     final controller = _controller;
     if (controller == null) return null;
@@ -121,6 +124,7 @@ extension on _AdminHandGestureLiveScreenState {
     return rotation;
   }
 
+  /// Applies gesture priority and updates all live-screen gesture UI state.
   Future<void> _updateGestureState(
     List<Hand> hands,
     Size detectionImageSize, {
@@ -135,6 +139,13 @@ extension on _AdminHandGestureLiveScreenState {
     );
     if (!mounted) return;
 
+    // Gesture priority from here down:
+    // 1. release/clear follow target when no reliable hand exists
+    // 2. return-to-main and face-detect holds
+    // 3. follow-object target selection
+    // 4. recording gestures
+    // 5. zoom gestures
+    // 6. movement directions and package labels.
     if (hands.isEmpty) {
       final followObjectRelease =
           await _releaseFollowObjectFromLastVisiblePoint(
@@ -399,6 +410,8 @@ extension on _AdminHandGestureLiveScreenState {
     var releaseHadNoTarget = false;
     final releasePoint = followObjectSequence.releasePoint;
     if (releasePoint != null) {
+      // Release points come from hand-detection image space; convert to the
+      // normalized display space used by face/object candidates.
       final releaseDisplayPoint = _handPointToDisplayPoint(
         releasePoint,
         detectionImageSize,
@@ -664,6 +677,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Selects the hand closest to the current focus box, or highest score first.
   Hand _selectTrackedHand(List<Hand> visibleHands) {
     final focusedHandBox = _focusedHandBox;
 
@@ -690,6 +704,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Saves the focused hand box and updates camera focus/exposure.
   void _updateFocusedHand({required Hand hand, required Size imageSize}) {
     final box = hand.boundingBox;
 
@@ -699,17 +714,20 @@ extension on _AdminHandGestureLiveScreenState {
     unawaited(_updateCameraFocusPoint(hand: hand, imageSize: imageSize));
   }
 
+  /// Returns the center of a detected hand bounding box.
   Offset _handBoxCenter(Hand hand) {
     final box = hand.boundingBox;
     return Offset((box.left + box.right) / 2, (box.top + box.bottom) / 2);
   }
 
+  /// Squared 2D distance, enough for comparing nearest hands.
   double _distanceBetweenOffsets(Offset first, Offset second) {
     final dx = first.dx - second.dx;
     final dy = first.dy - second.dy;
     return dx * dx + dy * dy;
   }
 
+  /// Refreshes targets and selects the nearest target to a release point.
   Future<FollowTarget?> _selectFollowTargetAtReleasePoint(
     Offset releasePoint, {
     required CameraImage image,
@@ -729,6 +747,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Updates cached face/object candidates for follow-object selection.
   Future<_FollowTargetDetections> _refreshFollowObjectTargetCandidates({
     required CameraImage image,
     required CameraFrameRotation? rotation,
@@ -753,11 +772,13 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Clears cached follow-object candidates from the debug/selection overlay.
   void _clearFollowObjectTargetCandidates() {
     _followObjectCandidateFaces = const [];
     _followObjectCandidateObjects = const [];
   }
 
+  /// Completes follow-object selection when the hand leaves the frame.
   Future<_FollowObjectReleaseSelection?>
   _releaseFollowObjectFromLastVisiblePoint({
     required CameraImage image,
@@ -806,6 +827,7 @@ extension on _AdminHandGestureLiveScreenState {
     return _FollowObjectReleaseSelection(target: target);
   }
 
+  /// Detects faces and picks the largest one for "detect my face".
   Future<FollowTarget?> _selectBestFaceTarget({
     required CameraImage image,
     required CameraFrameRotation? rotation,
@@ -828,6 +850,7 @@ extension on _AdminHandGestureLiveScreenState {
     });
   }
 
+  /// Refreshes the locked target and keeps it briefly if detection flickers.
   Future<FollowTarget?> _refreshLockedFollowTarget({
     required CameraImage image,
     required CameraFrameRotation? rotation,
@@ -862,6 +885,7 @@ extension on _AdminHandGestureLiveScreenState {
     return updated;
   }
 
+  /// Runs ML Kit face/object detection and maps results to display boxes.
   Future<_FollowTargetDetections?> _detectFollowTargets({
     required CameraImage image,
     required CameraFrameRotation? rotation,
@@ -934,6 +958,7 @@ extension on _AdminHandGestureLiveScreenState {
     return _FollowTargetDetections(faces: faces, objects: objects);
   }
 
+  /// Converts a camera frame into the ML Kit input format for the platform.
   ml_face.InputImage? _inputImageFromCameraImage(
     CameraImage image,
     CameraFrameRotation? rotation,
@@ -977,6 +1002,7 @@ extension on _AdminHandGestureLiveScreenState {
     return null;
   }
 
+  /// Converts Android YUV planes into NV21 bytes for ML Kit.
   Uint8List? _androidNv21Bytes(CameraImage image) {
     final format = ml_face.InputImageFormatValue.fromRawValue(image.format.raw);
     if (format == ml_face.InputImageFormat.nv21 && image.planes.length == 1) {
@@ -995,6 +1021,8 @@ extension on _AdminHandGestureLiveScreenState {
     final ySize = width * height;
     final out = Uint8List(ySize + width * height ~/ 2);
 
+    // Copy the full-resolution luma plane first, then interleave V and U for
+    // the chroma plane expected by NV21.
     for (var row = 0; row < height; row++) {
       for (var col = 0; col < width; col++) {
         out[row * width + col] = _planeValue(yPlane, row, col);
@@ -1014,6 +1042,7 @@ extension on _AdminHandGestureLiveScreenState {
     return out;
   }
 
+  /// Safely reads a pixel value from a camera image plane.
   int _planeValue(Plane plane, int row, int col) {
     final pixelStride = plane.bytesPerPixel ?? 1;
     final index = row * plane.bytesPerRow + col * pixelStride;
@@ -1021,6 +1050,7 @@ extension on _AdminHandGestureLiveScreenState {
     return plane.bytes[index];
   }
 
+  /// Maps hand-detector frame rotation to ML Kit input-image rotation.
   ml_face.InputImageRotation _inputImageRotationFromCameraFrameRotation(
     CameraFrameRotation? rotation,
   ) {
@@ -1036,6 +1066,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Converts an ML Kit bounding box into normalized preview display space.
   Rect _mlKitRectToDisplayBox(
     Rect rect, {
     required Size imageSize,
@@ -1060,6 +1091,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Converts one ML Kit point into normalized preview display space.
   Offset _mlKitPointToDisplayPoint(
     Offset point, {
     required Size imageSize,
@@ -1081,6 +1113,7 @@ extension on _AdminHandGestureLiveScreenState {
     return Offset(x.clamp(0, 1), y.clamp(0, 1));
   }
 
+  /// Normalizes the x-coordinate for the active ML Kit rotation.
   double _translateMlKitX(
     double x, {
     required Size imageSize,
@@ -1099,6 +1132,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Normalizes the y-coordinate for the active ML Kit rotation.
   double _translateMlKitY(
     double y, {
     required Size imageSize,
@@ -1114,6 +1148,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Converts a hand-detector image point into normalized preview space.
   Offset _handPointToDisplayPoint(Offset point, Size imageSize) {
     if (imageSize.width <= 0 || imageSize.height <= 0) {
       return Offset.zero;
@@ -1142,6 +1177,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Rotates a normalized point by quarter turns.
   Offset _rotateNormalizedPoint(Offset point, int quarterTurns) {
     switch (quarterTurns % 4) {
       case 1:
@@ -1155,6 +1191,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Chooses the best object label returned by ML Kit.
   String _objectLabel(ml_object.DetectedObject object) {
     if (object.labels.isEmpty) return 'Object';
 
@@ -1165,10 +1202,12 @@ extension on _AdminHandGestureLiveScreenState {
     return bestLabel.text.isEmpty ? 'Object' : bestLabel.text;
   }
 
+  /// Status text for a locked follow target.
   String _followTargetText(FollowTarget target) {
     return 'Following ${target.displayLabel.toLowerCase()}';
   }
 
+  /// Keeps a lost target briefly before clearing it.
   FollowTarget? _keepOrClearLostFollowTarget(DateTime now) {
     final previous = _lockedFollowTarget;
     if (previous == null) return null;
@@ -1188,15 +1227,18 @@ extension on _AdminHandGestureLiveScreenState {
     return null;
   }
 
+  /// Clears the locked face/object follow target.
   void _clearLockedFollowTarget() {
     _lockedFollowTarget = null;
     _lockedFollowTargetLostAt = null;
   }
 
+  /// Clears the "call me" face-detection hold timer.
   void _clearFaceDetectGestureHold() {
     _faceDetectGestureStartedAt = null;
   }
 
+  /// Rate-limits the optional victory feedback hook.
   void _showVictoryToast(DateTime now) {
     final lastShownAt = _lastVictoryToastShownAt;
     if (lastShownAt != null && now.difference(lastShownAt).inSeconds < 3) {
@@ -1207,10 +1249,12 @@ extension on _AdminHandGestureLiveScreenState {
     // _showSnackBar("It's victory");
   }
 
+  /// Records when punch should be displayed briefly outside recording mode.
   void _showPunchOnScreen(DateTime now) {
     _lastPunchScreenShownAt = now;
   }
 
+  /// Clears every active gesture task and optionally resets camera zoom/focus.
   void _clearAllActiveGestureTasks({required bool resetCameraZoom}) {
     _zoomGestureDetector.clearState();
     _directionGestureDetector.clearState();
@@ -1244,6 +1288,7 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
+  /// Focuses the camera on the center of a detected hand box.
   Future<void> _updateCameraFocusPoint({
     required Hand hand,
     required Size imageSize,
@@ -1257,10 +1302,12 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Focuses the camera on the center of a selected follow target.
   Future<void> _updateCameraFocusPointForTarget(FollowTarget target) async {
     await _updateCameraFocusAtNormalizedPoint(target.displayBox.center);
   }
 
+  /// Applies camera focus/exposure with throttling and bounds checking.
   Future<void> _updateCameraFocusAtNormalizedPoint(Offset focusPoint) async {
     final controller = _controller;
 
@@ -1293,6 +1340,7 @@ extension on _AdminHandGestureLiveScreenState {
   }
 }
 
+/// Cached face and object detections from the current frame.
 class _FollowTargetDetections {
   const _FollowTargetDetections({required this.faces, required this.objects});
 
@@ -1300,6 +1348,7 @@ class _FollowTargetDetections {
   final List<FollowTarget> objects;
 }
 
+/// Result of releasing follow-object selection when the hand is gone.
 class _FollowObjectReleaseSelection {
   const _FollowObjectReleaseSelection({required this.target});
 

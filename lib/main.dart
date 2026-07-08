@@ -5,14 +5,17 @@ import 'hand_gesture_features/domain/enums/stand_control_mode.dart';
 import 'hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen.dart';
 import 'hand_gesture_features/stand_control_home_page.dart';
 
+/// Starts the Flutter application.
 void main() {
   runApp(const MyApp());
 }
 
+/// Root widget that configures app theme and opens the stand-control flow.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
+  /// Builds the Material app and wires home-screen actions to navigation.
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,

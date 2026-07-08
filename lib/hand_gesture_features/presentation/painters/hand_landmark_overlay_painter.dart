@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hand_detection/hand_detection.dart';
 
+/// Painter that draws detected hand skeletons over the live preview.
 class HandLandmarkOverlayPainter extends CustomPainter {
   const HandLandmarkOverlayPainter({
     required this.hands,
@@ -15,6 +16,7 @@ class HandLandmarkOverlayPainter extends CustomPainter {
   final int previewQuarterTurns;
 
   @override
+  /// Draws landmark connections, landmark points, and optional index labels.
   void paint(Canvas canvas, Size size) {
     if (hands.isEmpty || imageSize.width <= 0 || imageSize.height <= 0) {
       return;
@@ -38,6 +40,7 @@ class HandLandmarkOverlayPainter extends CustomPainter {
           ..strokeWidth = 1.5
           ..color = Colors.black;
 
+    // Local helper keeps all landmark drawing in the same coordinate mapping.
     Offset mapPoint(double x, double y) {
       final normalizedX = (x / imageSize.width).clamp(0.0, 1.0);
       final normalizedY = (y / imageSize.height).clamp(0.0, 1.0);
@@ -80,6 +83,7 @@ class HandLandmarkOverlayPainter extends CustomPainter {
     }
   }
 
+  /// Rotates a normalized point to match the preview orientation.
   Offset _rotateNormalizedPoint(Offset point) {
     switch (previewQuarterTurns % 4) {
       case 1:
@@ -93,6 +97,7 @@ class HandLandmarkOverlayPainter extends CustomPainter {
     }
   }
 
+  /// Draws the landmark index next to a landmark point.
   void _drawLandmarkIndex(Canvas canvas, String text, Offset center) {
     final textPainter = TextPainter(
       text: TextSpan(
@@ -111,6 +116,7 @@ class HandLandmarkOverlayPainter extends CustomPainter {
   }
 
   @override
+  /// Repaints when landmarks, image size, mirroring, or rotation changes.
   bool shouldRepaint(covariant HandLandmarkOverlayPainter oldDelegate) {
     return oldDelegate.hands != hands ||
         oldDelegate.imageSize != imageSize ||

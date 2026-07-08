@@ -43,6 +43,7 @@ part 'admin_hand_gesture_live_screen_parts/recording_controls.dart';
 part 'admin_hand_gesture_live_screen_parts/gesture_processing.dart';
 part 'admin_hand_gesture_live_screen_parts/live_screen_ui.dart';
 
+/// Live camera page that detects hand gestures and controls the stand/camera.
 class AdminHandGestureLiveScreen extends StatefulWidget {
   const AdminHandGestureLiveScreen({super.key, required this.fontorback});
 
@@ -51,10 +52,12 @@ class AdminHandGestureLiveScreen extends StatefulWidget {
   final int fontorback;
 
   @override
+  /// Creates the state object that owns camera, detectors, and live UI state.
   State<AdminHandGestureLiveScreen> createState() =>
       _AdminHandGestureLiveScreenState();
 }
 
+/// Coordinates camera streaming, gesture detection, zoom, recording, and UI.
 class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
@@ -136,6 +139,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   bool _recordingGestureTriggered = false;
 
   @override
+  /// Initializes detector state, picks the starting lens, and requests camera.
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
@@ -153,6 +157,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   }
 
   @override
+  /// Releases timers, camera controller, and ML detectors.
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _resetRecordingTimer();
@@ -170,6 +175,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   }
 
   @override
+  /// Restarts or pauses streaming as the app moves foreground/background.
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       if (_isCameraInitialized) {
@@ -188,6 +194,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
     }
   }
 
+  /// Runs a state update only through setState while the widget is mounted.
   void _setScreenState(VoidCallback update) {
     if (mounted) {
       setState(update);
@@ -197,5 +204,6 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   }
 
   @override
+  /// Delegates rendering to the live-screen UI part file.
   Widget build(BuildContext context) => _buildLiveScreen(context);
 }

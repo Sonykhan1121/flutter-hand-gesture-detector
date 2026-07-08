@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Painter that highlights the currently followed hand and dims the rest.
 class HandFocusOverlayPainter extends CustomPainter {
   const HandFocusOverlayPainter({
     required this.handBox,
@@ -14,6 +15,7 @@ class HandFocusOverlayPainter extends CustomPainter {
   final int previewQuarterTurns;
 
   @override
+  /// Maps the hand box to preview space, dims outside it, and draws corners.
   void paint(Canvas canvas, Size size) {
     if (imageSize.width <= 0 || imageSize.height <= 0 || handBox.isEmpty) {
       return;
@@ -74,6 +76,7 @@ class HandFocusOverlayPainter extends CustomPainter {
     _drawCorners(canvas, boundedFocusRect, cornerPaint);
   }
 
+  /// Shrinks the detector box to a tighter focus region, then adds padding.
   Rect _tightenRect(Rect rect) {
     final insetX = rect.width * 0.18;
     final insetY = rect.height * 0.14;
@@ -83,6 +86,7 @@ class HandFocusOverlayPainter extends CustomPainter {
     return tightenedRect.inflate(padding);
   }
 
+  /// Maps a raw image-space rectangle into canvas display coordinates.
   Rect _mapRect(Rect rect, Size canvasSize) {
     final topLeft = _mapPoint(rect.left, rect.top, canvasSize);
     final bottomRight = _mapPoint(rect.right, rect.bottom, canvasSize);
@@ -95,6 +99,7 @@ class HandFocusOverlayPainter extends CustomPainter {
     );
   }
 
+  /// Maps one raw image-space point into rotated/mirrored canvas coordinates.
   Offset _mapPoint(double x, double y, Size canvasSize) {
     final normalizedX = (x / imageSize.width).clamp(0.0, 1.0);
     final normalizedY = (y / imageSize.height).clamp(0.0, 1.0);
@@ -112,6 +117,7 @@ class HandFocusOverlayPainter extends CustomPainter {
     );
   }
 
+  /// Rotates a normalized point to match the preview orientation.
   Offset _rotateNormalizedPoint(Offset point) {
     switch (previewQuarterTurns % 4) {
       case 1:
@@ -125,6 +131,7 @@ class HandFocusOverlayPainter extends CustomPainter {
     }
   }
 
+  /// Draws short white corner guides around the focus rectangle.
   void _drawCorners(Canvas canvas, Rect rect, Paint paint) {
     final cornerLength = (rect.shortestSide * 0.18).clamp(12.0, 28.0);
 
@@ -174,6 +181,7 @@ class HandFocusOverlayPainter extends CustomPainter {
   }
 
   @override
+  /// Repaints when the box, image size, mirror, or rotation changes.
   bool shouldRepaint(covariant HandFocusOverlayPainter oldDelegate) {
     return oldDelegate.handBox != handBox ||
         oldDelegate.imageSize != imageSize ||

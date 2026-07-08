@@ -1,6 +1,7 @@
 part of '../admin_hand_gesture_live_screen.dart';
 
 extension on _AdminHandGestureLiveScreenState {
+  /// Returns the portrait-oriented preview size used by AspectRatio.
   Size _previewDisplaySize(CameraController? controller) {
     if (controller == null || !controller.value.isInitialized) {
       return const Size(9, 16);
@@ -20,12 +21,14 @@ extension on _AdminHandGestureLiveScreenState {
         : Size(rawWidth, rawHeight);
   }
 
+  /// Aspect ratio for the visible camera preview container.
   double _previewAspectRatio() {
     final controller = _controller;
     final previewDisplaySize = _previewDisplaySize(controller);
     return previewDisplaySize.width / previewDisplaySize.height;
   }
 
+  /// Builds the camera preview, applying Android recording correction if needed.
   Widget _buildCameraPreview(CameraController controller) {
     if (!Platform.isAndroid) {
       return CameraPreview(controller);
@@ -65,6 +68,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Mirrors a preview widget for front-camera recording correction.
   Widget _mirrorPreviewIfNeeded({
     required bool mirrorHorizontally,
     required Widget child,
@@ -74,11 +78,13 @@ extension on _AdminHandGestureLiveScreenState {
     return Transform.flip(flipX: true, child: child);
   }
 
+  /// True when overlay coordinates must mirror to match the preview.
   bool _shouldMirrorPreviewCoordinates(CameraController? controller) {
     return controller?.description.lensDirection == CameraLensDirection.front &&
         !Platform.isIOS;
   }
 
+  /// True when movement gestures should use mirrored horizontal coordinates.
   bool _shouldMirrorDirectionalGestureCoordinates(
     CameraController? controller,
   ) {
@@ -91,24 +97,29 @@ extension on _AdminHandGestureLiveScreenState {
     return _shouldMirrorPreviewCoordinates(controller);
   }
 
+  /// True when open-palm orientation checks should use mirrored coordinates.
   bool _shouldMirrorPalmGestureCoordinates(CameraController? controller) {
     return _shouldMirrorPreviewCoordinates(controller);
   }
 
+  /// Lets back-camera palm detection retry with the opposite side convention.
   bool _shouldAllowBackCameraPalmFallback(CameraController? controller) {
     return controller?.description.lensDirection == CameraLensDirection.back;
   }
 
+  /// Android recording preview needs correction while recording starts/stops.
   bool _shouldApplyRecordingPreviewCorrection(CameraController controller) {
     return Platform.isAndroid &&
         (_isRecordingPreviewCorrectionActive ||
             controller.value.isRecordingVideo);
   }
 
+  /// Quarter-turns used by overlay painters for the current preview mode.
   int _previewQuarterTurnsForOverlays(CameraController controller) {
     return _shouldApplyRecordingPreviewCorrection(controller) ? 3 : 0;
   }
 
+  /// Full-screen scrim shown while recording mode transitions settle.
   Widget _buildRecordingTransitionScrim({required String message}) {
     return AbsorbPointer(
       child: Container(
@@ -149,6 +160,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Builds the live camera screen, overlays, status panel, and loading state.
   Widget _buildLiveScreen(BuildContext context) {
     final controller = _controller;
     final followTargetDebugOverlayTargets =
@@ -347,6 +359,7 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Chooses the normal or recording-aware landmark painter.
   CustomPainter _handLandmarkPainterForCurrentMode(
     CameraController controller,
   ) {

@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:hand_detection/hand_detection.dart';
 
+/// Centralizes the hand detector setup and platform-specific fallback logic.
 class HandDetectorFactory {
   const HandDetectorFactory._();
 
+  /// Creates the detector, using the compiled model where it is supported.
   static Future<HandDetector> create() async {
     final useIosSafeInterpreter = defaultTargetPlatform == TargetPlatform.iOS;
     if (useIosSafeInterpreter) {
@@ -20,6 +22,7 @@ class HandDetectorFactory {
     }
   }
 
+  /// Builds the package detector with this app's landmark and gesture options.
   static Future<HandDetector> _createDetector({
     required bool useCompiledModel,
   }) {

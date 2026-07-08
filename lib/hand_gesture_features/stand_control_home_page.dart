@@ -4,6 +4,7 @@ import 'package:gesture_detector/hand_gesture_features/presentation/widgets/stan
 
 import 'domain/enums/stand_control_mode.dart';
 
+/// Home page where the user chooses how the smart stand will be controlled.
 class StandControlHomePage extends StatefulWidget {
   final StandControlMode initialMode;
   final Set<StandControlMode> disabledModes;
@@ -23,18 +24,22 @@ class StandControlHomePage extends StatefulWidget {
   });
 
   @override
+  /// Creates state that remembers the currently selected control mode.
   State<StandControlHomePage> createState() => _StandControlHomePageState();
 }
 
+/// Holds the selected mode and dispatches tap callbacks for each mode.
 class _StandControlHomePageState extends State<StandControlHomePage> {
   late StandControlMode _selectedMode;
 
   @override
+  /// Copies the starting mode from the widget into mutable screen state.
   void initState() {
     super.initState();
     _selectedMode = widget.initialMode;
   }
 
+  /// Updates the selected mode unless it is disabled, then runs its callback.
   void _selectMode(StandControlMode mode) {
     if (widget.disabledModes.contains(mode)) {
       _notifyModeTap(mode);
@@ -49,6 +54,7 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
     _notifyModeTap(mode);
   }
 
+  /// Calls the mode-specific handler provided by the app root.
   void _notifyModeTap(StandControlMode mode) {
     switch (mode) {
       case StandControlMode.automaticDetect:
@@ -64,6 +70,7 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
   }
 
   @override
+  /// Builds the hero artwork and the mode settings panel.
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
 

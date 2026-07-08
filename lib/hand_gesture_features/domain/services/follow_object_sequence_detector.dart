@@ -8,6 +8,7 @@ import '../enums/follow_object_release_reason.dart';
 import '../models/follow_object_sequence_result.dart';
 import 'open_palm_gesture_detector.dart';
 
+/// State machine for "open palm, closed fist, release" object following.
 class FollowObjectSequenceDetector {
   FollowObjectSequenceDetector({
     OpenPalmGestureDetector? openPalmGestureDetector,
@@ -71,6 +72,8 @@ class FollowObjectSequenceDetector {
       debugLabel: 'closedFist',
     );
 
+    // The switch below advances only one phase at a time so every frame has a
+    // predictable sequence status for the UI and target scanner.
     _debugPoseChange(openPalm: openPalm, closedFist: closedFist);
 
     var detected = false;
@@ -150,8 +153,10 @@ class FollowObjectSequenceDetector {
     );
   }
 
+  /// True while the detector is waiting for final open palm or hand release.
   bool get isTargetSelectionActive => _isTargetSelectionActive;
 
+  /// Completes the sequence from the last saved hand center after hand loss.
   FollowObjectSequenceResult releaseFromLastVisiblePoint(DateTime now) {
     if (!_isTargetSelectionActive) {
       if (_phase != FollowObjectSequencePhase.idle) {
@@ -196,6 +201,7 @@ class FollowObjectSequenceDetector {
     );
   }
 
+  /// Resets phase data, optionally keeping the recent success message alive.
   void clear({bool keepLastDetected = false}) {
     if (_phase != FollowObjectSequencePhase.idle) {
       _debug(
@@ -217,6 +223,7 @@ class FollowObjectSequenceDetector {
     }
   }
 
+  /// Uses the custom open-palm detector and stores the active package label.
   bool _isOpenPalmGesture({
     required Hand hand,
     required DateTime now,
@@ -241,6 +248,7 @@ class FollowObjectSequenceDetector {
     return result.isDetected;
   }
 
+  /// Checks a package gesture type against the shared confidence threshold.
   bool _isPackageGesture({
     required Hand hand,
     required GestureType type,
@@ -264,6 +272,7 @@ class FollowObjectSequenceDetector {
     return detected;
   }
 
+  /// Holds a completed sequence result long enough for the UI to show it.
   bool _recentDetected(DateTime now) {
     final lastDetectedAt = _lastDetectedAt;
     return lastDetectedAt != null &&
@@ -271,14 +280,17 @@ class FollowObjectSequenceDetector {
             HandGestureThresholds.followObjectMessageHoldDuration;
   }
 
+  /// Internal check for the target-selection phase.
   bool get _isTargetSelectionActive =>
       _phase == FollowObjectSequencePhase.waitingForFinalOpen;
 
+  /// Uses the hand bounding-box center as the target release point.
   Offset _handReleasePoint(Hand hand) {
     final box = hand.boundingBox;
     return Offset((box.left + box.right) / 2, (box.top + box.bottom) / 2);
   }
 
+  /// Prints debug output only when open-palm or fist pose state changes.
   void _debugPoseChange({required bool openPalm, required bool closedFist}) {
     if (_lastOpenPalmDebugValue == openPalm &&
         _lastClosedFistDebugValue == closedFist) {
@@ -294,6 +306,7 @@ class FollowObjectSequenceDetector {
     );
   }
 
+  /// Moves to a new sequence phase and logs the reason.
   void _setPhase(FollowObjectSequencePhase nextPhase, String reason) {
     if (_phase == nextPhase) return;
 
@@ -301,6 +314,7 @@ class FollowObjectSequenceDetector {
     _phase = nextPhase;
   }
 
+  /// Sends namespaced debug messages when a listener is attached.
   void _debug(String message) {
     onDebug?.call('[FollowObjectSequence] $message');
   }

@@ -7,6 +7,7 @@ import '../constants/hand_gesture_thresholds.dart';
 import '../models/open_palm_gesture_detection_result.dart';
 import 'hand_geometry_service.dart';
 
+/// Scores and smooths open-palm detection from raw hand landmarks.
 class OpenPalmGestureDetector {
   OpenPalmGestureDetector({this.geometry = const HandGeometryService()});
 
@@ -15,6 +16,7 @@ class OpenPalmGestureDetector {
   final ListQueue<_OpenPalmSample> _samples = ListQueue<_OpenPalmSample>();
   bool _wasDetected = false;
 
+  /// Detects whether the current frame is an open palm after smoothing.
   OpenPalmGestureDetectionResult detect({
     required Hand hand,
     required DateTime now,
@@ -54,11 +56,13 @@ class OpenPalmGestureDetector {
     );
   }
 
+  /// Resets smoothing state when another gesture flow takes over.
   void clear() {
     _samples.clear();
     _wasDetected = false;
   }
 
+  /// Produces a 0..1 open-palm confidence from finger shape and palm side.
   double _confidence(
     Hand hand, {
     required bool mirrorHorizontally,
@@ -134,6 +138,8 @@ class OpenPalmGestureDetector {
       handSize: handSize,
     );
 
+    // Combine soft scores, then clamp by required minimums so a single bad
+    // component can prevent false positives.
     final fingerScores = [
       indexScore,
       middleScore,
@@ -173,6 +179,7 @@ class OpenPalmGestureDetector {
     return confidence.clamp(0.0, 1.0);
   }
 
+  /// Scores one long finger by angle, tip reach, and tip-vs-PIP distance.
   double _fingerExtensionScore({
     required HandLandmark mcp,
     required HandLandmark pip,
@@ -200,6 +207,7 @@ class OpenPalmGestureDetector {
     );
   }
 
+  /// Scores the thumb as extended and separated from the index finger.
   double _thumbExtensionScore({
     required _OpenPalmLandmarks landmarks,
     required HandPoint3D palmCenter,
@@ -258,6 +266,7 @@ class OpenPalmGestureDetector {
         .clamp(0.0, 1.0);
   }
 
+  /// Scores how much the fingertips fan apart from index to pinky.
   double _fingerSpreadScore({
     required _OpenPalmLandmarks landmarks,
     required double handSize,
@@ -301,6 +310,7 @@ class OpenPalmGestureDetector {
         .clamp(0.0, 1.0);
   }
 
+  /// Scores whether palm orientation matches handedness and mirroring.
   double _palmSideScore({
     required Hand hand,
     required _OpenPalmLandmarks landmarks,
@@ -341,6 +351,7 @@ class OpenPalmGestureDetector {
     return (knuckleScore * 0.75 + thumbSideScore * 0.25).clamp(0.0, 1.0);
   }
 
+  /// Scores whether all long fingers rise mostly along the vertical axis.
   double _fingerYAxisScore(_OpenPalmLandmarks landmarks) {
     final scores = [
       _singleFingerYAxisScore(mcp: landmarks.indexMcp, tip: landmarks.indexTip),
@@ -355,6 +366,7 @@ class OpenPalmGestureDetector {
     return scores.reduce(math.min);
   }
 
+  /// Scores whether upper index/middle finger joints keep moving upward.
   double _upperFingerChainScore({
     required _OpenPalmLandmarks landmarks,
     required double handSize,
@@ -379,6 +391,7 @@ class OpenPalmGestureDetector {
     return scores.reduce(math.min);
   }
 
+  /// Scores one finger chain from MCP to tip for upward ordering.
   double _singleUpperFingerChainScore({
     required HandLandmark mcp,
     required HandLandmark pip,
@@ -399,6 +412,7 @@ class OpenPalmGestureDetector {
     ].reduce(math.min);
   }
 
+  /// Scores one finger for vertical, not sideways, extension.
   double _singleFingerYAxisScore({
     required HandLandmark mcp,
     required HandLandmark tip,
@@ -412,6 +426,7 @@ class OpenPalmGestureDetector {
     return (1 - _inverseLerp(0.35, 0.65, horizontalRatio)).clamp(0.0, 1.0);
   }
 
+  /// Keeps the smoothing window bounded by count and age.
   void _trimSamples(DateTime now) {
     while (_samples.length >
         HandGestureThresholds.openPalmSmoothingSampleCount) {
@@ -425,6 +440,7 @@ class OpenPalmGestureDetector {
     }
   }
 
+  /// Uses hand bounding-box size as the reference for normalized distances.
   double _handSize(Hand hand) {
     final box = hand.boundingBox;
     final handWidth = (box.right - box.left).abs();
@@ -432,6 +448,7 @@ class OpenPalmGestureDetector {
     return math.max(handWidth, handHeight);
   }
 
+  /// Normalized signed cross product used for palm-side orientation.
   double _normalizedCross({
     required HandLandmark origin,
     required HandLandmark first,
@@ -450,12 +467,14 @@ class OpenPalmGestureDetector {
         (firstLength * secondLength);
   }
 
+  /// Converts a value between min and max into a clamped 0..1 score.
   double _inverseLerp(double min, double max, double value) {
     if (max <= min) return value >= max ? 1 : 0;
     return ((value - min) / (max - min)).clamp(0.0, 1.0);
   }
 }
 
+/// One smoothed open-palm sample in the recent detection window.
 class _OpenPalmSample {
   const _OpenPalmSample({required this.isDetected, required this.time});
 
@@ -463,6 +482,7 @@ class _OpenPalmSample {
   final DateTime time;
 }
 
+/// Required landmark bundle for open-palm scoring.
 class _OpenPalmLandmarks {
   const _OpenPalmLandmarks({
     required this.wrist,
@@ -504,6 +524,7 @@ class _OpenPalmLandmarks {
   final HandLandmark pinkyPip;
   final HandLandmark pinkyMcp;
 
+  /// Collects all landmarks needed for scoring, or returns null if missing.
   static _OpenPalmLandmarks? fromHand(Hand hand, HandGeometryService geometry) {
     final wrist = geometry.visibleLandmark(hand, HandLandmarkType.wrist);
 

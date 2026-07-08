@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+/// Draws the illustrated phone stand on the home screen.
 class MobileStandPainter extends CustomPainter {
   @override
+  /// Paints a stylized phone, stand base, and gesture glow.
   void paint(Canvas canvas, Size size) {
     final phoneWidth = size.width * 0.38;
     final phoneHeight = size.height * 0.70;
@@ -127,5 +129,6 @@ class MobileStandPainter extends CustomPainter {
   }
 
   @override
+  /// Static illustration, so repainting is not needed.
   bool shouldRepaint(covariant MobileStandPainter oldDelegate) => false;
 }

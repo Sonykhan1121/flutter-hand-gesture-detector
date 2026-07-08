@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models/follow_target.dart';
 
+/// Debug painter that draws all face/object candidates on the preview.
 class FollowTargetDebugOverlayPainter extends CustomPainter {
   const FollowTargetDebugOverlayPainter({required this.targets});
 
   final List<FollowTarget> targets;
 
   @override
+  /// Paints red boxes and labels for each detected follow candidate.
   void paint(Canvas canvas, Size size) {
     if (targets.isEmpty) return;
 
@@ -35,6 +37,7 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
     }
   }
 
+  /// Converts a normalized target display box into canvas coordinates.
   Rect _displayRect(FollowTarget target, Size size) {
     final box = target.displayBox;
     final rect = Rect.fromLTRB(
@@ -52,6 +55,7 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
     );
   }
 
+  /// Draws a clamped label near the target box.
   void _drawLabel({
     required Canvas canvas,
     required Size size,
@@ -98,6 +102,7 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
   }
 
   @override
+  /// Repaints when the target list reference changes.
   bool shouldRepaint(covariant FollowTargetDebugOverlayPainter oldDelegate) {
     return oldDelegate.targets != targets;
   }

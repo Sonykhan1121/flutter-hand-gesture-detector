@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Bottom status panel that summarizes the current hand and gesture state.
 class GestureStatusPanel extends StatelessWidget {
   const GestureStatusPanel({
     super.key,
@@ -15,6 +16,7 @@ class GestureStatusPanel extends StatelessWidget {
   final int detectedHandsCount;
 
   @override
+  /// Builds the live gesture title and supporting detection details.
   Widget build(BuildContext context) {
     final hasGesture = gestureConfidence > 0;
 
@@ -71,6 +73,7 @@ class GestureStatusPanel extends StatelessWidget {
     );
   }
 
+  /// Creates the smaller status line below the main gesture text.
   String _subtitleText() {
     if (detectedHandsCount == 0) {
       return 'Move your hand left or right';

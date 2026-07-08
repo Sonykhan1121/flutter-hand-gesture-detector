@@ -4,6 +4,7 @@ import 'package:hand_detection/hand_detection.dart';
 
 import '../enums/follow_object_release_reason.dart';
 
+/// Result returned after each follow-object state-machine update.
 class FollowObjectSequenceResult {
   const FollowObjectSequenceResult({
     required this.isActive,

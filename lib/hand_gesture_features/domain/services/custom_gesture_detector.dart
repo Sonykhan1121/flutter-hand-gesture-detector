@@ -9,6 +9,7 @@ import '../models/custom_gesture_detection_result.dart';
 import '../models/timed_offset.dart';
 import 'hand_geometry_service.dart';
 
+/// Detects custom gestures that are not reliable enough from package labels.
 class CustomGestureDetector {
   CustomGestureDetector({this.geometry = const HandGeometryService()});
 
@@ -17,6 +18,7 @@ class CustomGestureDetector {
   final ListQueue<TimedOffset> _indexCircleHistory = ListQueue<TimedOffset>();
   DateTime? _lastCancelEverythingDetectedAt;
 
+  /// Evaluates all custom gestures for the current hand frame.
   CustomGestureDetectionResult detect({
     required Hand hand,
     required Size imageSize,
@@ -42,6 +44,7 @@ class CustomGestureDetector {
     );
   }
 
+  /// Detects the "return to main position" index-finger circle gesture.
   bool _detectCancelEverythingGesture({
     required Hand hand,
     required Size imageSize,
@@ -71,6 +74,8 @@ class CustomGestureDetector {
       indexTip.y,
     );
 
+    // Keep only a recent, bounded motion trail so old finger movement does not
+    // accidentally complete a new circle.
     _indexCircleHistory.addLast(
       TimedOffset(
         point: point,
@@ -121,6 +126,8 @@ class CustomGestureDetector {
       geometry.average(points.map((point) => point.dy)),
     );
 
+    // A circle should have a reasonably consistent radius and little depth
+    // movement; this rejects finger movement toward the camera.
     final radii = points
         .map((point) => geometry.distanceBetweenOffsets(point, center))
         .where((radius) => radius > 0)
@@ -164,6 +171,7 @@ class CustomGestureDetector {
     return _recentCancelEverythingDetected(now);
   }
 
+  /// Checks the starting pose for an index-only upward gesture.
   bool _isIndexOnlyNearUpperGesture(Hand hand) {
     if (!hand.hasLandmarks) return false;
 
@@ -296,6 +304,7 @@ class CustomGestureDetector {
         pinkyIsClosed;
   }
 
+  /// Detects the OK sign used to start recording.
   bool _isOkGesture(Hand hand) {
     if (!hand.hasLandmarks) return false;
 
@@ -416,6 +425,7 @@ class CustomGestureDetector {
         pinkyIsOpen;
   }
 
+  /// Detects the call-me sign used to start face detection.
   bool _isCallMeGesture(Hand hand) {
     if (!hand.hasLandmarks) return false;
 
@@ -512,6 +522,7 @@ class CustomGestureDetector {
         ringIsClosed;
   }
 
+  /// Detects the fist/punch pose used to pause or resume recording.
   bool _isPunchGesture(
     Hand hand, {
     required Size imageSize,
@@ -596,6 +607,7 @@ class CustomGestureDetector {
     return allLongFingersFolded && knucklesAlignedOnXAxis && thumbAllowsFist;
   }
 
+  /// Accepts the package thumb-down label as a high-confidence punch shortcut.
   bool _isPackageThumbDownPunch(Hand hand) {
     final gesture = hand.gesture;
 
@@ -605,6 +617,7 @@ class CustomGestureDetector {
             HandGestureThresholds.punchGestureMinPackageConfidence;
   }
 
+  /// Keeps the index-circle pose strict by requiring the thumb to be closed.
   bool _isThumbReallyClosedForIndexOnlyGesture({
     required HandLandmark thumbTip,
     required HandLandmark thumbIp,
@@ -625,6 +638,7 @@ class CustomGestureDetector {
     );
   }
 
+  /// Sums signed angular movement around a center point.
   double _totalCircularAngle(List<Offset> points, Offset center) {
     if (points.length < 2) return 0;
 
@@ -657,6 +671,7 @@ class CustomGestureDetector {
     return totalAngle;
   }
 
+  /// Holds the return-to-main result briefly so the UI does not flicker.
   bool _recentCancelEverythingDetected(DateTime now) {
     final lastDetectedAt = _lastCancelEverythingDetectedAt;
     return lastDetectedAt != null &&
@@ -664,6 +679,7 @@ class CustomGestureDetector {
             HandGestureThresholds.cancelEverythingHoldDuration;
   }
 
+  /// Uses the hand bounding box as the scale reference for ratio thresholds.
   double _handSize(Hand hand) {
     final box = hand.boundingBox;
     final handWidth = (box.right - box.left).abs();

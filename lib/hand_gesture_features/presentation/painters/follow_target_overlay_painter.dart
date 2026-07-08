@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import '../../domain/enums/follow_target_type.dart';
 import '../../domain/models/follow_target.dart';
 
+/// Painter for the locked face/object follow target highlight.
 class FollowTargetOverlayPainter extends CustomPainter {
   const FollowTargetOverlayPainter({required this.target});
 
   final FollowTarget target;
 
   @override
+  /// Dims the rest of the preview and highlights the selected target box.
   void paint(Canvas canvas, Size size) {
     final targetRect = _displayRect(size);
     if (targetRect.isEmpty) return;
@@ -57,6 +59,7 @@ class FollowTargetOverlayPainter extends CustomPainter {
     _drawCorners(canvas, targetRect, cornerPaint);
   }
 
+  /// Converts the normalized target box into canvas coordinates.
   Rect _displayRect(Size size) {
     final box = target.displayBox;
     final rect = Rect.fromLTRB(
@@ -74,6 +77,7 @@ class FollowTargetOverlayPainter extends CustomPainter {
     );
   }
 
+  /// Draws bright corner guides on top of the target rectangle.
   void _drawCorners(Canvas canvas, Rect rect, Paint paint) {
     final cornerLength = (rect.shortestSide * 0.18).clamp(12.0, 30.0);
 
@@ -123,6 +127,7 @@ class FollowTargetOverlayPainter extends CustomPainter {
   }
 
   @override
+  /// Repaints when the selected target changes.
   bool shouldRepaint(covariant FollowTargetOverlayPainter oldDelegate) {
     return oldDelegate.target != target;
   }

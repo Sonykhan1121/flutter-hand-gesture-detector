@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Full-screen camera setup/failure state with a retry/settings action.
 class HandCameraLoadingView extends StatelessWidget {
   const HandCameraLoadingView({
     super.key,
@@ -17,6 +18,7 @@ class HandCameraLoadingView extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
+  /// Builds loading or error content while the camera is unavailable.
   Widget build(BuildContext context) {
     return SafeArea(
       child: Column(

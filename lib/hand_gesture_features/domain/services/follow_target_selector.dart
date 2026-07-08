@@ -4,9 +4,11 @@ import 'dart:ui';
 import '../constants/hand_gesture_thresholds.dart';
 import '../models/follow_target.dart';
 
+/// Picks and tracks the face/object target selected by a release gesture.
 class FollowTargetSelector {
   const FollowTargetSelector();
 
+  /// Selects the smallest target box that contains the release point.
   FollowTarget? select({
     required Offset releasePoint,
     required List<FollowTarget> faces,
@@ -16,6 +18,7 @@ class FollowTargetSelector {
         _bestAtPoint(releasePoint, objects);
   }
 
+  /// Selects the closest available target when no box contains the point.
   FollowTarget? selectNearest({
     required Offset releasePoint,
     required List<FollowTarget> faces,
@@ -43,6 +46,7 @@ class FollowTargetSelector {
     return bestCandidate;
   }
 
+  /// Matches a previous target to the best current candidate.
   FollowTarget? track({
     required FollowTarget previous,
     required List<FollowTarget> candidates,
@@ -89,6 +93,7 @@ class FollowTargetSelector {
     return bestCandidate;
   }
 
+  /// Finds the smallest padded target box under the release point.
   FollowTarget? _bestAtPoint(
     Offset releasePoint,
     List<FollowTarget> candidates,
@@ -112,6 +117,7 @@ class FollowTargetSelector {
     return bestCandidate;
   }
 
+  /// Measures bounding-box overlap for target tracking.
   double _intersectionOverUnion(Rect first, Rect second) {
     final intersection = first.intersect(second);
     if (intersection.isEmpty) return 0;
@@ -126,6 +132,7 @@ class FollowTargetSelector {
     return intersectionArea / unionArea;
   }
 
+  /// Computes normalized 2D distance between two display points.
   double _centerDistance(Offset first, Offset second) {
     final dx = first.dx - second.dx;
     final dy = first.dy - second.dy;

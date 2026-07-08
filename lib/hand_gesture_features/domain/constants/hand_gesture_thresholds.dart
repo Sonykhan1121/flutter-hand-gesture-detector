@@ -2,12 +2,17 @@ import 'dart:math' as math;
 
 import 'package:hand_detection/hand_detection.dart';
 
+/// Tunable values used by gesture detectors and the live camera screen.
 abstract final class HandGestureThresholds {
+  /// Caps detector input size so frame processing stays fast enough live.
   static const int maxDetectionDimension = 640;
 
+  /// Lowest hand confidence accepted before gesture logic trusts the frame.
   static const double minHandScore = 0.45;
+  /// Lowest package gesture confidence accepted from `hand_detection`.
   static const double minPackageGestureConfidence = 0.50;
 
+  /// Open-palm hysteresis and smoothing thresholds.
   static const double openPalmEnterConfidence = 0.55;
   static const double openPalmExitConfidence = 0.45;
   static const double openPalmMinFingerConfidence = 0.50;
@@ -19,6 +24,7 @@ abstract final class HandGestureThresholds {
   static const int openPalmSmoothingMinPositiveSamples = 2;
   static const Duration openPalmSmoothingMaxAge = Duration(milliseconds: 500);
 
+  /// Follow-object timing, release, tracking, and face-hold thresholds.
   static const Duration followObjectMessageHoldDuration = Duration(
     milliseconds: 1200,
   );
@@ -33,9 +39,11 @@ abstract final class HandGestureThresholds {
   );
   static const Duration faceDetectHoldDuration = Duration(seconds: 2);
 
+  /// Landmark filtering and depth scaling shared by 3D geometry checks.
   static const double minLandmarkVisibility = 0.35;
   static const double landmarkDepthWeight = 0.65;
 
+  /// Fingertips used for movement direction and fingertip-wiggle detection.
   static const List<HandLandmarkType> directionFingerTipTypes = [
     HandLandmarkType.indexFingerTip,
     HandLandmarkType.middleFingerTip,
@@ -43,6 +51,7 @@ abstract final class HandGestureThresholds {
     HandLandmarkType.pinkyTip,
   ];
 
+  /// Long-finger landmark chains ordered from MCP to tip.
   static const List<List<HandLandmarkType>> directionFingerChainTypes = [
     [
       HandLandmarkType.indexFingerMCP,
@@ -70,6 +79,7 @@ abstract final class HandGestureThresholds {
     ],
   ];
 
+  /// Knuckle landmarks that describe the palm plane.
   static const List<HandLandmarkType> palmReferenceTypes = [
     HandLandmarkType.indexFingerMCP,
     HandLandmarkType.middleFingerMCP,
@@ -77,6 +87,7 @@ abstract final class HandGestureThresholds {
     HandLandmarkType.pinkyMCP,
   ];
 
+  /// Direction gesture shape thresholds.
   static const int directionFingerChainMinAlignedCount = 3;
   static const double directionFingerChainMinHorizontalImageRatio = 0.025;
   static const double directionFingerChainMinHorizontalSpanRatio = 0.12;
@@ -100,6 +111,7 @@ abstract final class HandGestureThresholds {
     milliseconds: 900,
   );
 
+  /// Palm/finger shape ratios used by custom gesture checks.
   static const double fingerTipVerticalMaxSpreadRatio = 0.22;
   static const double fingerTipHorizontalMaxSpreadRatio = 0.22;
   static const double sideBendMinRatio = 0.16;
@@ -120,11 +132,13 @@ abstract final class HandGestureThresholds {
 
   static const double okTouchMaxDistanceRatio = 0.11;
 
+  /// Fist/punch shape thresholds.
   static const double punchKnuckleMaxYSpreadRatio = 0.12;
   static const double punchKnuckleMaxDepthSpreadRatio = 0.22;
   static const double punchGestureMinPackageConfidence = 0.60;
   static const int punchMaxDownExtendedFingerChainCount = 1;
 
+  /// Index-circle thresholds for the return-to-main-position gesture.
   static const int indexCircleHistoryMaxLength = 36;
   static const int indexCircleMinSampleCount = 5;
   static const Duration indexCircleWindow = Duration(milliseconds: 1400);
@@ -137,6 +151,7 @@ abstract final class HandGestureThresholds {
   static const double indexCircleMaxRadiusVariationRatio = 1.60;
   static const double indexCircleMaxDepthVariationRatio = 0.32;
 
+  /// Index-only pose thresholds used before accepting an index circle.
   static const double indexUpperFacingMinDistanceRatio = 0.08;
   static const double indexUprightMaxSideOffsetRatio = 0.50;
 
@@ -145,6 +160,7 @@ abstract final class HandGestureThresholds {
   static const double closedThumbMaxKnuckleDistanceRatio = 0.32;
   static const double closedThumbMaxTipMcpDistanceRatio = 0.36;
 
+  /// Pinch/open ratios and stability limits for zoom gestures.
   static const double zoomClosedMaxDistanceRatio = 0.26;
   static const double zoomOpenMinDistanceRatio = 0.27;
   static const double zoomMinChangeRatio = 0.025;
@@ -155,6 +171,7 @@ abstract final class HandGestureThresholds {
   static const double partialZoomOutMinChangeImageRatio = 0.018;
   static const double partialZoomOutClosedMaxStartDistanceFactor = 0.72;
 
+  /// Zoom gesture timing and repeat-rate thresholds.
   static const Duration zoomStartPoseHoldDuration = Duration(milliseconds: 300);
   static const double zoomActiveTipMinPalmDistanceRatio = 0.06;
   static const double zoomMinLandmarkVisibility = 0.30;
@@ -165,6 +182,7 @@ abstract final class HandGestureThresholds {
   static const Duration zoomHoldDuration = Duration(milliseconds: 1200);
   static const Duration gestureZoomRepeatInterval = Duration(milliseconds: 100);
 
+  /// Camera-frame cadence, manual zoom step, and recording hold timings.
   static const Duration minFrameProcessInterval = Duration(milliseconds: 100);
   static const double zoomStep = 0.2;
   static const double gestureZoomStep = 0.08;
