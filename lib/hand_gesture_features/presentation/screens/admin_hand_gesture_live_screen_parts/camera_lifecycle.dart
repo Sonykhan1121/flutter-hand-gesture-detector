@@ -119,6 +119,8 @@ extension on _AdminHandGestureLiveScreenState {
       _controller = controller;
       await controller.initialize();
       await _initializeZoomLevels(controller);
+      _directionGestureDetector.clearState();
+      _moveDirectionDisplayHold.clear();
 
       if (Platform.isIOS) {
         await _turnFlashOff();
@@ -292,6 +294,8 @@ extension on _AdminHandGestureLiveScreenState {
     } catch (e, st) {
       debugPrint('Error stopping camera stream: $e\n$st');
     } finally {
+      _directionGestureDetector.clearState();
+      _moveDirectionDisplayHold.clear();
       if (mounted) {
         _setScreenState(() {
           _isStreaming = false;
@@ -321,6 +325,8 @@ extension on _AdminHandGestureLiveScreenState {
         activeController.value.isRecordingVideo;
 
     _zoomGestureDetector.clearState();
+    _directionGestureDetector.clearState();
+    _moveDirectionDisplayHold.clear();
     _followObjectSequenceDetector.clear();
     _clearFollowObjectTargetCandidates();
     _clearLockedFollowTarget();
@@ -405,6 +411,8 @@ extension on _AdminHandGestureLiveScreenState {
     _zoomControlAutoHideTimer?.cancel();
 
     _zoomGestureDetector.clearState();
+    _directionGestureDetector.clearState();
+    _moveDirectionDisplayHold.clear();
     _followObjectSequenceDetector.clear();
     _clearFollowObjectTargetCandidates();
     _clearLockedFollowTarget();

@@ -1,0 +1,1190 @@
+diff --git a/lib/hand_gesture_features/domain/constants/hand_gesture_thresholds.dart b/lib/hand_gesture_features/domain/constants/hand_gesture_thresholds.dart
+index e15af86..8feca88 100644
+--- a/lib/hand_gesture_features/domain/constants/hand_gesture_thresholds.dart
++++ b/lib/hand_gesture_features/domain/constants/hand_gesture_thresholds.dart
+@@ -81,14 +81,26 @@ abstract final class HandGestureThresholds {
+   static const double directionFingerChainMinHorizontalImageRatio = 0.025;
+   static const double directionFingerChainMinHorizontalSpanRatio = 0.12;
+   static const double directionFingerChainHorizontalDominanceRatio = 1.25;
+-  static const double directionFingerChainRightDominanceRatio = 1.10;
+-  static const double directionFingerChainUpDiagonalHorizontalRatio = 0.25;
++  static const double directionFingerChainRightDominanceRatio = 0.90;
++  static const double directionFingerChainUpDiagonalHorizontalRatio = 0.20;
+   static const double directionFingerChainMinVerticalImageRatio = 0.025;
+   static const double directionFingerChainMinVerticalSpanRatio = 0.18;
+   static const double directionFingerChainVerticalDominanceRatio = 1.25;
+   static const double directionMovingUpMinBackSideConfidence = 0.35;
+   static const double directionFingerChainMaxDepthProjectionRatio = 1.35;
+   static const int directionDownRejectFoldedLongFingerCount = 3;
++  static const double directionDownWristLineToleranceRatio = 0.08;
++  static const Duration directionDownMotionMaxSampleAge = Duration(
++    milliseconds: 800,
++  );
++  static const Duration directionDownMotionIdleResetDuration = Duration(
++    milliseconds: 500,
++  );
++  static const double directionDownMotionMinVerticalImageRatio = 0.025;
++  static const double directionDownMotionMinVerticalHandRatio = 0.06;
++  static const double directionDownMotionMaxHorizontalImageRatio = 0.06;
++  static const double directionDownMotionMaxHorizontalHandRatio = 0.12;
++  static const double directionDownMotionMinPalmSideConfidence = 0.30;
+ 
+   static const double fingerTipVerticalMaxSpreadRatio = 0.22;
+   static const double fingerTipHorizontalMaxSpreadRatio = 0.22;
+diff --git a/lib/hand_gesture_features/domain/services/direction_gesture_detector.dart b/lib/hand_gesture_features/domain/services/direction_gesture_detector.dart
+index 144f106..f70df93 100644
+--- a/lib/hand_gesture_features/domain/services/direction_gesture_detector.dart
++++ b/lib/hand_gesture_features/domain/services/direction_gesture_detector.dart
+@@ -8,24 +8,64 @@ import '../enums/hand_move_direction.dart';
+ import 'hand_geometry_service.dart';
+ 
+ class DirectionGestureDetector {
+-  const DirectionGestureDetector({this.geometry = const HandGeometryService()});
++  DirectionGestureDetector({this.geometry = const HandGeometryService()});
+ 
+   final HandGeometryService geometry;
++  _DownMotionPhase _downMotionPhase = _DownMotionPhase.waitingForDownFromStart;
++  Map<HandLandmarkType, _FingertipMotionPoint> _downMotionReferenceTips =
++      const {};
++  Map<HandLandmarkType, _FingertipMotionPoint> _downMotionLowTips = const {};
++  Map<HandLandmarkType, _FingertipMotionPoint> _lastDownMotionTips = const {};
++  DateTime? _downMotionReferenceAt;
++  DateTime? _lastDownMotionSampleAt;
++  DateTime? _downMotionIdleStartedAt;
++
++  void clearState() {
++    _downMotionPhase = _DownMotionPhase.waitingForDownFromStart;
++    _downMotionReferenceTips = const {};
++    _downMotionLowTips = const {};
++    _lastDownMotionTips = const {};
++    _downMotionReferenceAt = null;
++    _lastDownMotionSampleAt = null;
++    _downMotionIdleStartedAt = null;
++  }
+ 
+   HandMoveDirection detect({
+     required Hand hand,
+     required Size imageSize,
+     required bool mirrorHorizontally,
++    DateTime? now,
+   }) {
+     if (!hand.hasLandmarks || imageSize.width <= 0 || imageSize.height <= 0) {
++      clearState();
+       return HandMoveDirection.none;
+     }
+ 
+-    return _detectFingerChainDirection(
++    final detectedAt = now ?? DateTime.now();
++    final shouldEmitDown = _updateDownMotionGate(
++      hand: hand,
++      imageSize: imageSize,
++      mirrorHorizontally: mirrorHorizontally,
++      now: detectedAt,
++    );
++
++    final direction = _detectFingerChainDirection(
+       hand: hand,
+       imageSize: imageSize,
+       mirrorHorizontally: mirrorHorizontally,
+     );
++
++    if (shouldEmitDown &&
++        (direction == HandMoveDirection.none ||
++            direction == HandMoveDirection.down)) {
++      return HandMoveDirection.down;
++    }
++
++    if (direction == HandMoveDirection.down && !shouldEmitDown) {
++      return HandMoveDirection.none;
++    }
++
++    return direction;
+   }
+ 
+   HandMoveDirection _detectFingerChainDirection({
+@@ -148,29 +188,30 @@ class DirectionGestureDetector {
+ 
+     final horizontalDirection =
+         leftPointingFingerCount >=
+-            HandGestureThresholds.directionFingerChainMinAlignedCount
+-        ? HandMoveDirection.left
+-        : rightPointingFingerCount >=
+-              HandGestureThresholds.directionFingerChainMinAlignedCount
+-        ? HandMoveDirection.right
+-        : HandMoveDirection.none;
++                HandGestureThresholds.directionFingerChainMinAlignedCount
++            ? HandMoveDirection.left
++            : rightPointingFingerCount >=
++                HandGestureThresholds.directionFingerChainMinAlignedCount
++            ? HandMoveDirection.right
++            : HandMoveDirection.none;
+     final verticalDirection =
+         upPointingFingerCount >=
+-            HandGestureThresholds.directionFingerChainMinAlignedCount
+-        ? HandMoveDirection.up
+-        : downPointingFingerCount >=
+-              HandGestureThresholds.directionFingerChainMinAlignedCount
+-        ? HandMoveDirection.down
+-        : HandMoveDirection.none;
++                HandGestureThresholds.directionFingerChainMinAlignedCount
++            ? HandMoveDirection.up
++            : downPointingFingerCount >=
++                HandGestureThresholds.directionFingerChainMinAlignedCount
++            ? HandMoveDirection.down
++            : HandMoveDirection.none;
+ 
+     final HandMoveDirection selectedDirection;
+     if (horizontalDirection != HandMoveDirection.none &&
+         verticalDirection != HandMoveDirection.none) {
+-      selectedDirection = verticalDirection == HandMoveDirection.up
+-          ? horizontalDirection
+-          : totalDeltaY.abs() > totalDeltaX.abs()
+-          ? verticalDirection
+-          : horizontalDirection;
++      selectedDirection =
++          verticalDirection == HandMoveDirection.up
++              ? horizontalDirection
++              : totalDeltaY.abs() > totalDeltaX.abs()
++              ? verticalDirection
++              : horizontalDirection;
+     } else if (horizontalDirection != HandMoveDirection.none) {
+       selectedDirection = horizontalDirection;
+     } else {
+@@ -201,6 +242,291 @@ class DirectionGestureDetector {
+     return geometry.isFingerChainExtended3D(chain);
+   }
+ 
++  bool _updateDownMotionGate({
++    required Hand hand,
++    required Size imageSize,
++    required bool mirrorHorizontally,
++    required DateTime now,
++  }) {
++    final handSize = _handSize(hand);
++    if (handSize <= 0) {
++      clearState();
++      return false;
++    }
++
++    if (!_isPalmSideVisible(
++      hand: hand,
++      mirrorHorizontally: mirrorHorizontally,
++    )) {
++      clearState();
++      return false;
++    }
++
++    final currentTips = _visibleFingertipMotionPoints(
++      hand: hand,
++      imageSize: imageSize,
++      mirrorHorizontally: mirrorHorizontally,
++    );
++
++    if (currentTips.length <
++        HandGestureThresholds.directionFingerChainMinAlignedCount) {
++      clearState();
++      return false;
++    }
++
++    final lastSampleAt = _lastDownMotionSampleAt;
++    if (lastSampleAt != null &&
++        now.difference(lastSampleAt) >
++            HandGestureThresholds.directionDownMotionMaxSampleAge) {
++      _resetDownMotionReference(currentTips, now);
++      return false;
++    }
++
++    _lastDownMotionSampleAt = now;
++
++    final verticalThreshold = _downMotionVerticalThreshold(
++      imageSize: imageSize,
++      handSize: handSize,
++    );
++    final horizontalLimit = _downMotionHorizontalLimit(
++      imageSize: imageSize,
++      handSize: handSize,
++    );
++
++    if (_hasBeenIdleLongEnough(
++      currentTips: currentTips,
++      now: now,
++      verticalThreshold: verticalThreshold,
++      horizontalLimit: horizontalLimit,
++    )) {
++      _resetDownMotionReference(currentTips, now);
++      return false;
++    }
++
++    if (_downMotionReferenceTips.isEmpty || _downMotionReferenceAt == null) {
++      _resetDownMotionReference(currentTips, now);
++      return false;
++    }
++
++    final referenceAt = _downMotionReferenceAt!;
++    if (now.difference(referenceAt) >
++        HandGestureThresholds.directionDownMotionMaxSampleAge) {
++      _resetDownMotionReference(currentTips, now);
++      return false;
++    }
++
++    final motion = _countDownMotion(
++      currentTips: currentTips,
++      referenceTips: _downMotionReferenceTips,
++      verticalThreshold: verticalThreshold,
++      horizontalLimit: horizontalLimit,
++    );
++    var emitDown = false;
++
++    switch (_downMotionPhase) {
++      case _DownMotionPhase.waitingForDownFromStart:
++        if (motion.downCount >=
++            HandGestureThresholds.directionFingerChainMinAlignedCount) {
++          _downMotionPhase = _DownMotionPhase.waitingForReturnToStart;
++          _downMotionLowTips = currentTips;
++          _downMotionIdleStartedAt = null;
++        } else if (motion.upCount >=
++            HandGestureThresholds.directionFingerChainMinAlignedCount) {
++          _setDownMotionReference(currentTips, now);
++        }
++      case _DownMotionPhase.waitingForReturnToStart:
++        final returnUpCount = _countReturnedTowardDownMotionStart(
++          currentTips: currentTips,
++          referenceTips: _downMotionReferenceTips,
++          lowTips: _downMotionLowTips,
++          verticalThreshold: verticalThreshold,
++          horizontalLimit: horizontalLimit,
++        );
++
++        if (returnUpCount >=
++            HandGestureThresholds.directionFingerChainMinAlignedCount) {
++          emitDown = true;
++          _resetDownMotionReference(currentTips, now);
++        } else if (motion.downCount >=
++            HandGestureThresholds.directionFingerChainMinAlignedCount) {
++          _downMotionLowTips = currentTips;
++          _downMotionIdleStartedAt = null;
++        }
++    }
++
++    _lastDownMotionTips = currentTips;
++    return emitDown;
++  }
++
++  Map<HandLandmarkType, _FingertipMotionPoint> _visibleFingertipMotionPoints({
++    required Hand hand,
++    required Size imageSize,
++    required bool mirrorHorizontally,
++  }) {
++    double visibleX(double rawX) =>
++        mirrorHorizontally ? imageSize.width - rawX : rawX;
++
++    final palmCenter = geometry.palmCenter3D(hand);
++    if (palmCenter == null) return const {};
++
++    final points = <HandLandmarkType, _FingertipMotionPoint>{};
++
++    for (final tipType in HandGestureThresholds.directionFingerTipTypes) {
++      final tip = geometry.visibleLandmark(hand, tipType);
++      if (tip == null) continue;
++
++      points[tipType] = _FingertipMotionPoint(
++        x: visibleX(tip.x) - visibleX(palmCenter.x),
++        y: tip.y - palmCenter.y,
++      );
++    }
++
++    return points;
++  }
++
++  bool _hasBeenIdleLongEnough({
++    required Map<HandLandmarkType, _FingertipMotionPoint> currentTips,
++    required DateTime now,
++    required double verticalThreshold,
++    required double horizontalLimit,
++  }) {
++    if (_downMotionPhase == _DownMotionPhase.waitingForDownFromStart ||
++        _lastDownMotionTips.isEmpty) {
++      _downMotionIdleStartedAt = null;
++      return false;
++    }
++
++    final idleVerticalThreshold = verticalThreshold * 0.35;
++    final idleHorizontalLimit = horizontalLimit * 0.35;
++    var movingTipCount = 0;
++
++    for (final tipType in HandGestureThresholds.directionFingerTipTypes) {
++      final current = currentTips[tipType];
++      final previous = _lastDownMotionTips[tipType];
++      if (current == null || previous == null) continue;
++
++      final deltaX = current.x - previous.x;
++      final deltaY = current.y - previous.y;
++      if (deltaY.abs() >= idleVerticalThreshold ||
++          deltaX.abs() >= idleHorizontalLimit) {
++        movingTipCount += 1;
++      }
++    }
++
++    if (movingTipCount >=
++        HandGestureThresholds.directionFingerChainMinAlignedCount) {
++      _downMotionIdleStartedAt = null;
++      return false;
++    }
++
++    final idleStartedAt = _downMotionIdleStartedAt ?? now;
++    _downMotionIdleStartedAt = idleStartedAt;
++
++    return now.difference(idleStartedAt) >=
++        HandGestureThresholds.directionDownMotionIdleResetDuration;
++  }
++
++  _DownMotionCounts _countDownMotion({
++    required Map<HandLandmarkType, _FingertipMotionPoint> currentTips,
++    required Map<HandLandmarkType, _FingertipMotionPoint> referenceTips,
++    required double verticalThreshold,
++    required double horizontalLimit,
++  }) {
++    var upCount = 0;
++    var downCount = 0;
++
++    for (final tipType in HandGestureThresholds.directionFingerTipTypes) {
++      final current = currentTips[tipType];
++      final reference = referenceTips[tipType];
++      if (current == null || reference == null) continue;
++
++      final deltaX = current.x - reference.x;
++      if (deltaX.abs() > horizontalLimit) continue;
++
++      final deltaY = current.y - reference.y;
++      if (deltaY <= -verticalThreshold) {
++        upCount += 1;
++      } else if (deltaY >= verticalThreshold) {
++        downCount += 1;
++      }
++    }
++
++    return _DownMotionCounts(upCount: upCount, downCount: downCount);
++  }
++
++  int _countReturnedTowardDownMotionStart({
++    required Map<HandLandmarkType, _FingertipMotionPoint> currentTips,
++    required Map<HandLandmarkType, _FingertipMotionPoint> referenceTips,
++    required Map<HandLandmarkType, _FingertipMotionPoint> lowTips,
++    required double verticalThreshold,
++    required double horizontalLimit,
++  }) {
++    var returnUpCount = 0;
++    final returnTolerance = verticalThreshold * 0.45;
++
++    for (final tipType in HandGestureThresholds.directionFingerTipTypes) {
++      final current = currentTips[tipType];
++      final reference = referenceTips[tipType];
++      final low = lowTips[tipType];
++      if (current == null || reference == null || low == null) continue;
++
++      final deltaX = current.x - reference.x;
++      if (deltaX.abs() > horizontalLimit) continue;
++
++      final movedUpFromLow = low.y - current.y >= verticalThreshold;
++      final returnedNearStart = current.y <= reference.y + returnTolerance;
++      if (movedUpFromLow && returnedNearStart) {
++        returnUpCount += 1;
++      }
++    }
++
++    return returnUpCount;
++  }
++
++  double _downMotionVerticalThreshold({
++    required Size imageSize,
++    required double handSize,
++  }) {
++    return math.max(
++      imageSize.height *
++          HandGestureThresholds.directionDownMotionMinVerticalImageRatio,
++      handSize * HandGestureThresholds.directionDownMotionMinVerticalHandRatio,
++    );
++  }
++
++  double _downMotionHorizontalLimit({
++    required Size imageSize,
++    required double handSize,
++  }) {
++    return math.max(
++      imageSize.width *
++          HandGestureThresholds.directionDownMotionMaxHorizontalImageRatio,
++      handSize *
++          HandGestureThresholds.directionDownMotionMaxHorizontalHandRatio,
++    );
++  }
++
++  void _resetDownMotionReference(
++    Map<HandLandmarkType, _FingertipMotionPoint> currentTips,
++    DateTime now,
++  ) {
++    _downMotionPhase = _DownMotionPhase.waitingForDownFromStart;
++    _setDownMotionReference(currentTips, now);
++    _downMotionLowTips = const {};
++    _lastDownMotionTips = currentTips;
++    _lastDownMotionSampleAt = now;
++    _downMotionIdleStartedAt = null;
++  }
++
++  void _setDownMotionReference(
++    Map<HandLandmarkType, _FingertipMotionPoint> currentTips,
++    DateTime now,
++  ) {
++    _downMotionReferenceTips = currentTips;
++    _downMotionReferenceAt = now;
++    _downMotionIdleStartedAt = null;
++  }
++
+   bool _hasClearDownShape({
+     required Hand hand,
+     required Size imageSize,
+@@ -222,6 +548,10 @@ class DirectionGestureDetector {
+ 
+     if (palmCenter == null || handSize <= 0) return false;
+ 
++    if (!_hasFingertipsAtOrBelowWristLine(hand: hand, handSize: handSize)) {
++      return false;
++    }
++
+     final foldedFingerCount = geometry.foldedLongFingerCount3D(
+       hand: hand,
+       palmCenter: palmCenter,
+@@ -232,6 +562,30 @@ class DirectionGestureDetector {
+         HandGestureThresholds.directionDownRejectFoldedLongFingerCount;
+   }
+ 
++  bool _hasFingertipsAtOrBelowWristLine({
++    required Hand hand,
++    required double handSize,
++  }) {
++    final wrist = geometry.visibleLandmark(hand, HandLandmarkType.wrist);
++    if (wrist == null) return false;
++
++    final tolerance =
++        handSize * HandGestureThresholds.directionDownWristLineToleranceRatio;
++    var fingertipCount = 0;
++
++    for (final tipType in HandGestureThresholds.directionFingerTipTypes) {
++      final tip = geometry.visibleLandmark(hand, tipType);
++      if (tip == null) continue;
++
++      if (tip.y + tolerance >= wrist.y) {
++        fingertipCount += 1;
++      }
++    }
++
++    return fingertipCount >=
++        HandGestureThresholds.directionFingerChainMinAlignedCount;
++  }
++
+   bool _isBackSideVisible({
+     required Hand hand,
+     required bool mirrorHorizontally,
+@@ -286,6 +640,60 @@ class DirectionGestureDetector {
+         HandGestureThresholds.directionMovingUpMinBackSideConfidence;
+   }
+ 
++  bool _isPalmSideVisible({
++    required Hand hand,
++    required bool mirrorHorizontally,
++  }) {
++    final handedness = hand.handedness;
++    final wrist = geometry.visibleLandmark(hand, HandLandmarkType.wrist);
++    final indexMcp = geometry.visibleLandmark(
++      hand,
++      HandLandmarkType.indexFingerMCP,
++    );
++    final pinkyMcp = geometry.visibleLandmark(hand, HandLandmarkType.pinkyMCP);
++    final thumbTip = geometry.visibleLandmark(hand, HandLandmarkType.thumbTip);
++
++    if (handedness == null ||
++        wrist == null ||
++        indexMcp == null ||
++        pinkyMcp == null ||
++        thumbTip == null) {
++      return false;
++    }
++
++    var expectedPalmSide = handedness == Handedness.right ? 1.0 : -1.0;
++    if (mirrorHorizontally) {
++      expectedPalmSide *= -1;
++    }
++
++    final knuckleSide = _normalizedCross(
++      origin: wrist,
++      first: indexMcp,
++      second: pinkyMcp,
++    );
++    final thumbSide = _normalizedCross(
++      origin: indexMcp,
++      first: pinkyMcp,
++      second: thumbTip,
++    );
++
++    final knucklePalmSideScore = _inverseLerp(
++      0.10,
++      0.35,
++      knuckleSide * expectedPalmSide,
++    );
++    final thumbPalmSideScore = _inverseLerp(
++      0.08,
++      0.25,
++      thumbSide * expectedPalmSide,
++    );
++    final confidence = (knucklePalmSideScore * 0.75 + thumbPalmSideScore * 0.25)
++        .clamp(0.0, 1.0);
++
++    return confidence >=
++        HandGestureThresholds.directionDownMotionMinPalmSideConfidence;
++  }
++
+   double _normalizedCross({
+     required HandLandmark origin,
+     required HandLandmark first,
+@@ -317,3 +725,19 @@ class DirectionGestureDetector {
+     return math.max(handWidth, handHeight);
+   }
+ }
++
++enum _DownMotionPhase { waitingForDownFromStart, waitingForReturnToStart }
++
++class _FingertipMotionPoint {
++  const _FingertipMotionPoint({required this.x, required this.y});
++
++  final double x;
++  final double y;
++}
++
++class _DownMotionCounts {
++  const _DownMotionCounts({required this.upCount, required this.downCount});
++
++  final int upCount;
++  final int downCount;
++}
+diff --git a/lib/hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen_parts/camera_lifecycle.dart b/lib/hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen_parts/camera_lifecycle.dart
+index 653ec57..01b7868 100644
+--- a/lib/hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen_parts/camera_lifecycle.dart
++++ b/lib/hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen_parts/camera_lifecycle.dart
+@@ -129,6 +129,8 @@ extension on _AdminHandGestureLiveScreenState {
+         return;
+       }
+ 
++      _directionGestureDetector.clearState();
++
+       _setScreenState(() {
+         _hasCameraFailure = false;
+         _shouldOpenSettingsOnRetry = false;
+@@ -255,6 +257,9 @@ extension on _AdminHandGestureLiveScreenState {
+     }
+ 
+     try {
++      _lastTrackingFrameRotation = null;
++      _directionGestureDetector.clearState();
++      await _handDetector?.resetTracking();
+       await controller.startImageStream(_processCameraImage);
+       if (!mounted) return;
+ 
+@@ -321,6 +326,7 @@ extension on _AdminHandGestureLiveScreenState {
+         activeController.value.isRecordingVideo;
+ 
+     _zoomGestureDetector.clearState();
++    _directionGestureDetector.clearState();
+     _followObjectSequenceDetector.clear();
+     _clearFollowObjectTargetCandidates();
+     _clearLockedFollowTarget();
+@@ -405,6 +411,7 @@ extension on _AdminHandGestureLiveScreenState {
+     _zoomControlAutoHideTimer?.cancel();
+ 
+     _zoomGestureDetector.clearState();
++    _directionGestureDetector.clearState();
+     _followObjectSequenceDetector.clear();
+     _clearFollowObjectTargetCandidates();
+     _clearLockedFollowTarget();
+diff --git a/lib/hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen_parts/gesture_processing.dart b/lib/hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen_parts/gesture_processing.dart
+index 4851d10..6b9436e 100644
+--- a/lib/hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen_parts/gesture_processing.dart
++++ b/lib/hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen_parts/gesture_processing.dart
+@@ -27,6 +27,11 @@ extension on _AdminHandGestureLiveScreenState {
+ 
+     try {
+       final rotation = _cameraFrameRotation(image);
++      if (_lastTrackingFrameRotation != rotation) {
++        await detector.resetTracking();
++        _directionGestureDetector.clearState();
++        _lastTrackingFrameRotation = rotation;
++      }
+ 
+       final detectionImageSize = detectionSize(
+         width: image.width,
+@@ -148,6 +153,7 @@ extension on _AdminHandGestureLiveScreenState {
+       if (followObjectRelease != null) {
+         final selectedTarget = followObjectRelease.target;
+         _zoomGestureDetector.markPoseInvalid(now);
++        _directionGestureDetector.clearState();
+         _clearRecordingGestureHold();
+         _clearFaceDetectGestureHold();
+ 
+@@ -170,6 +176,7 @@ extension on _AdminHandGestureLiveScreenState {
+       }
+ 
+       _zoomGestureDetector.markPoseInvalid(now);
++      _directionGestureDetector.clearState();
+       _followObjectSequenceDetector.clear();
+       _clearFollowObjectTargetCandidates();
+       _clearRecordingGestureHold();
+@@ -210,6 +217,7 @@ extension on _AdminHandGestureLiveScreenState {
+       if (followObjectRelease != null) {
+         final selectedTarget = followObjectRelease.target;
+         _zoomGestureDetector.markPoseInvalid(now);
++        _directionGestureDetector.clearState();
+         _clearRecordingGestureHold();
+         _clearFaceDetectGestureHold();
+ 
+@@ -247,6 +255,7 @@ extension on _AdminHandGestureLiveScreenState {
+       }
+ 
+       _zoomGestureDetector.markPoseInvalid(now);
++      _directionGestureDetector.clearState();
+       _followObjectSequenceDetector.clear();
+       _clearFollowObjectTargetCandidates();
+       _clearRecordingGestureHold();
+@@ -322,6 +331,7 @@ extension on _AdminHandGestureLiveScreenState {
+ 
+       if (holdProgress < 1) {
+         _zoomGestureDetector.clearState();
++        _directionGestureDetector.clearState();
+         _followObjectSequenceDetector.clear();
+         _clearFollowObjectTargetCandidates();
+         _clearRecordingGestureHold();
+@@ -510,17 +520,22 @@ extension on _AdminHandGestureLiveScreenState {
+         _zoomGestureDetector.isGestureActive;
+ 
+     var moveDirection = HandMoveDirection.none;
+-    if (!followTrackingActive &&
++    final canDetectDirection =
++        !followTrackingActive &&
+         customGestureLabels.isEmpty &&
+         !hasOverlappingCustomGestures &&
+         !recordingGestureActive &&
+         !zoomGestureActive &&
+-        !hasKnownGesture) {
++        !hasKnownGesture;
++    if (canDetectDirection) {
+       moveDirection = _directionGestureDetector.detect(
+         hand: bestHand,
+         imageSize: detectionImageSize,
+         mirrorHorizontally: mirrorDirectionalGestureCoordinates,
++        now: now,
+       );
++    } else {
++      _directionGestureDetector.clearState();
+     }
+ 
+     final hasDirectionGesture = moveDirection != HandMoveDirection.none;
+@@ -1168,6 +1183,7 @@ extension on _AdminHandGestureLiveScreenState {
+ 
+   void _clearAllActiveGestureTasks({required bool resetCameraZoom}) {
+     _zoomGestureDetector.clearState();
++    _directionGestureDetector.clearState();
+     _followObjectSequenceDetector.clear();
+     _clearFollowObjectTargetCandidates();
+     _clearLockedFollowTarget();
+diff --git a/test/direction_gesture_detector_test.dart b/test/direction_gesture_detector_test.dart
+index e3401ae..b303cac 100644
+--- a/test/direction_gesture_detector_test.dart
++++ b/test/direction_gesture_detector_test.dart
+@@ -5,6 +5,18 @@ import 'package:gesture_detector/hand_gesture_features/domain/services/direction
+ import 'package:hand_detection/hand_detection.dart';
+ 
+ const _imageSize = Size(400, 400);
++const _downPoseVectors = [
++  Offset(0, 140),
++  Offset(0, 110),
++  Offset(0, 80),
++  Offset(0, -90),
++];
++const _beckonPoseVectors = [
++  Offset(0, -120),
++  Offset(0, -135),
++  Offset(0, -125),
++  Offset(0, -105),
++];
+ 
+ const _fingerChains = [
+   [
+@@ -37,7 +49,11 @@ enum _VisibleHandSide { none, palm, back }
+ 
+ void main() {
+   group('DirectionGestureDetector finger chains', () {
+-    const detector = DirectionGestureDetector();
++    late DirectionGestureDetector detector;
++
++    setUp(() {
++      detector = DirectionGestureDetector();
++    });
+ 
+     test('returns left when at least three finger chains point left', () {
+       final hand = _handWithFingerChainVectors([
+@@ -86,19 +102,234 @@ void main() {
+       expect(_detect(detector, hand), HandMoveDirection.none);
+     });
+ 
+-    test('returns down when at least three finger chains point down', () {
++    test('returns none for static down pose before bounce motion', () {
++      final hand = _downPoseHand();
++
++      expect(_detect(detector, hand), HandMoveDirection.none);
++    });
++
++    test('returns down when palm-facing fingertips bend down then back up', () {
++      final now = DateTime(2026);
++
++      expect(
++        _detect(detector, _beckonHand(), now: now),
++        HandMoveDirection.none,
++      );
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 36)),
++          now: now.add(const Duration(milliseconds: 100)),
++        ),
++        HandMoveDirection.none,
++      );
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 4)),
++          now: now.add(const Duration(milliseconds: 200)),
++        ),
++        HandMoveDirection.down,
++      );
++    });
++
++    test(
++      'does not return down when the whole palm moves instead of fingers',
++      () {
++        final now = DateTime(2026);
++
++        _detect(detector, _beckonHand(), now: now);
++        _detect(
++          detector,
++          _beckonHand(handOffset: const Offset(0, 36)),
++          now: now.add(const Duration(milliseconds: 100)),
++        );
++
++        expect(
++          _detect(
++            detector,
++            _beckonHand(handOffset: const Offset(0, 4)),
++            now: now.add(const Duration(milliseconds: 200)),
++          ),
++          HandMoveDirection.none,
++        );
++      },
++    );
++
++    test('rearms after palm-facing finger bend completes', () {
++      final now = DateTime(2026);
++
++      _detect(detector, _beckonHand(), now: now);
++      _detect(
++        detector,
++        _beckonHand(tipOffset: const Offset(0, 36)),
++        now: now.add(const Duration(milliseconds: 100)),
++      );
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 4)),
++          now: now.add(const Duration(milliseconds: 200)),
++        ),
++        HandMoveDirection.down,
++      );
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 42)),
++          now: now.add(const Duration(milliseconds: 300)),
++        ),
++        HandMoveDirection.none,
++      );
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 4)),
++          now: now.add(const Duration(milliseconds: 400)),
++        ),
++        HandMoveDirection.down,
++      );
++    });
++
++    test('does not return down before fingertips return up to start', () {
++      final now = DateTime(2026);
++
++      expect(
++        _detect(detector, _beckonHand(), now: now),
++        HandMoveDirection.none,
++      );
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 36)),
++          now: now.add(const Duration(milliseconds: 100)),
++        ),
++        HandMoveDirection.none,
++      );
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 50)),
++          now: now.add(const Duration(milliseconds: 200)),
++        ),
++        HandMoveDirection.none,
++      );
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 62)),
++          now: now.add(const Duration(milliseconds: 300)),
++        ),
++        HandMoveDirection.none,
++      );
++    });
++
++    test('does not return down when only two fingertips agree', () {
++      final now = DateTime(2026);
++
++      _detect(detector, _beckonHand(), now: now);
++      _detect(
++        detector,
++        _beckonHand(
++          fingerTipOffsets: _fingerOffsets(
++            movedFingerIndexes: {0, 1},
++            movedOffset: const Offset(0, 36),
++          ),
++        ),
++        now: now.add(const Duration(milliseconds: 100)),
++      );
++
++      expect(
++        _detect(
++          detector,
++          _beckonHand(
++            fingerTipOffsets: _fingerOffsets(
++              movedFingerIndexes: {0, 1},
++              movedOffset: const Offset(0, 4),
++            ),
++          ),
++          now: now.add(const Duration(milliseconds: 200)),
++        ),
++        HandMoveDirection.none,
++      );
++    });
++
++    test('does not return down for stale down samples', () {
++      final now = DateTime(2026);
++
++      _detect(detector, _beckonHand(), now: now);
++      _detect(
++        detector,
++        _beckonHand(tipOffset: const Offset(0, 36)),
++        now: now.add(const Duration(milliseconds: 900)),
++      );
++
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 4)),
++          now: now.add(const Duration(milliseconds: 1000)),
++        ),
++        HandMoveDirection.none,
++      );
++    });
++
++    test('clearState allows a new start down up sequence', () {
++      final now = DateTime(2026);
++
++      _detect(detector, _beckonHand(), now: now);
++      _detect(
++        detector,
++        _beckonHand(tipOffset: const Offset(0, 36)),
++        now: now.add(const Duration(milliseconds: 100)),
++      );
++      detector.clearState();
++
++      _detect(
++        detector,
++        _beckonHand(),
++        now: now.add(const Duration(milliseconds: 200)),
++      );
++      _detect(
++        detector,
++        _beckonHand(tipOffset: const Offset(0, 36)),
++        now: now.add(const Duration(milliseconds: 300)),
++      );
++
++      expect(
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 4)),
++          now: now.add(const Duration(milliseconds: 400)),
++        ),
++        HandMoveDirection.down,
++      );
++    });
++
++    test('returns none when down-pointing fingertips stay above wrist', () {
+       final hand = _handWithFingerChainVectors([
+-        const Offset(0, 90),
+-        const Offset(0, 90),
+-        const Offset(0, 90),
++        const Offset(0, 70),
++        const Offset(0, 50),
++        const Offset(0, 30),
+         const Offset(0, -90),
+-      ]);
++      ], visibleHandSide: _VisibleHandSide.palm);
++
++      expect(_detect(detector, hand), HandMoveDirection.none);
++    });
+ 
+-      expect(_detect(detector, hand), HandMoveDirection.down);
++    test('returns up when fingertips are at or above the top edge', () {
++      final hand = _handWithFingerChainVectors([
++        const Offset(0, -160),
++        const Offset(0, -190),
++        const Offset(0, -220),
++        const Offset(0, -250),
++      ], visibleHandSide: _VisibleHandSide.back);
++
++      expect(_detect(detector, hand), HandMoveDirection.up);
+     });
+ 
+     test(
+-      'returns down when package says closed fist but fingers point down',
++      'returns none when package says closed fist but down pose has no bounce',
+       () {
+         final hand = _handWithFingerChainVectors(
+           [
+@@ -107,13 +338,14 @@ void main() {
+             const Offset(0, 90),
+             const Offset(0, 90),
+           ],
++          visibleHandSide: _VisibleHandSide.palm,
+           gesture: const GestureResult(
+             type: GestureType.closedFist,
+             confidence: 1,
+           ),
+         );
+ 
+-        expect(_detect(detector, hand), HandMoveDirection.down);
++        expect(_detect(detector, hand), HandMoveDirection.none);
+       },
+     );
+ 
+@@ -230,15 +462,23 @@ void main() {
+           const Offset(50, -90),
+           const Offset(50, -90),
+         ]);
+-        final downHand = _handWithFingerChainVectors([
+-          const Offset(-50, 90),
+-          const Offset(-50, 90),
+-          const Offset(-50, 90),
+-          const Offset(-50, 90),
+-        ]);
+-
+         expect(_detect(detector, rightHand), HandMoveDirection.right);
+-        expect(_detect(detector, downHand), HandMoveDirection.down);
++        detector.clearState();
++        final now = DateTime(2026);
++        _detect(detector, _beckonHand(), now: now);
++        _detect(
++          detector,
++          _beckonHand(tipOffset: const Offset(0, 36)),
++          now: now.add(const Duration(milliseconds: 100)),
++        );
++        expect(
++          _detect(
++            detector,
++            _beckonHand(tipOffset: const Offset(0, 4)),
++            now: now.add(const Duration(milliseconds: 200)),
++          ),
++          HandMoveDirection.down,
++        );
+       },
+     );
+ 
+@@ -383,7 +623,7 @@ void main() {
+       expect(_detect(detector, upHand), HandMoveDirection.none);
+     });
+ 
+-    test('returns down with only the 16 finger-chain points', () {
++    test('returns none for down with only the 16 finger-chain points', () {
+       final downHand = _handWithFingerChainVectors([
+         const Offset(0, 90),
+         const Offset(0, 90),
+@@ -391,7 +631,7 @@ void main() {
+         const Offset(0, 90),
+       ]);
+ 
+-      expect(_detect(detector, downHand), HandMoveDirection.down);
++      expect(_detect(detector, downHand), HandMoveDirection.none);
+     });
+ 
+     test('returns none when any finger-chain point is missing', () {
+@@ -428,11 +668,50 @@ HandMoveDirection _detect(
+   DirectionGestureDetector detector,
+   Hand hand, {
+   bool mirrorHorizontally = false,
++  DateTime? now,
+ }) {
+   return detector.detect(
+     hand: hand,
+     imageSize: _imageSize,
+     mirrorHorizontally: mirrorHorizontally,
++    now: now,
++  );
++}
++
++Hand _downPoseHand({
++  Offset handOffset = Offset.zero,
++  List<Offset>? fingerOffsets,
++}) {
++  return _handWithFingerChainVectors(
++    _downPoseVectors,
++    visibleHandSide: _VisibleHandSide.palm,
++    handOffset: handOffset,
++    fingerOffsets: fingerOffsets,
++  );
++}
++
++Hand _beckonHand({
++  Offset handOffset = Offset.zero,
++  Offset tipOffset = Offset.zero,
++  List<Offset>? fingerTipOffsets,
++}) {
++  return _handWithFingerChainVectors(
++    _beckonPoseVectors,
++    visibleHandSide: _VisibleHandSide.palm,
++    handOffset: handOffset,
++    fingerTipOffsets:
++        fingerTipOffsets ??
++        List<Offset>.filled(_fingerChains.length, tipOffset),
++  );
++}
++
++List<Offset> _fingerOffsets({
++  required Set<int> movedFingerIndexes,
++  required Offset movedOffset,
++}) {
++  return List<Offset>.generate(
++    _fingerChains.length,
++    (index) => movedFingerIndexes.contains(index) ? movedOffset : Offset.zero,
+   );
+ }
+ 
+@@ -445,6 +724,9 @@ Hand _handWithFingerChainVectors(
+   _VisibleHandSide visibleHandSide = _VisibleHandSide.none,
+   bool mirrorHorizontally = false,
+   GestureResult? gesture,
++  Offset handOffset = Offset.zero,
++  List<Offset>? fingerOffsets,
++  List<Offset>? fingerTipOffsets,
+ }) {
+   final landmarks = <HandLandmark>[];
+   final bases = [
+@@ -458,22 +740,28 @@ Hand _handWithFingerChainVectors(
+     final chainTypes = _fingerChains[fingerIndex];
+     final base = bases[fingerIndex];
+     final vector = vectors[fingerIndex];
++    final fingerOffset =
++        fingerOffsets == null ? Offset.zero : fingerOffsets[fingerIndex];
++    final fingerTipOffset =
++        fingerTipOffsets == null ? Offset.zero : fingerTipOffsets[fingerIndex];
+     final depthVector = depthVectors == null ? 0.0 : depthVectors[fingerIndex];
+-    final points = foldedFingerIndexes.contains(fingerIndex)
+-        ? _foldedChainPoints(base, vector)
+-        : _straightChainPoints(base, vector);
++    final points =
++        foldedFingerIndexes.contains(fingerIndex)
++            ? _foldedChainPoints(base, vector)
++            : _straightChainPoints(base, vector);
+ 
+     for (var pointIndex = 0; pointIndex < chainTypes.length; pointIndex++) {
+       final type = chainTypes[pointIndex];
+       if (missingTypes.contains(type)) continue;
+ 
+       final point = points[pointIndex];
++      final pointOffset = pointIndex == 3 ? fingerTipOffset : Offset.zero;
+ 
+       landmarks.add(
+         HandLandmark(
+           type: type,
+-          x: point.dx,
+-          y: point.dy,
++          x: point.dx + handOffset.dx + fingerOffset.dx + pointOffset.dx,
++          y: point.dy + handOffset.dy + fingerOffset.dy + pointOffset.dy,
+           z: depthVector * pointIndex / 3,
+           visibility: lowVisibilityTypes.contains(type) ? 0.2 : 1,
+         ),
+@@ -487,6 +775,7 @@ Hand _handWithFingerChainVectors(
+     mirrorHorizontally: mirrorHorizontally,
+     missingTypes: missingTypes,
+     lowVisibilityTypes: lowVisibilityTypes,
++    handOffset: handOffset,
+   );
+ 
+   return Hand(
+@@ -506,17 +795,16 @@ void _addVisibleHandSideLandmarks(
+   required bool mirrorHorizontally,
+   required Set<HandLandmarkType> missingTypes,
+   required Set<HandLandmarkType> lowVisibilityTypes,
++  required Offset handOffset,
+ }) {
+   if (visibleHandSide == _VisibleHandSide.none) return;
+ 
+   final expectedSide = mirrorHorizontally ? -1.0 : 1.0;
+-  final rawSide = visibleHandSide == _VisibleHandSide.back
+-      ? -expectedSide
+-      : expectedSide;
++  final rawSide =
++      visibleHandSide == _VisibleHandSide.back ? -expectedSide : expectedSide;
+   final wrist = rawSide < 0 ? const Offset(300, 270) : const Offset(140, 270);
+-  final thumbTip = rawSide < 0
+-      ? const Offset(260, 180)
+-      : const Offset(180, 180);
++  final thumbTip =
++      rawSide < 0 ? const Offset(260, 180) : const Offset(180, 180);
+ 
+   void addLandmark(HandLandmarkType type, Offset point) {
+     if (missingTypes.contains(type)) return;
+@@ -524,8 +812,8 @@ void _addVisibleHandSideLandmarks(
+     landmarks.add(
+       HandLandmark(
+         type: type,
+-        x: point.dx,
+-        y: point.dy,
++        x: point.dx + handOffset.dx,
++        y: point.dy + handOffset.dy,
+         z: 0,
+         visibility: lowVisibilityTypes.contains(type) ? 0.2 : 1,
+       ),
+@@ -549,9 +837,10 @@ List<Offset> _straightChainPoints(Offset base, Offset vector) {
+ List<Offset> _foldedChainPoints(Offset base, Offset vector) {
+   final tip = base + vector;
+   final vectorLength = vector.distance;
+-  final bendOffset = vectorLength == 0
+-      ? Offset.zero
+-      : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 45;
++  final bendOffset =
++      vectorLength == 0
++          ? Offset.zero
++          : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 45;
+   final pip = Offset.lerp(base, tip, 0.5)! + bendOffset;
+   final dip = Offset.lerp(pip, tip, 0.5)!;
+ 

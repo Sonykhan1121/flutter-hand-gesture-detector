@@ -23,6 +23,7 @@ import '../../domain/services/custom_gesture_detector.dart';
 import '../../domain/services/direction_gesture_detector.dart';
 import '../../domain/services/follow_object_sequence_detector.dart';
 import '../../domain/services/follow_target_selector.dart';
+import '../../domain/services/move_direction_display_hold.dart';
 import '../../domain/services/zoom_gesture_detector.dart';
 import '../painters/follow_target_debug_overlay_painter.dart';
 import '../painters/follow_target_overlay_painter.dart';
@@ -63,6 +64,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
 
   final _customGestureDetector = CustomGestureDetector();
   final _directionGestureDetector = DirectionGestureDetector();
+  final _moveDirectionDisplayHold = MoveDirectionDisplayHold();
   final _zoomGestureDetector = ZoomGestureDetector();
   final _followTargetSelector = const FollowTargetSelector();
 
@@ -119,6 +121,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   DateTime? _lastFrameProcessedAt;
   DateTime? _lastCameraFocusPointSetAt;
   DateTime? _lastOrientationDebugPrintedAt;
+  CameraFrameRotation? _lastTrackingFrameRotation;
   DateTime? _faceDetectGestureStartedAt;
   DateTime? _lastVictoryToastShownAt;
   DateTime? _lastPunchScreenShownAt;
@@ -141,9 +144,10 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
       onDebug: debugPrint,
     );
 
-    _currentLensDirection = widget.fontorback == 0
-        ? CameraLensDirection.back
-        : CameraLensDirection.front;
+    _currentLensDirection =
+        widget.fontorback == 0
+            ? CameraLensDirection.back
+            : CameraLensDirection.front;
 
     _requestCameraPermission();
   }

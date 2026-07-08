@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/constants/hand_gesture_thresholds.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/custom_gesture_detector.dart';
 import 'package:hand_detection/hand_detection.dart';
 
@@ -74,6 +75,45 @@ void main() {
       );
 
       expect(result.isPunch, isTrue);
+    });
+
+    test('treats package thumb down as punch', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(
+          fingersCurled: false,
+          thumbTucked: false,
+          gesture: const GestureResult(
+            type: GestureType.thumbDown,
+            confidence: 1,
+          ),
+        ),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isTrue);
+    });
+
+    test('does not punch for low confidence package thumb down', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(
+          fingersCurled: false,
+          thumbTucked: false,
+          gesture: const GestureResult(
+            type: GestureType.thumbDown,
+            confidence:
+                HandGestureThresholds.punchGestureMinPackageConfidence - 0.01,
+          ),
+        ),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
     });
 
     test('does not punch when visible thumb is open', () {

@@ -148,6 +148,8 @@ extension on _AdminHandGestureLiveScreenState {
       if (followObjectRelease != null) {
         final selectedTarget = followObjectRelease.target;
         _zoomGestureDetector.markPoseInvalid(now);
+        _directionGestureDetector.clearState();
+        _moveDirectionDisplayHold.clear();
         _clearRecordingGestureHold();
         _clearFaceDetectGestureHold();
 
@@ -170,6 +172,8 @@ extension on _AdminHandGestureLiveScreenState {
       }
 
       _zoomGestureDetector.markPoseInvalid(now);
+      _directionGestureDetector.clearState();
+      _moveDirectionDisplayHold.clear();
       _followObjectSequenceDetector.clear();
       _clearFollowObjectTargetCandidates();
       _clearRecordingGestureHold();
@@ -210,6 +214,8 @@ extension on _AdminHandGestureLiveScreenState {
       if (followObjectRelease != null) {
         final selectedTarget = followObjectRelease.target;
         _zoomGestureDetector.markPoseInvalid(now);
+        _directionGestureDetector.clearState();
+        _moveDirectionDisplayHold.clear();
         _clearRecordingGestureHold();
         _clearFaceDetectGestureHold();
 
@@ -234,6 +240,8 @@ extension on _AdminHandGestureLiveScreenState {
       if (_isFollowingHand && trackedFollowTarget == null) {
         final trackedHand = _selectTrackedHand(hands);
         _updateFocusedHand(hand: trackedHand, imageSize: detectionImageSize);
+        _directionGestureDetector.clearState();
+        _moveDirectionDisplayHold.clear();
 
         _setScreenState(() {
           _hands = hands;
@@ -247,6 +255,8 @@ extension on _AdminHandGestureLiveScreenState {
       }
 
       _zoomGestureDetector.markPoseInvalid(now);
+      _directionGestureDetector.clearState();
+      _moveDirectionDisplayHold.clear();
       _followObjectSequenceDetector.clear();
       _clearFollowObjectTargetCandidates();
       _clearRecordingGestureHold();
@@ -322,6 +332,8 @@ extension on _AdminHandGestureLiveScreenState {
 
       if (holdProgress < 1) {
         _zoomGestureDetector.clearState();
+        _directionGestureDetector.clearState();
+        _moveDirectionDisplayHold.clear();
         _followObjectSequenceDetector.clear();
         _clearFollowObjectTargetCandidates();
         _clearRecordingGestureHold();
@@ -486,6 +498,8 @@ extension on _AdminHandGestureLiveScreenState {
 
     final packageGestureBlocksZoom =
         hasKnownGesture && gesture.type != GestureType.pointingUp;
+    final packageGestureBlocksDirection =
+        hasKnownGesture && gesture.type != GestureType.closedFist;
 
     final canDetectZoom =
         !followTrackingActive &&
@@ -505,27 +519,36 @@ extension on _AdminHandGestureLiveScreenState {
       _zoomGestureDetector.clearState();
     }
 
-    final zoomGestureActive =
-        zoomDirection != ZoomDirection.none ||
-        _zoomGestureDetector.isGestureActive;
-
     var moveDirection = HandMoveDirection.none;
-    if (!followTrackingActive &&
-        customGestureLabels.isEmpty &&
-        !hasOverlappingCustomGestures &&
-        !recordingGestureActive &&
-        !zoomGestureActive &&
-        !hasKnownGesture) {
+    final directionBlockReason =
+        followTrackingActive
+            ? 'blocked: follow active'
+            : customGestureLabels.isNotEmpty
+            ? 'blocked: custom ${customGestureLabels.join(', ')}'
+            : hasOverlappingCustomGestures
+            ? 'blocked: overlapping custom'
+            : recordingGestureActive
+            ? 'blocked: recording gesture'
+            : packageGestureBlocksDirection
+            ? 'blocked: package ${gesture.type.name}'
+            : null;
+
+    if (directionBlockReason == null) {
       moveDirection = _directionGestureDetector.detect(
         hand: bestHand,
         imageSize: detectionImageSize,
         mirrorHorizontally: mirrorDirectionalGestureCoordinates,
       );
+    } else {
+      _directionGestureDetector.clearState(reason: directionBlockReason);
     }
 
     final hasDirectionGesture = moveDirection != HandMoveDirection.none;
 
-    if (hasDirectionGesture) {
+    if (moveDirection == HandMoveDirection.down) {
+      zoomDirection = ZoomDirection.none;
+      _zoomGestureDetector.clearState();
+    } else if (hasDirectionGesture && zoomDirection == ZoomDirection.none) {
       _zoomGestureDetector.clearState();
     }
 
@@ -543,6 +566,28 @@ extension on _AdminHandGestureLiveScreenState {
 
     if (shouldFocusOnHand) {
       _updateFocusedHand(hand: bestHand, imageSize: detectionImageSize);
+    }
+
+    final directionDisplayBlockedByPriority =
+        followTargetActive ||
+        releaseHadNoTarget ||
+        followObjectDetected ||
+        _isFollowingHand ||
+        followObjectSequenceActive ||
+        recordingGestureFeedback != null ||
+        shouldShowPunchOnScreen ||
+        hasSingleCustomGesture ||
+        hasOverlappingCustomGestures;
+
+    final HandMoveDirection displayMoveDirection;
+    if (directionDisplayBlockedByPriority) {
+      _moveDirectionDisplayHold.clear();
+      displayMoveDirection = HandMoveDirection.none;
+    } else {
+      displayMoveDirection = _moveDirectionDisplayHold.resolve(
+        detectedDirection: moveDirection,
+        now: now,
+      );
     }
 
     _setScreenState(() {
@@ -584,12 +629,24 @@ extension on _AdminHandGestureLiveScreenState {
       } else if (hasOverlappingCustomGestures) {
         _gestureText = 'Hand detected';
         _gestureConfidence = 0;
+      } else if (displayMoveDirection == HandMoveDirection.down) {
+        _gestureText = 'Moving down';
+        _gestureConfidence = 1;
       } else if (zoomDirection == ZoomDirection.zoomIn) {
         _gestureText = _isCameraZoomSupported ? 'Zoom in' : 'Zoom unavailable';
         _gestureConfidence = _isCameraZoomSupported ? 1 : 0;
       } else if (zoomDirection == ZoomDirection.zoomOut) {
         _gestureText = _isCameraZoomSupported ? 'Zoom out' : 'Zoom unavailable';
         _gestureConfidence = _isCameraZoomSupported ? 1 : 0;
+      } else if (moveDirection == HandMoveDirection.left) {
+        _gestureText = 'Moving left';
+        _gestureConfidence = 1;
+      } else if (moveDirection == HandMoveDirection.right) {
+        _gestureText = 'Moving right';
+        _gestureConfidence = 1;
+      } else if (moveDirection == HandMoveDirection.up) {
+        _gestureText = 'Moving up';
+        _gestureConfidence = 1;
       } else if (hasKnownGesture) {
         if (gesture.type == GestureType.thumbUp) {
           _gestureText = 'Stop & Continue Action';
@@ -600,18 +657,6 @@ extension on _AdminHandGestureLiveScreenState {
         }
 
         _gestureConfidence = gesture.confidence;
-      } else if (moveDirection == HandMoveDirection.left) {
-        _gestureText = 'Moving left';
-        _gestureConfidence = 1;
-      } else if (moveDirection == HandMoveDirection.right) {
-        _gestureText = 'Moving right';
-        _gestureConfidence = 1;
-      } else if (moveDirection == HandMoveDirection.up) {
-        _gestureText = 'Moving up';
-        _gestureConfidence = 1;
-      } else if (moveDirection == HandMoveDirection.down) {
-        _gestureText = 'Moving down';
-        _gestureConfidence = 1;
       } else {
         _gestureText = 'Hand detected';
         _gestureConfidence = 0;
@@ -1168,6 +1213,8 @@ extension on _AdminHandGestureLiveScreenState {
 
   void _clearAllActiveGestureTasks({required bool resetCameraZoom}) {
     _zoomGestureDetector.clearState();
+    _directionGestureDetector.clearState();
+    _moveDirectionDisplayHold.clear();
     _followObjectSequenceDetector.clear();
     _clearFollowObjectTargetCandidates();
     _clearLockedFollowTarget();

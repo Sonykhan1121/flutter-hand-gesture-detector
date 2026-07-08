@@ -517,6 +517,8 @@ class CustomGestureDetector {
     required Size imageSize,
     required bool mirrorHorizontally,
   }) {
+    if (_isPackageThumbDownPunch(hand)) return true;
+
     if (!hand.hasLandmarks) return false;
 
     final indexMcp = geometry.visibleLandmark(
@@ -592,6 +594,15 @@ class CustomGestureDetector {
     final thumbAllowsFist = thumbTucked ?? true;
 
     return allLongFingersFolded && knucklesAlignedOnXAxis && thumbAllowsFist;
+  }
+
+  bool _isPackageThumbDownPunch(Hand hand) {
+    final gesture = hand.gesture;
+
+    return gesture != null &&
+        gesture.type == GestureType.thumbDown &&
+        gesture.confidence >=
+            HandGestureThresholds.punchGestureMinPackageConfidence;
   }
 
   bool _isThumbReallyClosedForIndexOnlyGesture({

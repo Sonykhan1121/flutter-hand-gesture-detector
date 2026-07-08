@@ -37,7 +37,11 @@ enum _VisibleHandSide { none, palm, back }
 
 void main() {
   group('DirectionGestureDetector finger chains', () {
-    const detector = DirectionGestureDetector();
+    late DirectionGestureDetector detector;
+
+    setUp(() {
+      detector = DirectionGestureDetector();
+    });
 
     test('returns left when at least three finger chains point left', () {
       final hand = _handWithFingerChainVectors([
@@ -422,6 +426,219 @@ void main() {
       expect(_detect(detector, hand), HandMoveDirection.none);
     });
   });
+
+  group('DirectionGestureDetector fingertip wiggle moving down', () {
+    late DirectionGestureDetector detector;
+
+    setUp(() {
+      detector = DirectionGestureDetector();
+    });
+
+    test('starts from small fingertip position without emitting', () {
+      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+    });
+
+    test('emits down after repeated small up and down fingertip motion', () {
+      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
+        HandMoveDirection.down,
+      );
+      expect(detector.debugSummary, contains('FIRED'));
+    });
+
+    test('emits down when the small shake starts downward', () {
+      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        HandMoveDirection.down,
+      );
+    });
+
+    test(
+      'emits down even when old left path is detected between wiggle frames',
+      () {
+        expect(
+          _detect(detector, _handWithLeftFingerChains(tipYOffset: 0)),
+          HandMoveDirection.left,
+        );
+        expect(
+          _detect(detector, _handWithLeftFingerChains(tipYOffset: -8)),
+          HandMoveDirection.left,
+        );
+        expect(
+          _detect(detector, _handWithLeftFingerChains(tipYOffset: 8)),
+          HandMoveDirection.left,
+        );
+        expect(
+          _detect(detector, _handWithLeftFingerChains(tipYOffset: -8)),
+          HandMoveDirection.down,
+        );
+        expect(detector.debugSummary, contains('FIRED'));
+      },
+    );
+
+    test('does not emit when only two fingertips move', () {
+      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(
+            movingTipYOffset: -8,
+            movingFingerIndexes: {0, 1},
+          ),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(movingTipYOffset: 8, movingFingerIndexes: {0, 1}),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(
+            movingTipYOffset: -8,
+            movingFingerIndexes: {0, 1},
+          ),
+        ),
+        HandMoveDirection.none,
+      );
+    });
+
+    test('does not emit for tiny camera noise', () {
+      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+      for (final offset in const [-1.0, 1.0, -1.0, 1.0]) {
+        expect(
+          _detect(detector, _handWithWiggleTips(movingTipYOffset: offset)),
+          HandMoveDirection.none,
+        );
+      }
+    });
+
+    test(
+      'does not emit when the small motion has too much horizontal drift',
+      () {
+        expect(
+          _detect(detector, _handWithWiggleTips()),
+          HandMoveDirection.none,
+        );
+        expect(
+          _detect(
+            detector,
+            _handWithWiggleTips(movingTipXOffset: 40, movingTipYOffset: -8),
+          ),
+          HandMoveDirection.none,
+        );
+        expect(
+          _detect(
+            detector,
+            _handWithWiggleTips(movingTipXOffset: -40, movingTipYOffset: 8),
+          ),
+          HandMoveDirection.none,
+        );
+        expect(
+          _detect(
+            detector,
+            _handWithWiggleTips(movingTipXOffset: 40, movingTipYOffset: -8),
+          ),
+          HandMoveDirection.none,
+        );
+      },
+    );
+
+    test('does not emit from one-way fingertip movement without shaking', () {
+      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+      for (final offset in const [6.0, 12.0, 18.0, 24.0]) {
+        expect(
+          _detect(detector, _handWithWiggleTips(movingTipYOffset: offset)),
+          HandMoveDirection.none,
+        );
+      }
+    });
+
+    test('does not emit with low-visibility fingertips', () {
+      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(
+            movingTipYOffset: -8,
+            lowVisibilityTypes: {
+              HandLandmarkType.ringFingerTip,
+              HandLandmarkType.pinkyTip,
+            },
+          ),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(
+            movingTipYOffset: 8,
+            lowVisibilityTypes: {
+              HandLandmarkType.ringFingerTip,
+              HandLandmarkType.pinkyTip,
+            },
+          ),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(detector.debugSummary, contains('low visibility tips=2/4'));
+    });
+
+    test('clearState allows a fresh fingertip wiggle sequence', () {
+      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
+        HandMoveDirection.down,
+      );
+
+      detector.clearState();
+
+      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        HandMoveDirection.down,
+      );
+    });
+  });
 }
 
 HandMoveDirection _detect(
@@ -459,9 +676,10 @@ Hand _handWithFingerChainVectors(
     final base = bases[fingerIndex];
     final vector = vectors[fingerIndex];
     final depthVector = depthVectors == null ? 0.0 : depthVectors[fingerIndex];
-    final points = foldedFingerIndexes.contains(fingerIndex)
-        ? _foldedChainPoints(base, vector)
-        : _straightChainPoints(base, vector);
+    final points =
+        foldedFingerIndexes.contains(fingerIndex)
+            ? _foldedChainPoints(base, vector)
+            : _straightChainPoints(base, vector);
 
     for (var pointIndex = 0; pointIndex < chainTypes.length; pointIndex++) {
       final type = chainTypes[pointIndex];
@@ -500,6 +718,96 @@ Hand _handWithFingerChainVectors(
   );
 }
 
+Hand _handWithLeftFingerChains({required double tipYOffset}) {
+  return _handWithFingerChainVectors([
+    Offset(-90, tipYOffset),
+    Offset(-90, tipYOffset),
+    Offset(-90, tipYOffset),
+    Offset(-90, tipYOffset),
+  ]);
+}
+
+Hand _handWithWiggleTips({
+  double movingTipXOffset = 0,
+  double movingTipYOffset = 0,
+  Set<int> movingFingerIndexes = const {0, 1, 2, 3},
+  Set<HandLandmarkType> lowVisibilityTypes = const {},
+  GestureResult? gesture,
+}) {
+  final landmarks = <HandLandmark>[];
+  final bases = [
+    const Offset(135, 210),
+    const Offset(175, 200),
+    const Offset(215, 205),
+    const Offset(255, 220),
+  ];
+  final pipOffsets = [
+    const Offset(4, -44),
+    const Offset(0, -48),
+    const Offset(0, -45),
+    const Offset(-3, -40),
+  ];
+  final dipOffsets = [
+    const Offset(22, -44),
+    const Offset(18, -47),
+    const Offset(17, -44),
+    const Offset(13, -39),
+  ];
+  final tipOffsets = [
+    const Offset(40, -38),
+    const Offset(36, -40),
+    const Offset(34, -38),
+    const Offset(28, -34),
+  ];
+
+  void addLandmark(HandLandmarkType type, Offset point) {
+    landmarks.add(
+      HandLandmark(
+        type: type,
+        x: point.dx,
+        y: point.dy,
+        z: 0,
+        visibility: lowVisibilityTypes.contains(type) ? 0.2 : 1,
+      ),
+    );
+  }
+
+  addLandmark(HandLandmarkType.wrist, const Offset(195, 315));
+  addLandmark(HandLandmarkType.thumbTip, const Offset(110, 235));
+
+  for (var fingerIndex = 0; fingerIndex < _fingerChains.length; fingerIndex++) {
+    final base = bases[fingerIndex];
+    final movingOffset =
+        movingFingerIndexes.contains(fingerIndex)
+            ? Offset(movingTipXOffset, movingTipYOffset)
+            : Offset.zero;
+    final points = [
+      base,
+      base + pipOffsets[fingerIndex],
+      base + dipOffsets[fingerIndex],
+      base + tipOffsets[fingerIndex] + movingOffset,
+    ];
+
+    for (
+      var pointIndex = 0;
+      pointIndex < _fingerChains[fingerIndex].length;
+      pointIndex++
+    ) {
+      addLandmark(_fingerChains[fingerIndex][pointIndex], points[pointIndex]);
+    }
+  }
+
+  return Hand(
+    boundingBox: BoundingBox.ltrb(0, 0, _imageSize.width, _imageSize.height),
+    score: 1,
+    landmarks: landmarks,
+    imageWidth: _imageSize.width.toInt(),
+    imageHeight: _imageSize.height.toInt(),
+    handedness: Handedness.right,
+    gesture: gesture,
+  );
+}
+
 void _addVisibleHandSideLandmarks(
   List<HandLandmark> landmarks, {
   required _VisibleHandSide visibleHandSide,
@@ -510,13 +818,11 @@ void _addVisibleHandSideLandmarks(
   if (visibleHandSide == _VisibleHandSide.none) return;
 
   final expectedSide = mirrorHorizontally ? -1.0 : 1.0;
-  final rawSide = visibleHandSide == _VisibleHandSide.back
-      ? -expectedSide
-      : expectedSide;
+  final rawSide =
+      visibleHandSide == _VisibleHandSide.back ? -expectedSide : expectedSide;
   final wrist = rawSide < 0 ? const Offset(300, 270) : const Offset(140, 270);
-  final thumbTip = rawSide < 0
-      ? const Offset(260, 180)
-      : const Offset(180, 180);
+  final thumbTip =
+      rawSide < 0 ? const Offset(260, 180) : const Offset(180, 180);
 
   void addLandmark(HandLandmarkType type, Offset point) {
     if (missingTypes.contains(type)) return;
@@ -549,9 +855,10 @@ List<Offset> _straightChainPoints(Offset base, Offset vector) {
 List<Offset> _foldedChainPoints(Offset base, Offset vector) {
   final tip = base + vector;
   final vectorLength = vector.distance;
-  final bendOffset = vectorLength == 0
-      ? Offset.zero
-      : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 45;
+  final bendOffset =
+      vectorLength == 0
+          ? Offset.zero
+          : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 45;
   final pip = Offset.lerp(base, tip, 0.5)! + bendOffset;
   final dip = Offset.lerp(pip, tip, 0.5)!;
 

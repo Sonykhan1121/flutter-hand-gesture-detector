@@ -89,6 +89,16 @@ abstract final class HandGestureThresholds {
   static const double directionMovingUpMinBackSideConfidence = 0.35;
   static const double directionFingerChainMaxDepthProjectionRatio = 1.35;
   static const int directionDownRejectFoldedLongFingerCount = 3;
+  static const int directionFingerWiggleMinAlignedCount = 3;
+  static const int directionFingerWiggleHistoryMaxLength = 6;
+  static const int directionFingerWiggleMinDirectionChanges = 2;
+  static const int directionFingerWiggleCooldownFrames = 3;
+  static const double directionFingerWiggleSmoothingAlpha = 0.45;
+  static const double directionFingerWiggleMinStepRatio = 0.006;
+  static const double directionFingerWiggleMaxHorizontalStepRatio = 0.035;
+  static const Duration movingDownDisplayHoldDuration = Duration(
+    milliseconds: 900,
+  );
 
   static const double fingerTipVerticalMaxSpreadRatio = 0.22;
   static const double fingerTipHorizontalMaxSpreadRatio = 0.22;
@@ -139,6 +149,8 @@ abstract final class HandGestureThresholds {
   static const double zoomOpenMinDistanceRatio = 0.27;
   static const double zoomMinChangeRatio = 0.025;
   static const double zoomMaxPalmMovementRatio = 0.08;
+  static const int zoomStableFingerMinCount = 2;
+  static const double zoomStableFingerMaxMovementRatio = 0.07;
   static const double partialZoomOutOpenMinImageRatio = 0.045;
   static const double partialZoomOutMinChangeImageRatio = 0.018;
   static const double partialZoomOutClosedMaxStartDistanceFactor = 0.72;

@@ -23,6 +23,7 @@ class ZoomGestureDetector {
   double? _startDistanceRatio;
   HandPoint3D? _startPalmCenter;
   double? _startHandSize;
+  Map<HandLandmarkType, HandPoint3D>? _startStableFingerOffsets;
   DateTime? _phaseStartedAt;
   DateTime? _poseInvalidStartedAt;
   DateTime? _lastZoomInDetectedAt;
@@ -33,6 +34,13 @@ class ZoomGestureDetector {
   double? _startPoseDistanceRatio;
   HandPoint3D? _startPosePalmCenter;
   double? _startPoseHandSize;
+  Map<HandLandmarkType, HandPoint3D>? _startPoseStableFingerOffsets;
+
+  static const List<HandLandmarkType> _stableFingerTypes = [
+    HandLandmarkType.middleFingerTip,
+    HandLandmarkType.ringFingerTip,
+    HandLandmarkType.pinkyTip,
+  ];
 
   bool get isGestureActive =>
       _phase != ZoomGesturePhase.idle ||
@@ -54,10 +62,12 @@ class ZoomGestureDetector {
           hand: hand,
           imageSize: imageSize,
         );
+        final stableFingerSample = _zoomStableFingerSample(hand);
 
         if (partialZoomOutDistanceRatio != null) {
           return _detectPartialZoomOut(
             distanceRatio: partialZoomOutDistanceRatio,
+            stableFingerSample: stableFingerSample,
             now: now,
           );
         }
@@ -90,20 +100,16 @@ class ZoomGestureDetector {
           now: now,
           palmCenter: pose.palmCenter,
           handSize: pose.handSize,
+          stableFingerOffsets: pose.stableFingerOffsets,
         );
 
         if (startPoseReady) {
-          final startDistance = _startPoseDistanceRatio ?? distanceRatio;
-          final startPalmCenter = _startPosePalmCenter ?? pose.palmCenter;
-          final startHandSize = _startPoseHandSize ?? pose.handSize;
-
-          _clearStartPoseCandidate();
-          _directionLock = ZoomDirection.none;
-          _phase = ZoomGesturePhase.armedForZoomIn;
-          _startDistanceRatio = startDistance;
-          _startPalmCenter = startPalmCenter;
-          _startHandSize = startHandSize;
-          _phaseStartedAt = now;
+          _armGestureFromStartPose(
+            phase: ZoomGesturePhase.armedForZoomIn,
+            distanceRatio: distanceRatio,
+            pose: pose,
+            now: now,
+          );
         }
       } else {
         _clearStartPoseCandidate();
@@ -120,20 +126,16 @@ class ZoomGestureDetector {
           now: now,
           palmCenter: pose.palmCenter,
           handSize: pose.handSize,
+          stableFingerOffsets: pose.stableFingerOffsets,
         );
 
         if (startPoseReady) {
-          final startDistance = _startPoseDistanceRatio ?? distanceRatio;
-          final startPalmCenter = _startPosePalmCenter ?? pose.palmCenter;
-          final startHandSize = _startPoseHandSize ?? pose.handSize;
-
-          _clearStartPoseCandidate();
-          _directionLock = ZoomDirection.none;
-          _phase = ZoomGesturePhase.armedForZoomOut;
-          _startDistanceRatio = startDistance;
-          _startPalmCenter = startPalmCenter;
-          _startHandSize = startHandSize;
-          _phaseStartedAt = now;
+          _armGestureFromStartPose(
+            phase: ZoomGesturePhase.armedForZoomOut,
+            distanceRatio: distanceRatio,
+            pose: pose,
+            now: now,
+          );
         }
       } else {
         _clearStartPoseCandidate();
@@ -151,19 +153,16 @@ class ZoomGestureDetector {
             now: now,
             palmCenter: pose.palmCenter,
             handSize: pose.handSize,
+            stableFingerOffsets: pose.stableFingerOffsets,
           );
 
           if (startPoseReady) {
-            final startDistance = _startPoseDistanceRatio ?? distanceRatio;
-            final startPalmCenter = _startPosePalmCenter ?? pose.palmCenter;
-            final startHandSize = _startPoseHandSize ?? pose.handSize;
-
-            _clearStartPoseCandidate();
-            _phase = ZoomGesturePhase.armedForZoomIn;
-            _startDistanceRatio = startDistance;
-            _startPalmCenter = startPalmCenter;
-            _startHandSize = startHandSize;
-            _phaseStartedAt = now;
+            _armGestureFromStartPose(
+              phase: ZoomGesturePhase.armedForZoomIn,
+              distanceRatio: distanceRatio,
+              pose: pose,
+              now: now,
+            );
           }
         } else if (distanceRatio >=
             HandGestureThresholds.zoomOpenMinDistanceRatio) {
@@ -173,19 +172,16 @@ class ZoomGestureDetector {
             now: now,
             palmCenter: pose.palmCenter,
             handSize: pose.handSize,
+            stableFingerOffsets: pose.stableFingerOffsets,
           );
 
           if (startPoseReady) {
-            final startDistance = _startPoseDistanceRatio ?? distanceRatio;
-            final startPalmCenter = _startPosePalmCenter ?? pose.palmCenter;
-            final startHandSize = _startPoseHandSize ?? pose.handSize;
-
-            _clearStartPoseCandidate();
-            _phase = ZoomGesturePhase.armedForZoomOut;
-            _startDistanceRatio = startDistance;
-            _startPalmCenter = startPalmCenter;
-            _startHandSize = startHandSize;
-            _phaseStartedAt = now;
+            _armGestureFromStartPose(
+              phase: ZoomGesturePhase.armedForZoomOut,
+              distanceRatio: distanceRatio,
+              pose: pose,
+              now: now,
+            );
           }
         } else {
           _clearStartPoseCandidate();
@@ -203,6 +199,14 @@ class ZoomGestureDetector {
         }
 
         if (!_isPalmStableForActiveGesture(pose)) {
+          _clearActivePhase();
+          return _recentDetected(now);
+        }
+
+        if (!_areStableFingersStableForActiveGesture(
+          currentStableFingerOffsets: pose.stableFingerOffsets,
+          currentHandSize: pose.handSize,
+        )) {
           _clearActivePhase();
           return _recentDetected(now);
         }
@@ -238,6 +242,14 @@ class ZoomGestureDetector {
         }
 
         if (!_isPalmStableForActiveGesture(pose)) {
+          _clearActivePhase();
+          return _recentDetected(now);
+        }
+
+        if (!_areStableFingersStableForActiveGesture(
+          currentStableFingerOffsets: pose.stableFingerOffsets,
+          currentHandSize: pose.handSize,
+        )) {
           _clearActivePhase();
           return _recentDetected(now);
         }
@@ -307,6 +319,7 @@ class ZoomGestureDetector {
     _startDistanceRatio = null;
     _startPalmCenter = null;
     _startHandSize = null;
+    _startStableFingerOffsets = null;
     _phaseStartedAt = null;
     _clearStartPoseCandidate();
   }
@@ -317,6 +330,7 @@ class ZoomGestureDetector {
     _startPoseDistanceRatio = null;
     _startPosePalmCenter = null;
     _startPoseHandSize = null;
+    _startPoseStableFingerOffsets = null;
   }
 
   bool _startOrContinueStartPose({
@@ -325,7 +339,15 @@ class ZoomGestureDetector {
     required DateTime now,
     HandPoint3D? palmCenter,
     double? handSize,
+    Map<HandLandmarkType, HandPoint3D>? stableFingerOffsets,
   }) {
+    if (stableFingerOffsets == null ||
+        stableFingerOffsets.length <
+            HandGestureThresholds.zoomStableFingerMinCount) {
+      _clearStartPoseCandidate();
+      return false;
+    }
+
     if (_startPoseDirection != direction) {
       _setStartPoseCandidate(
         direction: direction,
@@ -333,6 +355,7 @@ class ZoomGestureDetector {
         now: now,
         palmCenter: palmCenter,
         handSize: handSize,
+        stableFingerOffsets: stableFingerOffsets,
       );
       return false;
     }
@@ -345,6 +368,7 @@ class ZoomGestureDetector {
         now: now,
         palmCenter: palmCenter,
         handSize: handSize,
+        stableFingerOffsets: stableFingerOffsets,
       );
       return false;
     }
@@ -359,6 +383,22 @@ class ZoomGestureDetector {
         now: now,
         palmCenter: palmCenter,
         handSize: handSize,
+        stableFingerOffsets: stableFingerOffsets,
+      );
+      return false;
+    }
+
+    if (!_areStableFingersStableForStartPose(
+      currentStableFingerOffsets: stableFingerOffsets,
+      currentHandSize: handSize,
+    )) {
+      _setStartPoseCandidate(
+        direction: direction,
+        distanceRatio: distanceRatio,
+        now: now,
+        palmCenter: palmCenter,
+        handSize: handSize,
+        stableFingerOffsets: stableFingerOffsets,
       );
       return false;
     }
@@ -387,16 +427,41 @@ class ZoomGestureDetector {
     required DateTime now,
     HandPoint3D? palmCenter,
     double? handSize,
+    Map<HandLandmarkType, HandPoint3D>? stableFingerOffsets,
   }) {
     _startPoseDirection = direction;
     _startPoseStartedAt = now;
     _startPoseDistanceRatio = distanceRatio;
     _startPosePalmCenter = palmCenter;
     _startPoseHandSize = handSize;
+    _startPoseStableFingerOffsets = stableFingerOffsets;
+  }
+
+  void _armGestureFromStartPose({
+    required ZoomGesturePhase phase,
+    required double distanceRatio,
+    required _ZoomPose pose,
+    required DateTime now,
+  }) {
+    final startDistance = _startPoseDistanceRatio ?? distanceRatio;
+    final startPalmCenter = _startPosePalmCenter ?? pose.palmCenter;
+    final startHandSize = _startPoseHandSize ?? pose.handSize;
+    final startStableFingerOffsets =
+        _startPoseStableFingerOffsets ?? pose.stableFingerOffsets;
+
+    _clearStartPoseCandidate();
+    _directionLock = ZoomDirection.none;
+    _phase = phase;
+    _startDistanceRatio = startDistance;
+    _startPalmCenter = startPalmCenter;
+    _startHandSize = startHandSize;
+    _startStableFingerOffsets = startStableFingerOffsets;
+    _phaseStartedAt = now;
   }
 
   ZoomDirection _detectPartialZoomOut({
     required double distanceRatio,
+    required _ZoomStableFingerSample? stableFingerSample,
     required DateTime now,
   }) {
     _poseInvalidStartedAt = null;
@@ -421,11 +486,15 @@ class ZoomGestureDetector {
 
     if (_directionLock == ZoomDirection.zoomOut) {
       if (distanceRatio >=
-          HandGestureThresholds.partialZoomOutOpenMinImageRatio) {
+              HandGestureThresholds.partialZoomOutOpenMinImageRatio &&
+          stableFingerSample != null) {
         final startPoseReady = _startOrContinueStartPose(
           direction: ZoomDirection.zoomOut,
           distanceRatio: distanceRatio,
           now: now,
+          palmCenter: stableFingerSample.palmCenter,
+          handSize: stableFingerSample.handSize,
+          stableFingerOffsets: stableFingerSample.stableFingerOffsets,
         );
 
         if (startPoseReady) {
@@ -442,11 +511,15 @@ class ZoomGestureDetector {
     switch (_phase) {
       case ZoomGesturePhase.idle:
         if (distanceRatio >=
-            HandGestureThresholds.partialZoomOutOpenMinImageRatio) {
+                HandGestureThresholds.partialZoomOutOpenMinImageRatio &&
+            stableFingerSample != null) {
           final startPoseReady = _startOrContinueStartPose(
             direction: ZoomDirection.zoomOut,
             distanceRatio: distanceRatio,
             now: now,
+            palmCenter: stableFingerSample.palmCenter,
+            handSize: stableFingerSample.handSize,
+            stableFingerOffsets: stableFingerSample.stableFingerOffsets,
           );
 
           if (startPoseReady) {
@@ -473,6 +546,16 @@ class ZoomGestureDetector {
         final startedAt = _phaseStartedAt;
 
         if (startDistance == null || startedAt == null) {
+          _clearActivePhase();
+          return _recentDetected(now);
+        }
+
+        if (stableFingerSample == null ||
+            !_areStableFingersStableForActiveGesture(
+              currentStableFingerOffsets:
+                  stableFingerSample.stableFingerOffsets,
+              currentHandSize: stableFingerSample.handSize,
+            )) {
           _clearActivePhase();
           return _recentDetected(now);
         }
@@ -507,11 +590,18 @@ class ZoomGestureDetector {
     required double startDistance,
     required DateTime now,
   }) {
+    final startPalmCenter = _startPosePalmCenter;
+    final startHandSize = _startPoseHandSize;
+    final startStableFingerOffsets = _startPoseStableFingerOffsets;
+
     _clearStartPoseCandidate();
     _directionLock = ZoomDirection.none;
     _phase = ZoomGesturePhase.armedForZoomOut;
     _isPartialZoomOutPhase = true;
     _startDistanceRatio = startDistance;
+    _startPalmCenter = startPalmCenter;
+    _startHandSize = startHandSize;
+    _startStableFingerOffsets = startStableFingerOffsets;
     _phaseStartedAt = now;
   }
 
@@ -589,11 +679,18 @@ class ZoomGestureDetector {
     if (palmCenter == null) return null;
 
     final box = hand.boundingBox;
-    final handWidth = (box.right - box.left).abs();
-    final handHeight = (box.bottom - box.top).abs();
-    final handSize = math.max(handWidth, handHeight);
+    final handSize = _handSize(box);
 
     if (handSize <= 0) return null;
+
+    final stableFingerOffsets = _stableFingerOffsets(
+      hand: hand,
+      palmCenter: palmCenter,
+    );
+
+    if (!_hasEnoughStableFingerOffsets(stableFingerOffsets)) {
+      return null;
+    }
 
     final tipCenter = HandPoint3D(
       x: (thumbTip.x + indexTip.x) / 2,
@@ -611,7 +708,59 @@ class ZoomGestureDetector {
           geometry.distanceBetweenLandmarks3D(thumbTip, indexTip) / handSize,
       palmCenter: palmCenter,
       handSize: handSize,
+      stableFingerOffsets: stableFingerOffsets,
     );
+  }
+
+  _ZoomStableFingerSample? _zoomStableFingerSample(Hand hand) {
+    if (!hand.hasLandmarks) return null;
+
+    final palmCenter = geometry.palmCenter3D(hand);
+    if (palmCenter == null) return null;
+
+    final handSize = _handSize(hand.boundingBox);
+    if (handSize <= 0) return null;
+
+    final stableFingerOffsets = _stableFingerOffsets(
+      hand: hand,
+      palmCenter: palmCenter,
+    );
+
+    if (!_hasEnoughStableFingerOffsets(stableFingerOffsets)) {
+      return null;
+    }
+
+    return _ZoomStableFingerSample(
+      palmCenter: palmCenter,
+      handSize: handSize,
+      stableFingerOffsets: stableFingerOffsets,
+    );
+  }
+
+  double _handSize(BoundingBox box) {
+    final handWidth = (box.right - box.left).abs();
+    final handHeight = (box.bottom - box.top).abs();
+    return math.max(handWidth, handHeight);
+  }
+
+  Map<HandLandmarkType, HandPoint3D> _stableFingerOffsets({
+    required Hand hand,
+    required HandPoint3D palmCenter,
+  }) {
+    final offsets = <HandLandmarkType, HandPoint3D>{};
+
+    for (final type in _stableFingerTypes) {
+      final landmark = _zoomVisibleLandmark(hand, type);
+      if (landmark == null) continue;
+
+      offsets[type] = HandPoint3D(
+        x: landmark.x - palmCenter.x,
+        y: landmark.y - palmCenter.y,
+        z: landmark.z - palmCenter.z,
+      );
+    }
+
+    return offsets;
   }
 
   double? _partialZoomOutDistanceRatio({
@@ -697,6 +846,92 @@ class ZoomGestureDetector {
     );
   }
 
+  bool _areStableFingersStableForStartPose({
+    required Map<HandLandmarkType, HandPoint3D> currentStableFingerOffsets,
+    required double? currentHandSize,
+  }) {
+    final startStableFingerOffsets = _startPoseStableFingerOffsets;
+    final startHandSize = _startPoseHandSize;
+
+    if (startStableFingerOffsets == null ||
+        startHandSize == null ||
+        currentHandSize == null) {
+      return false;
+    }
+
+    return _areStableFingerOffsetsWithinLimit(
+      startStableFingerOffsets: startStableFingerOffsets,
+      startHandSize: startHandSize,
+      currentStableFingerOffsets: currentStableFingerOffsets,
+      currentHandSize: currentHandSize,
+    );
+  }
+
+  bool _areStableFingersStableForActiveGesture({
+    required Map<HandLandmarkType, HandPoint3D> currentStableFingerOffsets,
+    required double currentHandSize,
+  }) {
+    final startStableFingerOffsets = _startStableFingerOffsets;
+    final startHandSize = _startHandSize;
+
+    if (startStableFingerOffsets == null || startHandSize == null) {
+      return false;
+    }
+
+    return _areStableFingerOffsetsWithinLimit(
+      startStableFingerOffsets: startStableFingerOffsets,
+      startHandSize: startHandSize,
+      currentStableFingerOffsets: currentStableFingerOffsets,
+      currentHandSize: currentHandSize,
+    );
+  }
+
+  bool _hasEnoughStableFingerOffsets(
+    Map<HandLandmarkType, HandPoint3D>? stableFingerOffsets,
+  ) {
+    return stableFingerOffsets != null &&
+        stableFingerOffsets.length >=
+            HandGestureThresholds.zoomStableFingerMinCount;
+  }
+
+  bool _areStableFingerOffsetsWithinLimit({
+    required Map<HandLandmarkType, HandPoint3D> startStableFingerOffsets,
+    required double startHandSize,
+    required Map<HandLandmarkType, HandPoint3D> currentStableFingerOffsets,
+    required double currentHandSize,
+  }) {
+    final referenceHandSize = math.max(startHandSize, currentHandSize);
+    if (referenceHandSize <= 0) return false;
+
+    final maxMovement =
+        referenceHandSize *
+        HandGestureThresholds.zoomStableFingerMaxMovementRatio;
+
+    var stableCount = 0;
+
+    for (final type in _stableFingerTypes) {
+      final startOffset = startStableFingerOffsets[type];
+      final currentOffset = currentStableFingerOffsets[type];
+
+      if (startOffset == null || currentOffset == null) continue;
+
+      if (_stableFingerOffsetDistance(startOffset, currentOffset) <=
+          maxMovement) {
+        stableCount += 1;
+      }
+    }
+
+    return stableCount >= HandGestureThresholds.zoomStableFingerMinCount;
+  }
+
+  double _stableFingerOffsetDistance(HandPoint3D first, HandPoint3D second) {
+    final dx = first.x - second.x;
+    final dy = first.y - second.y;
+    final dz = geometry.weightedDepthValue(first.z - second.z);
+
+    return math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
   bool _isPalmMovementWithinLimit({
     required HandPoint3D startPalmCenter,
     required double startHandSize,
@@ -722,9 +957,23 @@ class _ZoomPose {
     required this.distanceRatio,
     required this.palmCenter,
     required this.handSize,
+    required this.stableFingerOffsets,
   });
 
   final double distanceRatio;
   final HandPoint3D palmCenter;
   final double handSize;
+  final Map<HandLandmarkType, HandPoint3D> stableFingerOffsets;
+}
+
+class _ZoomStableFingerSample {
+  const _ZoomStableFingerSample({
+    required this.palmCenter,
+    required this.handSize,
+    required this.stableFingerOffsets,
+  });
+
+  final HandPoint3D palmCenter;
+  final double handSize;
+  final Map<HandLandmarkType, HandPoint3D> stableFingerOffsets;
 }

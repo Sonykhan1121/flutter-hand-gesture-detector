@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="680" viewBox="0 0 1100 680">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#08111f"/>
+      <stop offset="0.52" stop-color="#111827"/>
+      <stop offset="1" stop-color="#0b1117"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <style>
+      .title { font: 800 42px Arial, sans-serif; fill: #f8fafc; }
+      .sub { font: 500 22px Arial, sans-serif; fill: #dbeafe; }
+      .small { font: 600 18px Arial, sans-serif; fill: #cbd5e1; }
+      .tiny { font: 700 15px Arial, sans-serif; fill: #e2e8f0; }
+      .label { font: 800 18px Arial, sans-serif; fill: #ffffff; }
+      .tipLabel { font: 800 15px Arial, sans-serif; fill: #fecaca; }
+      .mcpLabel { font: 800 15px Arial, sans-serif; fill: #bbf7d0; }
+      .card { fill: rgba(15, 23, 42, 0.82); stroke: #334155; stroke-width: 2; }
+      .palm { fill: #d79972; stroke: #ffd0b5; stroke-width: 3; }
+      .finger { fill: #db9d78; stroke: #ffd0b5; stroke-width: 3; }
+      .tip { fill: #ef4444; stroke: #fecaca; stroke-width: 3; }
+      .mcp { fill: #22c55e; stroke: #bbf7d0; stroke-width: 3; }
+      .rail { stroke: #facc15; stroke-width: 4; stroke-dasharray: 9 9; opacity: 0.85; }
+      .detectBox { fill: #064e3b; stroke: #22c55e; stroke-width: 3; }
+      .noneBox { fill: #172554; stroke: #60a5fa; stroke-width: 3; }
+    </style>
+  </defs>
+
+  <rect width="1100" height="680" fill="url(#bg)"/>
+
+  <text x="550" y="58" text-anchor="middle" class="title">NEW SIDE-BY-SIDE MOVING DOWN LOGIC</text>
+  <text x="550" y="94" text-anchor="middle" class="sub">Landmarks 8, 12, 16, 20 shake up/down in a small local area</text>
+
+  <rect x="52" y="130" width="265" height="112" rx="10" class="card"/>
+  <text x="82" y="170" class="label" fill="#93c5fd">What is watched?</text>
+  <text x="82" y="205" class="small">Only fingertip motion:</text>
+  <text x="82" y="232" class="small">8, 12, 16, 20</text>
+
+  <rect x="783" y="130" width="265" height="112" rx="10" class="card"/>
+  <text x="812" y="170" class="label" fill="#93c5fd">Rule now</text>
+  <text x="812" y="205" class="small">3 of 4 tips agree</text>
+  <text x="812" y="232" class="small">up / down / up = Moving down</text>
+
+  <g filter="url(#softShadow)">
+    <rect x="354" y="148" width="392" height="430" rx="18" fill="#111827" stroke="#475569" stroke-width="2"/>
+    <rect x="488" y="430" width="124" height="112" rx="34" class="palm"/>
+    <rect x="470" y="530" width="160" height="88" rx="32" class="palm"/>
+
+    <g id="finger-index">
+      <rect x="442" y="254" width="54" height="210" rx="27" class="finger"/>
+      <circle cx="469" cy="444" r="9" class="mcp"/>
+      <text x="451" y="475" class="mcpLabel">5</text>
+      <line x1="469" y1="228" x2="469" y2="276" class="rail"/>
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0,-10;0,10;0,-10;0,10;0,-10" dur="1.4s" repeatCount="indefinite"/>
+        <circle cx="469" cy="252" r="12" class="tip"/>
+        <text x="460" y="224" class="tipLabel">8</text>
+      </g>
+    </g>
+
+    <g id="finger-middle">
+      <rect x="505" y="236" width="54" height="218" rx="27" class="finger"/>
+      <circle cx="532" cy="438" r="9" class="mcp"/>
+      <text x="509" y="470" class="mcpLabel">9</text>
+      <line x1="532" y1="210" x2="532" y2="258" class="rail"/>
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0,-10;0,10;0,-10;0,10;0,-10" dur="1.4s" begin="0.05s" repeatCount="indefinite"/>
+        <circle cx="532" cy="234" r="12" class="tip"/>
+        <text x="518" y="206" class="tipLabel">12</text>
+      </g>
+    </g>
+
+    <g id="finger-ring">
+      <rect x="568" y="248" width="54" height="210" rx="27" class="finger"/>
+      <circle cx="595" cy="444" r="9" class="mcp"/>
+      <text x="572" y="475" class="mcpLabel">13</text>
+      <line x1="595" y1="222" x2="595" y2="270" class="rail"/>
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0,-10;0,10;0,-10;0,10;0,-10" dur="1.4s" begin="0.1s" repeatCount="indefinite"/>
+        <circle cx="595" cy="246" r="12" class="tip"/>
+        <text x="581" y="218" class="tipLabel">16</text>
+      </g>
+    </g>
+
+    <g id="finger-pinky">
+      <rect x="628" y="282" width="48" height="180" rx="24" class="finger"/>
+      <circle cx="652" cy="448" r="9" class="mcp"/>
+      <text x="629" y="480" class="mcpLabel">17</text>
+      <line x1="652" y1="256" x2="652" y2="304" class="rail"/>
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0,-10;0,10;0,-10;0,10;0,-10" dur="1.4s" begin="0.15s" repeatCount="indefinite"/>
+        <circle cx="652" cy="280" r="12" class="tip"/>
+        <text x="638" y="252" class="tipLabel">20</text>
+      </g>
+    </g>
+
+    <path d="M488 472 C455 455 442 425 452 397 C463 369 493 384 503 421" fill="#d79972" stroke="#ffd0b5" stroke-width="3"/>
+  </g>
+
+  <g>
+    <rect x="355" y="592" width="184" height="58" rx="12" class="noneBox"/>
+    <text x="447" y="628" text-anchor="middle" class="label">None</text>
+  </g>
+  <g>
+    <rect x="561" y="592" width="184" height="58" rx="12" class="detectBox"/>
+    <animate attributeName="opacity" values="0.45;1;0.45;1" dur="1.4s" repeatCount="indefinite"/>
+    <text x="653" y="628" text-anchor="middle" class="label">Moving down</text>
+  </g>
+
+  <path d="M535 621 L558 621" stroke="#facc15" stroke-width="5" stroke-linecap="round"/>
+  <path d="M558 621 L548 613 M558 621 L548 629" stroke="#facc15" stroke-width="5" stroke-linecap="round"/>
+
+  <rect x="52" y="490" width="265" height="104" rx="10" class="card"/>
+  <text x="82" y="530" class="label" fill="#bbf7d0">Important</text>
+  <text x="82" y="563" class="small">Small distance is okay</text>
+  <text x="82" y="590" class="small">Tiny noise is ignored</text>
+
+  <rect x="783" y="490" width="265" height="104" rx="10" class="card"/>
+  <text x="812" y="530" class="label" fill="#bbf7d0">Also kept</text>
+  <text x="812" y="563" class="small">Old moving-down logic</text>
+  <text x="812" y="590" class="small">still runs first</text>
+
+  <text x="550" y="660" text-anchor="middle" class="tiny">Implementation: smooth fingertip positions relative to palm, count repeated vertical direction changes, then emit HandMoveDirection.down.</text>
+</svg>

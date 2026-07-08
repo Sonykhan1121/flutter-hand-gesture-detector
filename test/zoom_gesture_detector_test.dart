@@ -129,17 +129,177 @@ void main() {
       );
       expect(detector.isGestureActive, isFalse);
     });
+
+    test('does not zoom in when two folded fingers move too much', () {
+      var now = DateTime(2026);
+      final detector = ZoomGestureDetector(now: () => now);
+
+      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+
+      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
+      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+
+      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+      expect(
+        _detect(
+          detector,
+          _zoomHand(
+            tipDistance: 80,
+            fingerTipOffsets: const {
+              HandLandmarkType.middleFingerTip: Offset(20, 0),
+              HandLandmarkType.ringFingerTip: Offset(20, 0),
+            },
+          ),
+        ),
+        ZoomDirection.none,
+      );
+      expect(detector.isGestureActive, isFalse);
+    });
+
+    test('does not zoom out when two folded fingers move too much', () {
+      var now = DateTime(2026);
+      final detector = ZoomGestureDetector(now: () => now);
+
+      expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
+
+      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
+      expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
+
+      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+      expect(
+        _detect(
+          detector,
+          _zoomHand(
+            tipDistance: 20,
+            fingerTipOffsets: const {
+              HandLandmarkType.middleFingerTip: Offset(20, 0),
+              HandLandmarkType.ringFingerTip: Offset(20, 0),
+            },
+          ),
+        ),
+        ZoomDirection.none,
+      );
+      expect(detector.isGestureActive, isFalse);
+    });
+
+    test('returns zoom in when only one folded finger moves too much', () {
+      var now = DateTime(2026);
+      final detector = ZoomGestureDetector(now: () => now);
+
+      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+
+      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
+      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+
+      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+      expect(
+        _detect(
+          detector,
+          _zoomHand(
+            tipDistance: 80,
+            fingerTipOffsets: const {HandLandmarkType.pinkyTip: Offset(20, 0)},
+          ),
+        ),
+        ZoomDirection.zoomIn,
+      );
+    });
+
+    test('returns partial zoom out when other fingers stay stable', () {
+      var now = DateTime(2026);
+      final detector = ZoomGestureDetector(now: () => now);
+
+      expect(
+        _detect(
+          detector,
+          _zoomHand(tipDistance: 80, otherFingersFolded: false),
+          allowPartialZoomOut: true,
+        ),
+        ZoomDirection.none,
+      );
+
+      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
+      expect(
+        _detect(
+          detector,
+          _zoomHand(tipDistance: 80, otherFingersFolded: false),
+          allowPartialZoomOut: true,
+        ),
+        ZoomDirection.none,
+      );
+
+      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+      expect(
+        _detect(
+          detector,
+          _zoomHand(tipDistance: 20, otherFingersFolded: false),
+          allowPartialZoomOut: true,
+        ),
+        ZoomDirection.zoomOut,
+      );
+    });
+
+    test('does not partial zoom out when two folded fingers move too much', () {
+      var now = DateTime(2026);
+      final detector = ZoomGestureDetector(now: () => now);
+
+      expect(
+        _detect(
+          detector,
+          _zoomHand(tipDistance: 80, otherFingersFolded: false),
+          allowPartialZoomOut: true,
+        ),
+        ZoomDirection.none,
+      );
+
+      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
+      expect(
+        _detect(
+          detector,
+          _zoomHand(tipDistance: 80, otherFingersFolded: false),
+          allowPartialZoomOut: true,
+        ),
+        ZoomDirection.none,
+      );
+
+      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+      expect(
+        _detect(
+          detector,
+          _zoomHand(
+            tipDistance: 20,
+            otherFingersFolded: false,
+            fingerTipOffsets: const {
+              HandLandmarkType.middleFingerTip: Offset(20, 0),
+              HandLandmarkType.ringFingerTip: Offset(20, 0),
+            },
+          ),
+          allowPartialZoomOut: true,
+        ),
+        ZoomDirection.none,
+      );
+      expect(detector.isGestureActive, isFalse);
+    });
   });
 }
 
-ZoomDirection _detect(ZoomGestureDetector detector, Hand hand) {
-  return detector.detect(hand: hand, imageSize: _imageSize);
+ZoomDirection _detect(
+  ZoomGestureDetector detector,
+  Hand hand, {
+  bool allowPartialZoomOut = false,
+}) {
+  return detector.detect(
+    hand: hand,
+    imageSize: _imageSize,
+    allowPartialZoomOut: allowPartialZoomOut,
+  );
 }
 
 Hand _zoomHand({
   required double tipDistance,
   Offset offset = Offset.zero,
   double zOffset = 0,
+  bool otherFingersFolded = true,
+  Map<HandLandmarkType, Offset> fingerTipOffsets = const {},
 }) {
   final halfDistance = tipDistance / 2;
   final landmarks = <HandLandmark>[];
@@ -167,6 +327,9 @@ Hand _zoomHand({
     pip: HandLandmarkType.middleFingerPIP,
     tip: HandLandmarkType.middleFingerTip,
     x: 115,
+    folded: otherFingersFolded,
+    tipOffset:
+        fingerTipOffsets[HandLandmarkType.middleFingerTip] ?? Offset.zero,
   );
   _addFoldedFinger(
     add,
@@ -174,6 +337,8 @@ Hand _zoomHand({
     pip: HandLandmarkType.ringFingerPIP,
     tip: HandLandmarkType.ringFingerTip,
     x: 130,
+    folded: otherFingersFolded,
+    tipOffset: fingerTipOffsets[HandLandmarkType.ringFingerTip] ?? Offset.zero,
   );
   _addFoldedFinger(
     add,
@@ -181,6 +346,8 @@ Hand _zoomHand({
     pip: HandLandmarkType.pinkyPIP,
     tip: HandLandmarkType.pinkyTip,
     x: 145,
+    folded: otherFingersFolded,
+    tipOffset: fingerTipOffsets[HandLandmarkType.pinkyTip] ?? Offset.zero,
   );
 
   add(HandLandmarkType.thumbTip, 110 - halfDistance, 70);
@@ -206,8 +373,10 @@ void _addFoldedFinger(
   required HandLandmarkType pip,
   required HandLandmarkType tip,
   required double x,
+  required bool folded,
+  Offset tipOffset = Offset.zero,
 }) {
   add(mcp, x, 120);
   add(pip, x, 145);
-  add(tip, x, 125);
+  add(tip, x + tipOffset.dx, (folded ? 125 : 190) + tipOffset.dy);
 }

@@ -170,10 +170,10 @@ packages:
     dependency: transitive
     description:
       name: flutter_litert
-      sha256: e34f55e4a948c4c45497c76f1c790655aef525f57d5940f9f59601d97eaa9d76
+      sha256: "26788265d0cb19c4954678e855b4e2ee0f688343149857742cf4f9ff9b6ee4b4"
       url: "https://pub.dev"
     source: hosted
-    version: "3.2.0"
+    version: "3.3.1"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -228,10 +228,10 @@ packages:
     dependency: "direct main"
     description:
       name: hand_detection
-      sha256: b2a6795aed671e095ba9d89706a0be4e28a6fad3de40eae3ea3d3109cef0617f
+      sha256: "509c31c6740b7eb65c8d0ad1edd76206b3923eb1cd1eb01d0e8516cf02c40076"
       url: "https://pub.dev"
     source: hosted
-    version: "3.2.0"
+    version: "3.3.0"
   hooks:
     dependency: transitive
     description:
