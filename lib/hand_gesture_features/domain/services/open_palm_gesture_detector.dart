@@ -147,6 +147,12 @@ class OpenPalmGestureDetector {
       landmarks: landmarks,
       handSize: handSize,
     );
+    final adjacentSeparationScore = _adjacentFingerSeparationScore(
+      landmarks: landmarks,
+      handSize: handSize,
+    );
+
+    if (_hasCrossedAdjacentFingerChains(landmarks)) return 0;
 
     // Combine soft scores, then clamp by required minimums so a single bad
     // component can prevent false positives.
@@ -184,6 +190,11 @@ class OpenPalmGestureDetector {
     if (upperFingerChainScore <
         HandGestureThresholds.openPalmMinUpperFingerChainConfidence) {
       return math.min(confidence, upperFingerChainScore);
+    }
+
+    if (adjacentSeparationScore <
+        HandGestureThresholds.openPalmMinAdjacentSeparationConfidence) {
+      return math.min(confidence, adjacentSeparationScore);
     }
 
     return confidence.clamp(0.0, 1.0);
@@ -318,6 +329,148 @@ class OpenPalmGestureDetector {
             fanScore * 0.30 +
             adjacentSpreadScore * 0.25)
         .clamp(0.0, 1.0);
+  }
+
+  /// Scores whether adjacent fingers have visible gaps at upper joints and tips.
+  double _adjacentFingerSeparationScore({
+    required _OpenPalmLandmarks landmarks,
+    required double handSize,
+  }) {
+    if (handSize <= 0) return 0;
+
+    return [
+      _adjacentFingerPairSeparationScore(
+        firstPip: landmarks.indexPip,
+        firstDip: landmarks.indexDip,
+        firstTip: landmarks.indexTip,
+        secondPip: landmarks.middlePip,
+        secondDip: landmarks.middleDip,
+        secondTip: landmarks.middleTip,
+        handSize: handSize,
+      ),
+      _adjacentFingerPairSeparationScore(
+        firstPip: landmarks.middlePip,
+        firstDip: landmarks.middleDip,
+        firstTip: landmarks.middleTip,
+        secondPip: landmarks.ringPip,
+        secondDip: landmarks.ringDip,
+        secondTip: landmarks.ringTip,
+        handSize: handSize,
+      ),
+      _adjacentFingerPairSeparationScore(
+        firstPip: landmarks.ringPip,
+        firstDip: landmarks.ringDip,
+        firstTip: landmarks.ringTip,
+        secondPip: landmarks.pinkyPip,
+        secondDip: landmarks.pinkyDip,
+        secondTip: landmarks.pinkyTip,
+        handSize: handSize,
+      ),
+    ].reduce(math.min);
+  }
+
+  double _adjacentFingerPairSeparationScore({
+    required HandLandmark firstPip,
+    required HandLandmark firstDip,
+    required HandLandmark firstTip,
+    required HandLandmark secondPip,
+    required HandLandmark secondDip,
+    required HandLandmark secondTip,
+    required double handSize,
+  }) {
+    final pipScore = _separationDistanceScore(
+      geometry.distanceBetweenLandmarks3D(firstPip, secondPip) / handSize,
+      HandGestureThresholds.openPalmAdjacentJointMinDistanceRatio,
+    );
+    final dipScore = _separationDistanceScore(
+      geometry.distanceBetweenLandmarks3D(firstDip, secondDip) / handSize,
+      HandGestureThresholds.openPalmAdjacentJointMinDistanceRatio,
+    );
+    final tipScore = _separationDistanceScore(
+      geometry.distanceBetweenLandmarks3D(firstTip, secondTip) / handSize,
+      HandGestureThresholds.openPalmAdjacentTipMinDistanceRatio,
+    );
+
+    return [pipScore, dipScore, tipScore].reduce(math.min);
+  }
+
+  double _separationDistanceScore(double distanceRatio, double minRatio) {
+    if (!distanceRatio.isFinite || minRatio <= 0) return 0;
+
+    return _inverseLerp(minRatio * 0.80, minRatio * 1.20, distanceRatio);
+  }
+
+  /// Rejects adjacent finger chains that visually cross in the camera plane.
+  bool _hasCrossedAdjacentFingerChains(_OpenPalmLandmarks landmarks) {
+    return _fingerChainsCross(
+          firstPip: landmarks.indexPip,
+          firstDip: landmarks.indexDip,
+          firstTip: landmarks.indexTip,
+          secondPip: landmarks.middlePip,
+          secondDip: landmarks.middleDip,
+          secondTip: landmarks.middleTip,
+        ) ||
+        _fingerChainsCross(
+          firstPip: landmarks.middlePip,
+          firstDip: landmarks.middleDip,
+          firstTip: landmarks.middleTip,
+          secondPip: landmarks.ringPip,
+          secondDip: landmarks.ringDip,
+          secondTip: landmarks.ringTip,
+        ) ||
+        _fingerChainsCross(
+          firstPip: landmarks.ringPip,
+          firstDip: landmarks.ringDip,
+          firstTip: landmarks.ringTip,
+          secondPip: landmarks.pinkyPip,
+          secondDip: landmarks.pinkyDip,
+          secondTip: landmarks.pinkyTip,
+        );
+  }
+
+  bool _fingerChainsCross({
+    required HandLandmark firstPip,
+    required HandLandmark firstDip,
+    required HandLandmark firstTip,
+    required HandLandmark secondPip,
+    required HandLandmark secondDip,
+    required HandLandmark secondTip,
+  }) {
+    final firstSegments = [(firstPip, firstDip), (firstDip, firstTip)];
+    final secondSegments = [(secondPip, secondDip), (secondDip, secondTip)];
+
+    for (final first in firstSegments) {
+      for (final second in secondSegments) {
+        if (_segmentsCross(first.$1, first.$2, second.$1, second.$2)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  bool _segmentsCross(
+    HandLandmark firstStart,
+    HandLandmark firstEnd,
+    HandLandmark secondStart,
+    HandLandmark secondEnd,
+  ) {
+    final firstSideA = _orientation(firstStart, firstEnd, secondStart);
+    final firstSideB = _orientation(firstStart, firstEnd, secondEnd);
+    final secondSideA = _orientation(secondStart, secondEnd, firstStart);
+    final secondSideB = _orientation(secondStart, secondEnd, firstEnd);
+
+    return firstSideA * firstSideB < 0 && secondSideA * secondSideB < 0;
+  }
+
+  double _orientation(
+    HandLandmark origin,
+    HandLandmark end,
+    HandLandmark point,
+  ) {
+    return (end.x - origin.x) * (point.y - origin.y) -
+        (end.y - origin.y) * (point.x - origin.x);
   }
 
   /// Rejects collapsed landmark points without enforcing broad finger spacing.

@@ -76,7 +76,9 @@ void main() {
         mirrorHorizontally: false,
       );
 
-      openPalm.isDetected = true;
+      openPalm
+        ..isDetected = true
+        ..confidence = 0.66;
       final releaseResult = detector.update(
         _hand(box: BoundingBox.ltrb(200, 220, 320, 400)),
         now.add(const Duration(milliseconds: 1300)),
@@ -87,6 +89,26 @@ void main() {
       expect(releaseResult.releaseReason, FollowObjectReleaseReason.openPalm);
       expect(releaseResult.releasePoint?.dx, 260);
       expect(releaseResult.releasePoint?.dy, 310);
+      expect(releaseResult.gestureConfidence, closeTo(0.66, 0.001));
+    });
+
+    test('carries custom open-palm confidence while active', () {
+      final openPalm = _FakeOpenPalmGestureDetector()
+        ..isDetected = true
+        ..confidence = 0.72;
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+
+      final result = detector.update(
+        _hand(),
+        DateTime(2026),
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isActive, isTrue);
+      expect(result.packageGestureType, GestureType.openPalm);
+      expect(result.gestureConfidence, closeTo(0.72, 0.001));
     });
 
     test('hand lost before closed fist clears without release', () {
@@ -228,6 +250,7 @@ void main() {
 
 class _FakeOpenPalmGestureDetector extends OpenPalmGestureDetector {
   bool isDetected = false;
+  double confidence = 1;
 
   @override
   OpenPalmGestureDetectionResult detect({
@@ -238,7 +261,7 @@ class _FakeOpenPalmGestureDetector extends OpenPalmGestureDetector {
   }) {
     return OpenPalmGestureDetectionResult(
       isDetected: isDetected,
-      confidence: isDetected ? 1 : 0,
+      confidence: isDetected ? confidence : 0,
     );
   }
 }
@@ -264,9 +287,8 @@ Hand _hand({
     imageWidth: 400,
     imageHeight: 400,
     handedness: Handedness.right,
-    gesture:
-        gestureType == null
-            ? null
-            : GestureResult(type: gestureType, confidence: gestureConfidence),
+    gesture: gestureType == null
+        ? null
+        : GestureResult(type: gestureType, confidence: gestureConfidence),
   );
 }

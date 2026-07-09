@@ -22,6 +22,9 @@ abstract final class HandGestureThresholds {
   static const double openPalmMinYAxisConfidence = 0.55;
   static const double openPalmMinUpperFingerChainConfidence = 0.50;
   static const double openPalmLandmarkOverlapMaxRatio = 0.012;
+  static const double openPalmAdjacentTipMinDistanceRatio = 0.045;
+  static const double openPalmAdjacentJointMinDistanceRatio = 0.032;
+  static const double openPalmMinAdjacentSeparationConfidence = 0.50;
   static const int openPalmSmoothingSampleCount = 4;
   static const int openPalmSmoothingMinPositiveSamples = 2;
   static const Duration openPalmSmoothingMaxAge = Duration(milliseconds: 500);

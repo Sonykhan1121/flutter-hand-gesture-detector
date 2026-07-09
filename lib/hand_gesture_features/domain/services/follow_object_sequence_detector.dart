@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:hand_detection/hand_detection.dart';
@@ -28,6 +29,7 @@ class FollowObjectSequenceDetector {
   DateTime? _firstOpenPalmStartedAt;
   Offset? _lastVisibleReleasePoint;
   GestureType? _currentPackageGestureType;
+  double _currentGestureConfidence = 0;
 
   bool? _lastOpenPalmDebugValue;
   bool? _lastClosedFistDebugValue;
@@ -60,6 +62,7 @@ class FollowObjectSequenceDetector {
         isDetected: true,
         isTargetSelectionActive: false,
         packageGestureType: _currentPackageGestureType,
+        gestureConfidence: _currentGestureConfidence,
       );
     }
 
@@ -88,6 +91,7 @@ class FollowObjectSequenceDetector {
     Offset? releasePoint;
     FollowObjectReleaseReason? releaseReason;
     GestureType? packageGestureType;
+    var gestureConfidence = 0.0;
 
     switch (_phase) {
       case FollowObjectSequencePhase.idle:
@@ -138,6 +142,7 @@ class FollowObjectSequenceDetector {
           releasePoint = currentReleasePoint;
           releaseReason = FollowObjectReleaseReason.openPalm;
           packageGestureType = _currentPackageGestureType;
+          gestureConfidence = _currentGestureConfidence;
           _debug(
             'sequence completed -> release point '
             '(${releasePoint.dx.toStringAsFixed(1)}, '
@@ -156,6 +161,7 @@ class FollowObjectSequenceDetector {
       isDetected: isDetected,
       isTargetSelectionActive: _isTargetSelectionActive,
       packageGestureType: packageGestureType ?? _currentPackageGestureType,
+      gestureConfidence: math.max(gestureConfidence, _currentGestureConfidence),
       releasePoint: releasePoint,
       releaseReason: releaseReason,
     );
@@ -192,6 +198,7 @@ class FollowObjectSequenceDetector {
 
     _lastDetectedAt = now;
     final packageGestureType = _currentPackageGestureType;
+    final gestureConfidence = _currentGestureConfidence;
     _debug(
       'hand lost -> release from last visible point '
       '(${releasePoint.dx.toStringAsFixed(1)}, '
@@ -204,6 +211,7 @@ class FollowObjectSequenceDetector {
       isDetected: true,
       isTargetSelectionActive: false,
       packageGestureType: packageGestureType,
+      gestureConfidence: gestureConfidence,
       releasePoint: releasePoint,
       releaseReason: FollowObjectReleaseReason.handLost,
     );
@@ -222,6 +230,7 @@ class FollowObjectSequenceDetector {
     _firstOpenPalmStartedAt = null;
     _lastVisibleReleasePoint = null;
     _currentPackageGestureType = null;
+    _currentGestureConfidence = 0;
     _lastOpenPalmDebugValue = null;
     _lastClosedFistDebugValue = null;
     _openPalmGestureDetector.clear();
@@ -247,6 +256,7 @@ class FollowObjectSequenceDetector {
 
     if (result.isDetected) {
       _currentPackageGestureType = GestureType.openPalm;
+      _currentGestureConfidence = result.confidence;
       _debug(
         'custom openPalm detected | '
         'confidence=${result.confidence.toStringAsFixed(2)}',
@@ -269,6 +279,7 @@ class FollowObjectSequenceDetector {
     }
 
     _currentPackageGestureType = gesture.type;
+    _currentGestureConfidence = gesture.confidence;
     _debug(
       'package $debugLabel detected | '
       'confidence=${gesture.confidence.toStringAsFixed(2)}',
@@ -299,6 +310,7 @@ class FollowObjectSequenceDetector {
         isDetected: false,
         isTargetSelectionActive: true,
         packageGestureType: _currentPackageGestureType,
+        gestureConfidence: _currentGestureConfidence,
       );
     }
 

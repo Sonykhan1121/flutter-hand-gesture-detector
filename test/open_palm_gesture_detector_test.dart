@@ -11,15 +11,59 @@ void main() {
       expect(_detectAfterSmoothing(detector, hand).isDetected, isTrue);
     });
 
-    test('detects open palm when fingertips are close but distinct', () {
+    test('detects open palm when adjacent fingertips are naturally close', () {
       final detector = OpenPalmGestureDetector();
       final hand = _openPalmHand(
-        middlePip: const Offset(167, 155),
-        middleDip: const Offset(150, 110),
-        middleTip: const Offset(136, 72),
+        middlePip: const Offset(168, 142),
+        middleDip: const Offset(160, 96),
+        middleTip: const Offset(150, 58),
       );
 
       expect(_detectAfterSmoothing(detector, hand).isDetected, isTrue);
+    });
+
+    test('rejects open palm when index and middle tips nearly touch', () {
+      final detector = OpenPalmGestureDetector();
+      final result = _detectAfterSmoothing(
+        detector,
+        _openPalmHand(middleTip: const Offset(142, 72)),
+      );
+
+      expect(result.isDetected, isFalse);
+      expect(result.confidence, lessThan(0.50));
+    });
+
+    test(
+      'rejects open palm when index and middle upper joints nearly touch',
+      () {
+        final detector = OpenPalmGestureDetector();
+        final result = _detectAfterSmoothing(
+          detector,
+          _openPalmHand(
+            middlePip: const Offset(151, 154),
+            middleDip: const Offset(145, 109),
+            middleTip: const Offset(166, 62),
+          ),
+        );
+
+        expect(result.isDetected, isFalse);
+        expect(result.confidence, lessThan(0.50));
+      },
+    );
+
+    test('rejects open palm when adjacent finger chains cross', () {
+      final detector = OpenPalmGestureDetector();
+      final result = _detectAfterSmoothing(
+        detector,
+        _openPalmHand(
+          middlePip: const Offset(124, 150),
+          middleDip: const Offset(150, 110),
+          middleTip: const Offset(170, 70),
+        ),
+      );
+
+      expect(result.isDetected, isFalse);
+      expect(result.confidence, 0);
     });
 
     test('rejects open palm when index tip overlaps middle tip', () {

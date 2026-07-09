@@ -11,6 +11,7 @@ class FollowObjectSequenceResult {
     required this.isDetected,
     required this.isTargetSelectionActive,
     this.packageGestureType,
+    this.gestureConfidence = 0,
     this.releasePoint,
     this.releaseReason,
   });
@@ -19,6 +20,7 @@ class FollowObjectSequenceResult {
   final bool isDetected;
   final bool isTargetSelectionActive;
   final GestureType? packageGestureType;
+  final double gestureConfidence;
 
   /// Center point of the hand box when the final open/release pose is detected.
   final Offset? releasePoint;

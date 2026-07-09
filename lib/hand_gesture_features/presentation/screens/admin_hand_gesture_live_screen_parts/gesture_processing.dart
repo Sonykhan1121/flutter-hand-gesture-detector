@@ -637,7 +637,9 @@ extension on _AdminHandGestureLiveScreenState {
         _gestureConfidence = 1;
       } else if (followObjectSequenceActive) {
         _gestureText = followObjectSequenceMessage ?? 'Hand detected';
-        _gestureConfidence = followObjectSequenceMessage == null ? 0 : 1;
+        _gestureConfidence = followObjectSequenceMessage == null
+            ? 0
+            : followObjectSequence.gestureConfidence;
       } else if (recordingGestureFeedback != null) {
         _gestureText = recordingGestureFeedback.text;
         _gestureConfidence = recordingGestureFeedback.confidence;
