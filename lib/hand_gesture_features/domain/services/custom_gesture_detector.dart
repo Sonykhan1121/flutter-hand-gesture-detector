@@ -25,6 +25,15 @@ class CustomGestureDetector {
     required bool mirrorHorizontally,
     DateTime? now,
   }) {
+    if (!geometry.isReliableHand(hand) ||
+        !imageSize.width.isFinite ||
+        !imageSize.height.isFinite ||
+        imageSize.width <= 0 ||
+        imageSize.height <= 0) {
+      clearState();
+      return CustomGestureDetectionResult.empty;
+    }
+
     final frameTime = now ?? DateTime.now();
 
     return CustomGestureDetectionResult(
@@ -42,6 +51,12 @@ class CustomGestureDetector {
         mirrorHorizontally: mirrorHorizontally,
       ),
     );
+  }
+
+  /// Clears gesture history after an invalid frame or external reset.
+  void clearState() {
+    _indexCircleHistory.clear();
+    _lastCancelEverythingDetectedAt = null;
   }
 
   /// Detects the "return to main position" index-finger circle gesture.
@@ -128,10 +143,11 @@ class CustomGestureDetector {
 
     // A circle should have a reasonably consistent radius and little depth
     // movement; this rejects finger movement toward the camera.
-    final radii = points
-        .map((point) => geometry.distanceBetweenOffsets(point, center))
-        .where((radius) => radius > 0)
-        .toList();
+    final radii =
+        points
+            .map((point) => geometry.distanceBetweenOffsets(point, center))
+            .where((radius) => radius > 0)
+            .toList();
 
     if (radii.length < HandGestureThresholds.indexCircleMinSampleCount) {
       return _recentCancelEverythingDetected(now);
@@ -609,12 +625,11 @@ class CustomGestureDetector {
 
   /// Accepts the package thumb-down label as a high-confidence punch shortcut.
   bool _isPackageThumbDownPunch(Hand hand) {
-    final gesture = hand.gesture;
-
-    return gesture != null &&
-        gesture.type == GestureType.thumbDown &&
-        gesture.confidence >=
-            HandGestureThresholds.punchGestureMinPackageConfidence;
+    return geometry.isReliablePackageGesture(
+      hand.gesture,
+      type: GestureType.thumbDown,
+      minConfidence: HandGestureThresholds.punchGestureMinPackageConfidence,
+    );
   }
 
   /// Keeps the index-circle pose strict by requiring the thumb to be closed.
@@ -681,9 +696,6 @@ class CustomGestureDetector {
 
   /// Uses the hand bounding box as the scale reference for ratio thresholds.
   double _handSize(Hand hand) {
-    final box = hand.boundingBox;
-    final handWidth = (box.right - box.left).abs();
-    final handHeight = (box.bottom - box.top).abs();
-    return math.max(handWidth, handHeight);
+    return geometry.handSizeFromBoundingBox(hand.boundingBox);
   }
 }

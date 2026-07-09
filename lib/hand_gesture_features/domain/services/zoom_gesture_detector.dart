@@ -57,6 +57,16 @@ class ZoomGestureDetector {
     bool allowPartialZoomOut = false,
   }) {
     final now = _now();
+
+    if (!geometry.isReliableHand(hand) ||
+        !imageSize.width.isFinite ||
+        !imageSize.height.isFinite ||
+        imageSize.width <= 0 ||
+        imageSize.height <= 0) {
+      markPoseInvalid(now);
+      return _recentDetected(now);
+    }
+
     final pose = _zoomPose(hand);
 
     // Partial zoom-out handles frames where thumb/index are visible but the
@@ -680,8 +690,6 @@ class ZoomGestureDetector {
 
   /// Builds the strict zoom pose used by normal zoom in/out.
   _ZoomPose? _zoomPose(Hand hand) {
-    if (!hand.hasLandmarks) return null;
-
     if (!_hasOtherFingersClosedByAngle(hand)) {
       return null;
     }
@@ -733,8 +741,6 @@ class ZoomGestureDetector {
 
   /// Captures palm and stable-finger offsets without requiring a full pose.
   _ZoomStableFingerSample? _zoomStableFingerSample(Hand hand) {
-    if (!hand.hasLandmarks) return null;
-
     final palmCenter = geometry.palmCenter3D(hand);
     if (palmCenter == null) return null;
 
@@ -759,9 +765,7 @@ class ZoomGestureDetector {
 
   /// Uses hand bounding-box size as the zoom ratio denominator.
   double _handSize(BoundingBox box) {
-    final handWidth = (box.right - box.left).abs();
-    final handHeight = (box.bottom - box.top).abs();
-    return math.max(handWidth, handHeight);
+    return geometry.handSizeFromBoundingBox(box);
   }
 
   /// Stores stable-finger offsets relative to the palm center.
@@ -790,10 +794,6 @@ class ZoomGestureDetector {
     required Hand hand,
     required Size imageSize,
   }) {
-    if (!hand.hasLandmarks || imageSize.width <= 0 || imageSize.height <= 0) {
-      return null;
-    }
-
     final thumbTip = _zoomVisibleLandmark(hand, HandLandmarkType.thumbTip);
     final indexTip = _zoomVisibleLandmark(
       hand,

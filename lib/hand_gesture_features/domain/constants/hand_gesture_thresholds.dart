@@ -9,6 +9,7 @@ abstract final class HandGestureThresholds {
 
   /// Lowest hand confidence accepted before gesture logic trusts the frame.
   static const double minHandScore = 0.45;
+
   /// Lowest package gesture confidence accepted from `hand_detection`.
   static const double minPackageGestureConfidence = 0.50;
 
@@ -20,6 +21,7 @@ abstract final class HandGestureThresholds {
   static const double openPalmMinPalmSideConfidence = 0.35;
   static const double openPalmMinYAxisConfidence = 0.55;
   static const double openPalmMinUpperFingerChainConfidence = 0.50;
+  static const double openPalmLandmarkOverlapMaxRatio = 0.012;
   static const int openPalmSmoothingSampleCount = 4;
   static const int openPalmSmoothingMinPositiveSamples = 2;
   static const Duration openPalmSmoothingMaxAge = Duration(milliseconds: 500);
@@ -106,9 +108,18 @@ abstract final class HandGestureThresholds {
   static const int directionFingerWiggleCooldownFrames = 3;
   static const double directionFingerWiggleSmoothingAlpha = 0.45;
   static const double directionFingerWiggleMinStepRatio = 0.006;
+  static const double directionFingerWiggleVerticalMinStepRatio = 0.005;
   static const double directionFingerWiggleMaxHorizontalStepRatio = 0.035;
+  static const double directionFingerWiggleDownVerticalDominanceRatio = 1.45;
+  static const double directionFingerWiggleDownMaxHorizontalStepRatio = 0.030;
+  static const Duration directionFingerWiggleMaxSampleGap = Duration(
+    milliseconds: 350,
+  );
   static const Duration movingDownDisplayHoldDuration = Duration(
     milliseconds: 900,
+  );
+  static const Duration movingUpDisplayHoldDuration = Duration(
+    milliseconds: 300,
   );
 
   /// Palm/finger shape ratios used by custom gesture checks.
@@ -183,7 +194,7 @@ abstract final class HandGestureThresholds {
   static const Duration gestureZoomRepeatInterval = Duration(milliseconds: 100);
 
   /// Camera-frame cadence, manual zoom step, and recording hold timings.
-  static const Duration minFrameProcessInterval = Duration(milliseconds: 100);
+  static const Duration minFrameProcessInterval = Duration(milliseconds: 50);
   static const double zoomStep = 0.2;
   static const double gestureZoomStep = 0.08;
   static const Duration recordStartHoldDuration = Duration(seconds: 1);

@@ -23,6 +23,14 @@ class OpenPalmGestureDetector {
     required bool mirrorHorizontally,
     bool allowOppositePalmSide = false,
   }) {
+    if (!geometry.isReliableHand(hand)) {
+      clear();
+      return const OpenPalmGestureDetectionResult(
+        isDetected: false,
+        confidence: 0,
+      );
+    }
+
     final confidence = _confidence(
       hand,
       mirrorHorizontally: mirrorHorizontally,
@@ -68,16 +76,18 @@ class OpenPalmGestureDetector {
     required bool mirrorHorizontally,
     required bool allowOppositePalmSide,
   }) {
-    if (!hand.hasLandmarks) return 0;
+    final handSize = _handSize(hand);
+    if (handSize <= 0) return 0;
+
+    if (_hasOverlappingLandmarkPoints(hand: hand, handSize: handSize)) {
+      return 0;
+    }
 
     final landmarks = _OpenPalmLandmarks.fromHand(hand, geometry);
     if (landmarks == null) return 0;
 
     final palmCenter = geometry.palmCenter3D(hand);
     if (palmCenter == null) return 0;
-
-    final handSize = _handSize(hand);
-    if (handSize <= 0) return 0;
 
     final indexScore = _fingerExtensionScore(
       mcp: landmarks.indexMcp,
@@ -310,6 +320,44 @@ class OpenPalmGestureDetector {
         .clamp(0.0, 1.0);
   }
 
+  /// Rejects collapsed landmark points without enforcing broad finger spacing.
+  bool _hasOverlappingLandmarkPoints({
+    required Hand hand,
+    required double handSize,
+  }) {
+    final overlapDistance =
+        handSize * HandGestureThresholds.openPalmLandmarkOverlapMaxRatio;
+    final landmarks = hand.landmarks
+        .where(
+          (landmark) =>
+              landmark.x.isFinite &&
+              landmark.y.isFinite &&
+              landmark.z.isFinite &&
+              landmark.visibility.isFinite &&
+              landmark.visibility >=
+                  HandGestureThresholds.minLandmarkVisibility,
+        )
+        .toList(growable: false);
+
+    for (var firstIndex = 0; firstIndex < landmarks.length; firstIndex++) {
+      for (
+        var secondIndex = firstIndex + 1;
+        secondIndex < landmarks.length;
+        secondIndex++
+      ) {
+        if (geometry.distanceBetweenLandmarks(
+              landmarks[firstIndex],
+              landmarks[secondIndex],
+            ) <=
+            overlapDistance) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   /// Scores whether palm orientation matches handedness and mirroring.
   double _palmSideScore({
     required Hand hand,
@@ -442,10 +490,7 @@ class OpenPalmGestureDetector {
 
   /// Uses hand bounding-box size as the reference for normalized distances.
   double _handSize(Hand hand) {
-    final box = hand.boundingBox;
-    final handWidth = (box.right - box.left).abs();
-    final handHeight = (box.bottom - box.top).abs();
-    return math.max(handWidth, handHeight);
+    return geometry.handSizeFromBoundingBox(hand.boundingBox);
   }
 
   /// Normalized signed cross product used for palm-side orientation.
@@ -499,9 +544,11 @@ class _OpenPalmLandmarks {
     required this.middleMcp,
     required this.ringTip,
     required this.ringPip,
+    required this.ringDip,
     required this.ringMcp,
     required this.pinkyTip,
     required this.pinkyPip,
+    required this.pinkyDip,
     required this.pinkyMcp,
   });
 
@@ -519,9 +566,11 @@ class _OpenPalmLandmarks {
   final HandLandmark middleMcp;
   final HandLandmark ringTip;
   final HandLandmark ringPip;
+  final HandLandmark ringDip;
   final HandLandmark ringMcp;
   final HandLandmark pinkyTip;
   final HandLandmark pinkyPip;
+  final HandLandmark pinkyDip;
   final HandLandmark pinkyMcp;
 
   /// Collects all landmarks needed for scoring, or returns null if missing.
@@ -574,6 +623,10 @@ class _OpenPalmLandmarks {
       hand,
       HandLandmarkType.ringFingerPIP,
     );
+    final ringDip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.ringFingerDIP,
+    );
     final ringMcp = geometry.visibleLandmark(
       hand,
       HandLandmarkType.ringFingerMCP,
@@ -581,6 +634,7 @@ class _OpenPalmLandmarks {
 
     final pinkyTip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyTip);
     final pinkyPip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyPIP);
+    final pinkyDip = geometry.visibleLandmark(hand, HandLandmarkType.pinkyDIP);
     final pinkyMcp = geometry.visibleLandmark(hand, HandLandmarkType.pinkyMCP);
 
     if (wrist == null ||
@@ -597,9 +651,11 @@ class _OpenPalmLandmarks {
         middleMcp == null ||
         ringTip == null ||
         ringPip == null ||
+        ringDip == null ||
         ringMcp == null ||
         pinkyTip == null ||
         pinkyPip == null ||
+        pinkyDip == null ||
         pinkyMcp == null) {
       return null;
     }
@@ -619,9 +675,11 @@ class _OpenPalmLandmarks {
       middleMcp: middleMcp,
       ringTip: ringTip,
       ringPip: ringPip,
+      ringDip: ringDip,
       ringMcp: ringMcp,
       pinkyTip: pinkyTip,
       pinkyPip: pinkyPip,
+      pinkyDip: pinkyDip,
       pinkyMcp: pinkyMcp,
     );
   }

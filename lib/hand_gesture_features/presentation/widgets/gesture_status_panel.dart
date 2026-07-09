@@ -15,8 +15,8 @@ class GestureStatusPanel extends StatelessWidget {
   final double gestureConfidence;
   final int detectedHandsCount;
 
-  @override
   /// Builds the live gesture title and supporting detection details.
+  @override
   Widget build(BuildContext context) {
     final hasGesture = gestureConfidence > 0;
 
@@ -76,7 +76,7 @@ class GestureStatusPanel extends StatelessWidget {
   /// Creates the smaller status line below the main gesture text.
   String _subtitleText() {
     if (detectedHandsCount == 0) {
-      return 'Move your hand left or right';
+      return 'Move your hand left, right, up, or down';
     }
 
     final parts = <String>['Hands: $detectedHandsCount'];
@@ -85,12 +85,19 @@ class GestureStatusPanel extends StatelessWidget {
       parts.add(handText);
     }
 
-    if (gestureText == 'Moving left' || gestureText == 'Moving right') {
+    if (_isMovementGestureText(gestureText)) {
       parts.add('detected');
     } else if (gestureConfidence > 0) {
       parts.add('${(gestureConfidence * 100).toStringAsFixed(0)}%');
     }
 
     return parts.join('  •  ');
+  }
+
+  bool _isMovementGestureText(String text) {
+    return text == 'Moving left' ||
+        text == 'Moving right' ||
+        text == 'Moving up' ||
+        text == 'Moving down';
   }
 }

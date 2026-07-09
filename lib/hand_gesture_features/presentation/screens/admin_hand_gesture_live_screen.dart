@@ -23,6 +23,7 @@ import '../../domain/services/custom_gesture_detector.dart';
 import '../../domain/services/direction_gesture_detector.dart';
 import '../../domain/services/follow_object_sequence_detector.dart';
 import '../../domain/services/follow_target_selector.dart';
+import '../../domain/services/hand_geometry_service.dart';
 import '../../domain/services/move_direction_display_hold.dart';
 import '../../domain/services/zoom_gesture_detector.dart';
 import '../painters/follow_target_debug_overlay_painter.dart';
@@ -51,8 +52,8 @@ class AdminHandGestureLiveScreen extends StatefulWidget {
   /// 0 = back camera, anything else = front camera.
   final int fontorback;
 
-  @override
   /// Creates the state object that owns camera, detectors, and live UI state.
+  @override
   State<AdminHandGestureLiveScreen> createState() =>
       _AdminHandGestureLiveScreenState();
 }
@@ -70,6 +71,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final _moveDirectionDisplayHold = MoveDirectionDisplayHold();
   final _zoomGestureDetector = ZoomGestureDetector();
   final _followTargetSelector = const FollowTargetSelector();
+  final _handGeometry = const HandGeometryService();
 
   late final FollowObjectSequenceDetector _followObjectSequenceDetector;
 
@@ -124,7 +126,6 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   DateTime? _lastFrameProcessedAt;
   DateTime? _lastCameraFocusPointSetAt;
   DateTime? _lastOrientationDebugPrintedAt;
-  CameraFrameRotation? _lastTrackingFrameRotation;
   DateTime? _faceDetectGestureStartedAt;
   DateTime? _lastVictoryToastShownAt;
   DateTime? _lastPunchScreenShownAt;
@@ -138,8 +139,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   DateTime? _recordingGestureStartedAt;
   bool _recordingGestureTriggered = false;
 
-  @override
   /// Initializes detector state, picks the starting lens, and requests camera.
+  @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
@@ -148,16 +149,15 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
       onDebug: debugPrint,
     );
 
-    _currentLensDirection =
-        widget.fontorback == 0
-            ? CameraLensDirection.back
-            : CameraLensDirection.front;
+    _currentLensDirection = widget.fontorback == 0
+        ? CameraLensDirection.back
+        : CameraLensDirection.front;
 
     _requestCameraPermission();
   }
 
-  @override
   /// Releases timers, camera controller, and ML detectors.
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _resetRecordingTimer();
@@ -174,8 +174,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
     super.dispose();
   }
 
-  @override
   /// Restarts or pauses streaming as the app moves foreground/background.
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       if (_isCameraInitialized) {
@@ -203,7 +203,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
     }
   }
 
-  @override
   /// Delegates rendering to the live-screen UI part file.
+  @override
   Widget build(BuildContext context) => _buildLiveScreen(context);
 }

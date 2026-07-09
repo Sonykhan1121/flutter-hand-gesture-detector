@@ -1,3 +1,5 @@
+// ignore_for_file: file_names
+
 // Archived face-detection prototype kept for reference; every line below is
 // commented out, so this file is not part of the active app build.
 // import 'dart:async';

@@ -126,6 +126,7 @@ extension on _AdminHandGestureLiveScreenState {
       _controller = controller;
       await controller.initialize();
       await _initializeZoomLevels(controller);
+      _customGestureDetector.clearState();
       _directionGestureDetector.clearState();
       _moveDirectionDisplayHold.clear();
 
@@ -306,6 +307,7 @@ extension on _AdminHandGestureLiveScreenState {
     } catch (e, st) {
       debugPrint('Error stopping camera stream: $e\n$st');
     } finally {
+      _customGestureDetector.clearState();
       _directionGestureDetector.clearState();
       _moveDirectionDisplayHold.clear();
       if (mounted) {
@@ -339,6 +341,7 @@ extension on _AdminHandGestureLiveScreenState {
         activeController.value.isRecordingVideo;
 
     // Reset gesture and overlay state before the preview source changes.
+    _customGestureDetector.clearState();
     _zoomGestureDetector.clearState();
     _directionGestureDetector.clearState();
     _moveDirectionDisplayHold.clear();
@@ -426,6 +429,7 @@ extension on _AdminHandGestureLiveScreenState {
     _isManualZoomInteractionActive = false;
     _zoomControlAutoHideTimer?.cancel();
 
+    _customGestureDetector.clearState();
     _zoomGestureDetector.clearState();
     _directionGestureDetector.clearState();
     _moveDirectionDisplayHold.clear();

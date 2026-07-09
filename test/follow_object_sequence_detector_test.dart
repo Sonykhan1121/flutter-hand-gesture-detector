@@ -112,6 +112,117 @@ void main() {
       expect(releaseResult.releasePoint, isNull);
       expect(detector.isTargetSelectionActive, isFalse);
     });
+
+    test('unreliable hand cannot start the open-palm hold', () {
+      final openPalm = _FakeOpenPalmGestureDetector()..isDetected = true;
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+
+      final result = detector.update(
+        _hand(score: double.nan),
+        DateTime(2026),
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isActive, isFalse);
+      expect(result.isDetected, isFalse);
+      expect(detector.isTargetSelectionActive, isFalse);
+    });
+
+    test('unreliable hand interrupts first open-palm hold', () {
+      final openPalm = _FakeOpenPalmGestureDetector()..isDetected = true;
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+
+      detector.update(_hand(), now, mirrorHorizontally: false);
+      final result = detector.update(
+        _hand(score: 0.2),
+        now.add(const Duration(milliseconds: 400)),
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isActive, isFalse);
+
+      final releaseResult = detector.releaseFromLastVisiblePoint(
+        now.add(const Duration(milliseconds: 500)),
+      );
+      expect(releaseResult.isDetected, isFalse);
+    });
+
+    test('unreliable hand while selecting target keeps last release point', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+
+      openPalm.isDetected = true;
+      detector.update(_hand(), now, mirrorHorizontally: false);
+      detector.update(
+        _hand(),
+        now.add(const Duration(seconds: 1)),
+        mirrorHorizontally: false,
+      );
+
+      openPalm.isDetected = false;
+      detector.update(
+        _hand(
+          box: BoundingBox.ltrb(100, 120, 220, 300),
+          gestureType: GestureType.closedFist,
+        ),
+        now.add(const Duration(milliseconds: 1200)),
+        mirrorHorizontally: false,
+      );
+
+      final unreliableResult = detector.update(
+        _hand(box: BoundingBox.ltrb(300, 300, 360, 360), score: 0.2),
+        now.add(const Duration(milliseconds: 1300)),
+        mirrorHorizontally: false,
+      );
+
+      expect(unreliableResult.isTargetSelectionActive, isTrue);
+
+      final releaseResult = detector.releaseFromLastVisiblePoint(
+        now.add(const Duration(milliseconds: 1400)),
+      );
+
+      expect(releaseResult.isDetected, isTrue);
+      expect(releaseResult.releaseReason, FollowObjectReleaseReason.handLost);
+      expect(releaseResult.releasePoint?.dx, 160);
+      expect(releaseResult.releasePoint?.dy, 210);
+    });
+
+    test('non-finite package confidence does not start target selection', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+
+      openPalm.isDetected = true;
+      detector.update(_hand(), now, mirrorHorizontally: false);
+      detector.update(
+        _hand(),
+        now.add(const Duration(seconds: 1)),
+        mirrorHorizontally: false,
+      );
+
+      openPalm.isDetected = false;
+      final result = detector.update(
+        _hand(
+          gestureType: GestureType.closedFist,
+          gestureConfidence: double.infinity,
+        ),
+        now.add(const Duration(milliseconds: 1200)),
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isTargetSelectionActive, isFalse);
+      expect(detector.isTargetSelectionActive, isFalse);
+    });
   });
 }
 
@@ -132,17 +243,30 @@ class _FakeOpenPalmGestureDetector extends OpenPalmGestureDetector {
   }
 }
 
-Hand _hand({BoundingBox? box, GestureType? gestureType}) {
+Hand _hand({
+  BoundingBox? box,
+  GestureType? gestureType,
+  double gestureConfidence = 1,
+  double score = 1,
+}) {
   return Hand(
     boundingBox: box ?? BoundingBox.ltrb(100, 100, 220, 280),
-    score: 1,
-    landmarks: const [],
+    score: score,
+    landmarks: [
+      HandLandmark(
+        type: HandLandmarkType.wrist,
+        x: (box?.left ?? 100) + 10,
+        y: (box?.top ?? 100) + 10,
+        z: 0,
+        visibility: 1,
+      ),
+    ],
     imageWidth: 400,
     imageHeight: 400,
     handedness: Handedness.right,
     gesture:
         gestureType == null
             ? null
-            : GestureResult(type: gestureType, confidence: 1),
+            : GestureResult(type: gestureType, confidence: gestureConfidence),
   );
 }

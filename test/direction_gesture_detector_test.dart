@@ -54,6 +54,45 @@ void main() {
       expect(_detect(detector, hand), HandMoveDirection.left);
     });
 
+    test('returns none and resets state for low-confidence hands', () {
+      final hand = _handWithFingerChainVectors([
+        const Offset(-90, 0),
+        const Offset(-90, 0),
+        const Offset(-90, 0),
+        const Offset(90, 0),
+      ], score: 0.2);
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('invalid frame'));
+    });
+
+    test('returns none and resets state for non-finite hand scores', () {
+      final hand = _handWithFingerChainVectors([
+        const Offset(-90, 0),
+        const Offset(-90, 0),
+        const Offset(-90, 0),
+        const Offset(90, 0),
+      ], score: double.nan);
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('invalid frame'));
+    });
+
+    test('returns none and resets state for non-finite image sizes', () {
+      final hand = _handWithFingerChainVectors([
+        const Offset(-90, 0),
+        const Offset(-90, 0),
+        const Offset(-90, 0),
+        const Offset(90, 0),
+      ]);
+
+      expect(
+        _detect(detector, hand, imageSize: const Size(double.nan, 400)),
+        HandMoveDirection.none,
+      );
+      expect(detector.debugSummary, contains('invalid frame'));
+    });
+
     test('returns right when at least three finger chains point right', () {
       final hand = _handWithFingerChainVectors([
         const Offset(90, 0),
@@ -184,6 +223,28 @@ void main() {
         const Offset(20, -90),
         const Offset(20, -90),
         const Offset(20, -90),
+      ], visibleHandSide: _VisibleHandSide.back);
+
+      expect(_detect(detector, hand), HandMoveDirection.up);
+    });
+
+    test('prioritizes right over up when both finger-chain paths match', () {
+      final hand = _handWithFingerChainVectors([
+        const Offset(25, -90),
+        const Offset(25, -90),
+        const Offset(25, -90),
+        const Offset(25, -90),
+      ], visibleHandSide: _VisibleHandSide.back);
+
+      expect(_detect(detector, hand), HandMoveDirection.right);
+    });
+
+    test('prioritizes up over left when both finger-chain paths match', () {
+      final hand = _handWithFingerChainVectors([
+        const Offset(-25, -90),
+        const Offset(-25, -90),
+        const Offset(-25, -90),
+        const Offset(-25, -90),
       ], visibleHandSide: _VisibleHandSide.back);
 
       expect(_detect(detector, hand), HandMoveDirection.up);
@@ -488,6 +549,158 @@ void main() {
       );
     });
 
+    test('emits down for a fast 50ms up-down-up fingertip wiggle', () {
+      expect(
+        _detectWiggleSequence(detector, const [
+          Offset.zero,
+          Offset(0, -8),
+          Offset(0, 8),
+          Offset(0, -8),
+        ], step: const Duration(milliseconds: 50)),
+        HandMoveDirection.down,
+      );
+    });
+
+    test('emits down for a smaller up-down-up fingertip wiggle', () {
+      expect(
+        _detectWiggleSequence(detector, const [
+          Offset.zero,
+          Offset(0, -5),
+          Offset(0, 5),
+          Offset(0, -5),
+        ]),
+        HandMoveDirection.down,
+      );
+    });
+
+    test('emits down across long pauses between wiggle strokes', () {
+      final start = DateTime(2026);
+
+      expect(
+        _detect(detector, _handWithWiggleTips(), now: start),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(movingTipYOffset: -8),
+          now: start.add(const Duration(milliseconds: 16)),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(movingTipYOffset: -8),
+          now: start.add(const Duration(milliseconds: 500)),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(movingTipYOffset: 8),
+          now: start.add(const Duration(milliseconds: 550)),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(movingTipYOffset: 8),
+          now: start.add(const Duration(milliseconds: 1000)),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(movingTipYOffset: -8),
+          now: start.add(const Duration(milliseconds: 1050)),
+        ),
+        HandMoveDirection.down,
+      );
+    });
+
+    test(
+      'long pause refreshes baseline instead of turning a jump into a stroke',
+      () {
+        final start = DateTime(2026);
+
+        expect(
+          _detect(detector, _handWithWiggleTips(), now: start),
+          HandMoveDirection.none,
+        );
+        expect(
+          _detect(
+            detector,
+            _handWithWiggleTips(movingTipYOffset: 8),
+            now: start.add(const Duration(milliseconds: 500)),
+          ),
+          HandMoveDirection.none,
+        );
+        expect(detector.debugSummary, contains('refreshed baseline'));
+
+        expect(
+          _detect(
+            detector,
+            _handWithWiggleTips(movingTipYOffset: -8),
+            now: start.add(const Duration(milliseconds: 550)),
+          ),
+          HandMoveDirection.none,
+        );
+        expect(
+          _detect(
+            detector,
+            _handWithWiggleTips(movingTipYOffset: 8),
+            now: start.add(const Duration(milliseconds: 600)),
+          ),
+          HandMoveDirection.none,
+        );
+        expect(
+          _detect(
+            detector,
+            _handWithWiggleTips(movingTipYOffset: -8),
+            now: start.add(const Duration(milliseconds: 650)),
+          ),
+          HandMoveDirection.down,
+        );
+      },
+    );
+
+    test('low-confidence frame resets partial wiggle history', () {
+      final start = DateTime(2026);
+
+      expect(
+        _detect(detector, _handWithWiggleTips(), now: start),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(movingTipYOffset: -8),
+          now: start.add(const Duration(milliseconds: 16)),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(movingTipYOffset: 8, score: 0.2),
+          now: start.add(const Duration(milliseconds: 32)),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithWiggleTips(movingTipYOffset: -8),
+          now: start.add(const Duration(milliseconds: 48)),
+        ),
+        HandMoveDirection.none,
+      );
+    });
+
     test(
       'emits a wiggle direction even when old left path is detected between frames',
       () {
@@ -523,37 +736,169 @@ void main() {
       },
     );
 
-    test('emits down for down wiggle while fingers point left', () {
+    test(
+      'prioritizes down wiggle over old left path while it is in progress',
+      () {
+        expect(
+          _detect(
+            detector,
+            _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: 0),
+          ),
+          HandMoveDirection.left,
+        );
+        expect(
+          _detect(
+            detector,
+            _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: -8),
+          ),
+          HandMoveDirection.none,
+        );
+        expect(detector.debugSummary, contains('blocked old path left'));
+        expect(
+          _detect(
+            detector,
+            _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: 8),
+          ),
+          HandMoveDirection.none,
+        );
+        expect(detector.debugSummary, contains('blocked old path left'));
+        expect(
+          _detect(
+            detector,
+            _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: -8),
+          ),
+          HandMoveDirection.down,
+        );
+        expect(detector.debugSummary, contains('FIRED down'));
+      },
+    );
+
+    test(
+      'prioritizes down wiggle over old right path while it is in progress',
+      () {
+        expect(
+          _detect(detector, _handWithRightFingerChains(tipYOffset: 0)),
+          HandMoveDirection.right,
+        );
+        expect(
+          _detect(detector, _handWithRightFingerChains(tipYOffset: -8)),
+          HandMoveDirection.none,
+        );
+        expect(detector.debugSummary, contains('blocked old path right'));
+        expect(
+          _detect(detector, _handWithRightFingerChains(tipYOffset: 8)),
+          HandMoveDirection.none,
+        );
+        expect(detector.debugSummary, contains('blocked old path right'));
+        expect(
+          _detect(detector, _handWithRightFingerChains(tipYOffset: -8)),
+          HandMoveDirection.down,
+        );
+      },
+    );
+
+    test(
+      'prioritizes down wiggle over old up path while it is in progress',
+      () {
+        expect(
+          _detect(detector, _handWithUpFingerChains(tipYOffset: 0)),
+          HandMoveDirection.up,
+        );
+        expect(
+          _detect(detector, _handWithUpFingerChains(tipYOffset: -8)),
+          HandMoveDirection.none,
+        );
+        expect(detector.debugSummary, contains('blocked old path up'));
+        expect(
+          _detect(detector, _handWithUpFingerChains(tipYOffset: 8)),
+          HandMoveDirection.none,
+        );
+        expect(detector.debugSummary, contains('blocked old path up'));
+        expect(
+          _detect(detector, _handWithUpFingerChains(tipYOffset: -8)),
+          HandMoveDirection.down,
+        );
+      },
+    );
+
+    test('prioritizes old down path over fired right wiggle', () {
       expect(
-        _detect(
-          detector,
-          _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: 0),
-        ),
-        HandMoveDirection.left,
-      );
-      expect(
-        _detect(
-          detector,
-          _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: -8),
-        ),
-        HandMoveDirection.left,
-      );
-      expect(
-        _detect(
-          detector,
-          _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: 8),
-        ),
-        HandMoveDirection.left,
-      );
-      expect(
-        _detect(
-          detector,
-          _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: -8),
-        ),
+        _detect(detector, _handWithDownFingerChains(tipXOffset: 0)),
         HandMoveDirection.down,
       );
-      expect(detector.debugSummary, contains('FIRED down'));
+      expect(
+        _detect(detector, _handWithDownFingerChains(tipXOffset: -8)),
+        HandMoveDirection.down,
+      );
+      expect(
+        _detect(detector, _handWithDownFingerChains(tipXOffset: 8)),
+        HandMoveDirection.down,
+      );
+      expect(
+        _detect(detector, _handWithDownFingerChains(tipXOffset: -8)),
+        HandMoveDirection.down,
+      );
+      expect(detector.debugSummary, contains('over wiggle right'));
     });
+
+    test(
+      'does not emit down from mixed horizontal and vertical wiggle steps',
+      () {
+        expect(
+          _detectWiggleSequence(detector, const [
+            Offset.zero,
+            Offset(0, -8),
+            Offset(8, 0),
+            Offset(0, -8),
+          ]),
+          HandMoveDirection.none,
+        );
+      },
+    );
+
+    test(
+      'does not emit down after ambiguous diagonal motion interrupts it',
+      () {
+        expect(
+          _detectWiggleSequence(detector, const [
+            Offset.zero,
+            Offset(0, -8),
+            Offset(12, 8),
+            Offset(0, 8),
+            Offset(0, -8),
+          ]),
+          HandMoveDirection.none,
+        );
+      },
+    );
+
+    test('does not emit down when vertical wiggle is not clean enough', () {
+      expect(
+        _detectWiggleSequence(detector, const [
+          Offset.zero,
+          Offset(6, -8),
+          Offset(6, 8),
+          Offset(6, -8),
+        ]),
+        HandMoveDirection.none,
+      );
+    });
+
+    test(
+      'does not emit down when the same vertical stroke picks up horizontal drift',
+      () {
+        expect(
+          _detectWiggleSequence(detector, const [
+            Offset.zero,
+            Offset(0, -8),
+            Offset(9, -16),
+            Offset(0, 8),
+            Offset(0, -8),
+          ]),
+          HandMoveDirection.none,
+        );
+      },
+    );
 
     test('does not emit when only two fingertips move', () {
       expect(
@@ -688,12 +1033,15 @@ void main() {
 HandMoveDirection _detect(
   DirectionGestureDetector detector,
   Hand hand, {
+  Size imageSize = _imageSize,
   bool mirrorHorizontally = false,
+  DateTime? now,
 }) {
   return detector.detect(
     hand: hand,
-    imageSize: _imageSize,
+    imageSize: imageSize,
     mirrorHorizontally: mirrorHorizontally,
+    now: now,
   );
 }
 
@@ -702,9 +1050,12 @@ HandMoveDirection _detectWiggleSequence(
   List<Offset> movingTipOffsets, {
   bool mirrorHorizontally = false,
   Set<int> movingFingerIndexes = const {0, 1, 2, 3},
+  DateTime? start,
+  Duration step = const Duration(milliseconds: 16),
 }) {
   var direction = HandMoveDirection.none;
-  for (final offset in movingTipOffsets) {
+  for (var index = 0; index < movingTipOffsets.length; index++) {
+    final offset = movingTipOffsets[index];
     direction = _detect(
       detector,
       _handWithWiggleTips(
@@ -713,6 +1064,7 @@ HandMoveDirection _detectWiggleSequence(
         movingFingerIndexes: movingFingerIndexes,
       ),
       mirrorHorizontally: mirrorHorizontally,
+      now: start?.add(Duration(microseconds: step.inMicroseconds * index)),
     );
   }
 
@@ -727,6 +1079,7 @@ Hand _handWithFingerChainVectors(
   Set<int> foldedFingerIndexes = const {},
   _VisibleHandSide visibleHandSide = _VisibleHandSide.none,
   bool mirrorHorizontally = false,
+  double score = 1,
   GestureResult? gesture,
 }) {
   final landmarks = <HandLandmark>[];
@@ -742,10 +1095,9 @@ Hand _handWithFingerChainVectors(
     final base = bases[fingerIndex];
     final vector = vectors[fingerIndex];
     final depthVector = depthVectors == null ? 0.0 : depthVectors[fingerIndex];
-    final points =
-        foldedFingerIndexes.contains(fingerIndex)
-            ? _foldedChainPoints(base, vector)
-            : _straightChainPoints(base, vector);
+    final points = foldedFingerIndexes.contains(fingerIndex)
+        ? _foldedChainPoints(base, vector)
+        : _straightChainPoints(base, vector);
 
     for (var pointIndex = 0; pointIndex < chainTypes.length; pointIndex++) {
       final type = chainTypes[pointIndex];
@@ -775,7 +1127,7 @@ Hand _handWithFingerChainVectors(
 
   return Hand(
     boundingBox: BoundingBox.ltrb(0, 0, _imageSize.width, _imageSize.height),
-    score: 1,
+    score: score,
     landmarks: landmarks,
     imageWidth: _imageSize.width.toInt(),
     imageHeight: _imageSize.height.toInt(),
@@ -796,11 +1148,39 @@ Hand _handWithLeftFingerChains({
   ]);
 }
 
+Hand _handWithRightFingerChains({required double tipYOffset}) {
+  return _handWithFingerChainVectors([
+    Offset(90, tipYOffset),
+    Offset(90, tipYOffset),
+    Offset(90, tipYOffset),
+    Offset(90, tipYOffset),
+  ]);
+}
+
+Hand _handWithUpFingerChains({required double tipYOffset}) {
+  return _handWithFingerChainVectors([
+    Offset(0, -90 + tipYOffset),
+    Offset(0, -90 + tipYOffset),
+    Offset(0, -90 + tipYOffset),
+    Offset(0, -90 + tipYOffset),
+  ], visibleHandSide: _VisibleHandSide.back);
+}
+
+Hand _handWithDownFingerChains({required double tipXOffset}) {
+  return _handWithFingerChainVectors([
+    Offset(tipXOffset, 90),
+    Offset(tipXOffset, 90),
+    Offset(tipXOffset, 90),
+    Offset(tipXOffset, 90),
+  ]);
+}
+
 Hand _handWithWiggleTips({
   double movingTipXOffset = 0,
   double movingTipYOffset = 0,
   Set<int> movingFingerIndexes = const {0, 1, 2, 3},
   Set<HandLandmarkType> lowVisibilityTypes = const {},
+  double score = 1,
   GestureResult? gesture,
 }) {
   final landmarks = <HandLandmark>[];
@@ -846,10 +1226,9 @@ Hand _handWithWiggleTips({
 
   for (var fingerIndex = 0; fingerIndex < _fingerChains.length; fingerIndex++) {
     final base = bases[fingerIndex];
-    final movingOffset =
-        movingFingerIndexes.contains(fingerIndex)
-            ? Offset(movingTipXOffset, movingTipYOffset)
-            : Offset.zero;
+    final movingOffset = movingFingerIndexes.contains(fingerIndex)
+        ? Offset(movingTipXOffset, movingTipYOffset)
+        : Offset.zero;
     final points = [
       base,
       base + pipOffsets[fingerIndex],
@@ -868,7 +1247,7 @@ Hand _handWithWiggleTips({
 
   return Hand(
     boundingBox: BoundingBox.ltrb(0, 0, _imageSize.width, _imageSize.height),
-    score: 1,
+    score: score,
     landmarks: landmarks,
     imageWidth: _imageSize.width.toInt(),
     imageHeight: _imageSize.height.toInt(),
@@ -887,11 +1266,13 @@ void _addVisibleHandSideLandmarks(
   if (visibleHandSide == _VisibleHandSide.none) return;
 
   final expectedSide = mirrorHorizontally ? -1.0 : 1.0;
-  final rawSide =
-      visibleHandSide == _VisibleHandSide.back ? -expectedSide : expectedSide;
+  final rawSide = visibleHandSide == _VisibleHandSide.back
+      ? -expectedSide
+      : expectedSide;
   final wrist = rawSide < 0 ? const Offset(300, 270) : const Offset(140, 270);
-  final thumbTip =
-      rawSide < 0 ? const Offset(260, 180) : const Offset(180, 180);
+  final thumbTip = rawSide < 0
+      ? const Offset(260, 180)
+      : const Offset(180, 180);
 
   void addLandmark(HandLandmarkType type, Offset point) {
     if (missingTypes.contains(type)) return;
@@ -924,10 +1305,9 @@ List<Offset> _straightChainPoints(Offset base, Offset vector) {
 List<Offset> _foldedChainPoints(Offset base, Offset vector) {
   final tip = base + vector;
   final vectorLength = vector.distance;
-  final bendOffset =
-      vectorLength == 0
-          ? Offset.zero
-          : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 45;
+  final bendOffset = vectorLength == 0
+      ? Offset.zero
+      : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 45;
   final pip = Offset.lerp(base, tip, 0.5)! + bendOffset;
   final dip = Offset.lerp(pip, tip, 0.5)!;
 

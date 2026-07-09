@@ -15,11 +15,18 @@ class DirectionGestureDetector {
   final HandGeometryService geometry;
   final Map<HandLandmarkType, _NormalizedFingerPoint> _smoothedWiggleTips =
       <HandLandmarkType, _NormalizedFingerPoint>{};
-  final List<HandMoveDirection> _wiggleStepDirections = <HandMoveDirection>[];
+  final List<_WiggleStep> _wiggleSteps = <_WiggleStep>[];
   int _wiggleCooldownFramesRemaining = 0;
+  DateTime? _lastWiggleSampleAt;
   String _debugSummary = 'direction: idle';
   String? _lastPrintedDebugSummary;
   static const double _wiggleAxisDominanceRatio = 1.25;
+  static const List<HandMoveDirection> _directionPriority = [
+    HandMoveDirection.down,
+    HandMoveDirection.right,
+    HandMoveDirection.up,
+    HandMoveDirection.left,
+  ];
 
   /// Latest short debug explanation for why direction did or did not fire.
   String get debugSummary => _debugSummary;
@@ -33,8 +40,14 @@ class DirectionGestureDetector {
   /// Clears the fingertip-wiggle direction state.
   void _resetWiggleState() {
     _smoothedWiggleTips.clear();
-    _wiggleStepDirections.clear();
+    _clearWiggleSteps();
     _wiggleCooldownFramesRemaining = 0;
+    _lastWiggleSampleAt = null;
+  }
+
+  /// Clears accepted wiggle steps without dropping the smoothed fingertip sample.
+  void _clearWiggleSteps() {
+    _wiggleSteps.clear();
   }
 
   /// Stores and optionally prints one compact debug line.
@@ -52,10 +65,32 @@ class DirectionGestureDetector {
     required Hand hand,
     required Size imageSize,
     required bool mirrorHorizontally,
+    DateTime? now,
   }) {
-    if (!hand.hasLandmarks || imageSize.width <= 0 || imageSize.height <= 0) {
+    if (!geometry.isReliableHand(hand) ||
+        !imageSize.width.isFinite ||
+        !imageSize.height.isFinite ||
+        imageSize.width <= 0 ||
+        imageSize.height <= 0) {
       clearState(reason: 'invalid frame');
       return HandMoveDirection.none;
+    }
+
+    final wiggleDirection = _detectFingertipWiggleDirection(
+      hand: hand,
+      imageSize: imageSize,
+      mirrorHorizontally: mirrorHorizontally,
+      now: now ?? DateTime.now(),
+    );
+    final wiggleSummary = _debugSummary;
+
+    // The wiggle path gets priority because it is a deliberate fingertip
+    // command. A partial down wiggle also suppresses old left/up/right paths so
+    // those directions do not flash while the user completes up -> down -> up.
+    if (wiggleDirection != HandMoveDirection.none) {
+      if (wiggleDirection == HandMoveDirection.down) {
+        return wiggleDirection;
+      }
     }
 
     final fingerChainDirection = _detectFingerChainDirection(
@@ -64,27 +99,36 @@ class DirectionGestureDetector {
       mirrorHorizontally: mirrorHorizontally,
     );
 
-    final wiggleDirection = _detectFingertipWiggleDirection(
-      hand: hand,
-      imageSize: imageSize,
-      mirrorHorizontally: mirrorHorizontally,
-    );
-    final wiggleSummary = _debugSummary;
+    final selectedDirection = _highestPriorityDirection([
+      wiggleDirection,
+      fingerChainDirection,
+    ]);
 
-    // The wiggle path gets priority because it is a deliberate fingertip command
-    // when finger-chain direction is not clear enough.
-    if (wiggleDirection != HandMoveDirection.none) {
-      return wiggleDirection;
+    if (selectedDirection == HandMoveDirection.none) {
+      return HandMoveDirection.none;
     }
 
-    if (fingerChainDirection != HandMoveDirection.none) {
-      _setDebugSummary(
-        'direction: old path ${fingerChainDirection.name}; $wiggleSummary',
-      );
-      return fingerChainDirection;
+    if (selectedDirection == fingerChainDirection) {
+      if (selectedDirection != HandMoveDirection.down &&
+          _isDownWiggleInProgress()) {
+        _setDebugSummary(
+          'direction: down wiggle priority blocked old path '
+          '${selectedDirection.name}; $wiggleSummary',
+        );
+        return HandMoveDirection.none;
+      }
+
+      final priorityNote =
+          wiggleDirection != HandMoveDirection.none &&
+              wiggleDirection != selectedDirection
+          ? 'priority selected old path ${selectedDirection.name} '
+                'over wiggle ${wiggleDirection.name}'
+          : 'old path ${selectedDirection.name}';
+      _setDebugSummary('direction: $priorityNote; $wiggleSummary');
+      return selectedDirection;
     }
 
-    return HandMoveDirection.none;
+    return selectedDirection;
   }
 
   /// Detects direction by checking aligned extended finger chains.
@@ -146,8 +190,6 @@ class DirectionGestureDetector {
     var rightPointingFingerCount = 0;
     var upPointingFingerCount = 0;
     var downPointingFingerCount = 0;
-    var totalDeltaX = 0.0;
-    var totalDeltaY = 0.0;
 
     // Count how many long fingers agree on the same direction. A single finger
     // can be noisy, so the detector requires several aligned chains.
@@ -166,9 +208,6 @@ class DirectionGestureDetector {
       )) {
         continue;
       }
-
-      totalDeltaX += deltaX;
-      totalDeltaY += deltaY;
 
       if (deltaX.abs() >= minHorizontalDistance) {
         final isUpwardDiagonal =
@@ -208,56 +247,52 @@ class DirectionGestureDetector {
       }
     }
 
-    final horizontalDirection =
-        leftPointingFingerCount >=
-                HandGestureThresholds.directionFingerChainMinAlignedCount
-            ? HandMoveDirection.left
-            : rightPointingFingerCount >=
-                HandGestureThresholds.directionFingerChainMinAlignedCount
-            ? HandMoveDirection.right
-            : HandMoveDirection.none;
-    final verticalDirection =
-        upPointingFingerCount >=
-                HandGestureThresholds.directionFingerChainMinAlignedCount
-            ? HandMoveDirection.up
-            : downPointingFingerCount >=
-                HandGestureThresholds.directionFingerChainMinAlignedCount
-            ? HandMoveDirection.down
-            : HandMoveDirection.none;
+    final candidates = <HandMoveDirection>[];
 
-    final HandMoveDirection selectedDirection;
-    if (horizontalDirection != HandMoveDirection.none &&
-        verticalDirection != HandMoveDirection.none) {
-      selectedDirection =
-          verticalDirection == HandMoveDirection.up
-              ? horizontalDirection
-              : totalDeltaY.abs() > totalDeltaX.abs()
-              ? verticalDirection
-              : horizontalDirection;
-    } else if (horizontalDirection != HandMoveDirection.none) {
-      selectedDirection = horizontalDirection;
-    } else {
-      selectedDirection = verticalDirection;
-    }
-
-    if (selectedDirection == HandMoveDirection.up &&
-        !_isBackSideVisible(
-          hand: hand,
-          mirrorHorizontally: mirrorHorizontally,
-        )) {
-      return HandMoveDirection.none;
-    }
-
-    if (selectedDirection == HandMoveDirection.down &&
-        !_hasClearDownShape(
+    if (downPointingFingerCount >=
+            HandGestureThresholds.directionFingerChainMinAlignedCount &&
+        _hasClearDownShape(
           hand: hand,
           imageSize: imageSize,
           mirrorHorizontally: mirrorHorizontally,
         )) {
-      return HandMoveDirection.none;
+      candidates.add(HandMoveDirection.down);
     }
 
-    return selectedDirection;
+    if (rightPointingFingerCount >=
+        HandGestureThresholds.directionFingerChainMinAlignedCount) {
+      candidates.add(HandMoveDirection.right);
+    }
+
+    if (upPointingFingerCount >=
+            HandGestureThresholds.directionFingerChainMinAlignedCount &&
+        _isBackSideVisible(
+          hand: hand,
+          mirrorHorizontally: mirrorHorizontally,
+        )) {
+      candidates.add(HandMoveDirection.up);
+    }
+
+    if (leftPointingFingerCount >=
+        HandGestureThresholds.directionFingerChainMinAlignedCount) {
+      candidates.add(HandMoveDirection.left);
+    }
+
+    return _highestPriorityDirection(candidates);
+  }
+
+  HandMoveDirection _highestPriorityDirection(
+    Iterable<HandMoveDirection> candidates,
+  ) {
+    final candidateSet = candidates
+        .where((direction) => direction != HandMoveDirection.none)
+        .toSet();
+
+    for (final direction in _directionPriority) {
+      if (candidateSet.contains(direction)) return direction;
+    }
+
+    return HandMoveDirection.none;
   }
 
   /// Delegates extended-chain testing to the shared 3D geometry service.
@@ -302,6 +337,7 @@ class DirectionGestureDetector {
     required Hand hand,
     required Size imageSize,
     required bool mirrorHorizontally,
+    required DateTime now,
   }) {
     final sample = _fingerWiggleSample(
       hand: hand,
@@ -314,8 +350,37 @@ class DirectionGestureDetector {
       return HandMoveDirection.none;
     }
 
+    final lastSampleAt = _lastWiggleSampleAt;
+    if (lastSampleAt != null) {
+      final sampleGap = now.difference(lastSampleAt);
+      if (sampleGap.isNegative) {
+        _resetWiggleState();
+        _smoothedWiggleTips.addAll(sample.points);
+        _lastWiggleSampleAt = now;
+        _setDebugSummary(
+          'wiggle: clock reset ${sampleGap.inMilliseconds}ms; '
+          'baseline tips=${sample.points.length}/4',
+        );
+        return HandMoveDirection.none;
+      }
+
+      if (sampleGap > HandGestureThresholds.directionFingerWiggleMaxSampleGap) {
+        _smoothedWiggleTips
+          ..clear()
+          ..addAll(sample.points);
+        _wiggleCooldownFramesRemaining = 0;
+        _lastWiggleSampleAt = now;
+        _setDebugSummary(
+          'wiggle: refreshed baseline after ${sampleGap.inMilliseconds}ms; '
+          'tips=${sample.points.length}/4 changes=${_wiggleDirectionChangeCount()}',
+        );
+        return HandMoveDirection.none;
+      }
+    }
+
     if (_smoothedWiggleTips.isEmpty) {
       _smoothedWiggleTips.addAll(sample.points);
+      _lastWiggleSampleAt = now;
       _setDebugSummary('wiggle: baseline tips=${sample.points.length}/4');
       return HandMoveDirection.none;
     }
@@ -324,6 +389,8 @@ class DirectionGestureDetector {
     var movingRightCount = 0;
     var movingUpCount = 0;
     var movingDownCount = 0;
+    var cleanDownPatternUpCount = 0;
+    var cleanDownPatternDownCount = 0;
     var tinyMotionCount = 0;
     var crossAxisDriftCount = 0;
     final nextSmoothedTips = <HandLandmarkType, _NormalizedFingerPoint>{};
@@ -335,13 +402,12 @@ class DirectionGestureDetector {
       if (current == null) continue;
 
       final previous = _smoothedWiggleTips[type];
-      final smoothed =
-          previous == null
-              ? current
-              : previous.lerp(
-                current,
-                HandGestureThresholds.directionFingerWiggleSmoothingAlpha,
-              );
+      final smoothed = previous == null
+          ? current
+          : previous.lerp(
+              current,
+              HandGestureThresholds.directionFingerWiggleSmoothingAlpha,
+            );
       nextSmoothedTips[type] = smoothed;
 
       if (previous == null) continue;
@@ -353,7 +419,7 @@ class DirectionGestureDetector {
       if (absoluteDeltaX <
               HandGestureThresholds.directionFingerWiggleMinStepRatio &&
           absoluteDeltaY <
-              HandGestureThresholds.directionFingerWiggleMinStepRatio) {
+              HandGestureThresholds.directionFingerWiggleVerticalMinStepRatio) {
         tinyMotionCount += 1;
         continue;
       }
@@ -366,10 +432,19 @@ class DirectionGestureDetector {
               HandGestureThresholds.directionFingerWiggleMaxHorizontalStepRatio;
       final isVerticalStep =
           absoluteDeltaY >=
-              HandGestureThresholds.directionFingerWiggleMinStepRatio &&
+              HandGestureThresholds.directionFingerWiggleVerticalMinStepRatio &&
           absoluteDeltaY >= absoluteDeltaX * _wiggleAxisDominanceRatio &&
           absoluteDeltaX <=
               HandGestureThresholds.directionFingerWiggleMaxHorizontalStepRatio;
+      final isCleanDownPatternVerticalStep =
+          isVerticalStep &&
+          absoluteDeltaY >=
+              absoluteDeltaX *
+                  HandGestureThresholds
+                      .directionFingerWiggleDownVerticalDominanceRatio &&
+          absoluteDeltaX <=
+              HandGestureThresholds
+                  .directionFingerWiggleDownMaxHorizontalStepRatio;
 
       if (!isHorizontalStep && !isVerticalStep) {
         crossAxisDriftCount += 1;
@@ -385,8 +460,14 @@ class DirectionGestureDetector {
       } else {
         if (deltaY > 0) {
           movingDownCount += 1;
+          if (isCleanDownPatternVerticalStep) {
+            cleanDownPatternDownCount += 1;
+          }
         } else {
           movingUpCount += 1;
+          if (isCleanDownPatternVerticalStep) {
+            cleanDownPatternUpCount += 1;
+          }
         }
       }
     }
@@ -394,6 +475,7 @@ class DirectionGestureDetector {
     _smoothedWiggleTips
       ..clear()
       ..addAll(nextSmoothedTips);
+    _lastWiggleSampleAt = now;
 
     if (_wiggleCooldownFramesRemaining > 0) {
       _setDebugSummary(
@@ -403,7 +485,7 @@ class DirectionGestureDetector {
         'tiny=$tinyMotionCount drift=$crossAxisDriftCount',
       );
       _wiggleCooldownFramesRemaining -= 1;
-      _wiggleStepDirections.clear();
+      _clearWiggleSteps();
       return HandMoveDirection.none;
     }
 
@@ -415,6 +497,10 @@ class DirectionGestureDetector {
     );
 
     if (alignedDirection == HandMoveDirection.none) {
+      if (crossAxisDriftCount >=
+          HandGestureThresholds.directionFingerWiggleMinAlignedCount) {
+        _clearWiggleSteps();
+      }
       _setDebugSummary(
         'wiggle: waiting tips=${sample.points.length}/4 '
         'left=$movingLeftCount right=$movingRightCount '
@@ -425,7 +511,20 @@ class DirectionGestureDetector {
       return HandMoveDirection.none;
     }
 
-    _recordWiggleStepDirection(alignedDirection);
+    final isCleanDownPatternStep =
+        (alignedDirection == HandMoveDirection.up &&
+            cleanDownPatternUpCount >=
+                HandGestureThresholds.directionFingerWiggleMinAlignedCount) ||
+        (alignedDirection == HandMoveDirection.down &&
+            cleanDownPatternDownCount >=
+                HandGestureThresholds.directionFingerWiggleMinAlignedCount);
+
+    _recordWiggleStep(
+      _WiggleStep(
+        direction: alignedDirection,
+        isCleanDownPatternStep: isCleanDownPatternStep,
+      ),
+    );
 
     final firedDirection = _middleStrokeWiggleDirection();
     if (_wiggleDirectionChangeCount() <
@@ -449,7 +548,7 @@ class DirectionGestureDetector {
         'up=$movingUpCount down=$movingDownCount changes='
         '${_wiggleDirectionChangeCount()}',
       );
-      _wiggleStepDirections.clear();
+      _clearWiggleSteps();
       _wiggleCooldownFramesRemaining =
           HandGestureThresholds.directionFingerWiggleCooldownFrames;
       return HandMoveDirection.none;
@@ -461,7 +560,7 @@ class DirectionGestureDetector {
       'up=$movingUpCount down=$movingDownCount changes='
       '${_wiggleDirectionChangeCount()}',
     );
-    _wiggleStepDirections.clear();
+    _clearWiggleSteps();
     _wiggleCooldownFramesRemaining =
         HandGestureThresholds.directionFingerWiggleCooldownFrames;
     return firedDirection;
@@ -534,26 +633,33 @@ class DirectionGestureDetector {
         : HandMoveDirection.none;
   }
 
-  /// Records a new wiggle step only when it changes direction.
-  void _recordWiggleStepDirection(HandMoveDirection direction) {
-    if (_wiggleStepDirections.isNotEmpty &&
-        _wiggleStepDirections.last == direction) {
+  /// Records a new wiggle step, merging repeated frames in the same stroke.
+  void _recordWiggleStep(_WiggleStep step) {
+    if (_wiggleSteps.isNotEmpty &&
+        _wiggleSteps.last.direction == step.direction) {
+      final lastIndex = _wiggleSteps.length - 1;
+      final lastStep = _wiggleSteps[lastIndex];
+      _wiggleSteps[lastIndex] = _WiggleStep(
+        direction: lastStep.direction,
+        isCleanDownPatternStep:
+            lastStep.isCleanDownPatternStep && step.isCleanDownPatternStep,
+      );
       return;
     }
 
-    _wiggleStepDirections.add(direction);
+    _wiggleSteps.add(step);
 
-    if (_wiggleStepDirections.length >
+    if (_wiggleSteps.length >
         HandGestureThresholds.directionFingerWiggleHistoryMaxLength) {
-      _wiggleStepDirections.removeAt(0);
+      _wiggleSteps.removeAt(0);
     }
   }
 
   /// Counts direction changes in the recent wiggle history.
   int _wiggleDirectionChangeCount() {
     var count = 0;
-    for (var i = 1; i < _wiggleStepDirections.length; i++) {
-      if (_wiggleStepDirections[i] != _wiggleStepDirections[i - 1]) {
+    for (var i = 1; i < _wiggleSteps.length; i++) {
+      if (_wiggleSteps[i].direction != _wiggleSteps[i - 1].direction) {
         count += 1;
       }
     }
@@ -563,18 +669,52 @@ class DirectionGestureDetector {
 
   /// Returns the middle stroke from an A -> B -> A opposite-direction wiggle.
   HandMoveDirection _middleStrokeWiggleDirection() {
-    if (_wiggleStepDirections.length < 3) return HandMoveDirection.none;
+    if (_wiggleSteps.length < 3) return HandMoveDirection.none;
 
-    final lastIndex = _wiggleStepDirections.length - 1;
-    final first = _wiggleStepDirections[lastIndex - 2];
-    final middle = _wiggleStepDirections[lastIndex - 1];
-    final last = _wiggleStepDirections[lastIndex];
+    final lastIndex = _wiggleSteps.length - 1;
+    final first = _wiggleSteps[lastIndex - 2];
+    final middle = _wiggleSteps[lastIndex - 1];
+    final last = _wiggleSteps[lastIndex];
 
-    if (first == last && _areOppositeWiggleDirections(first, middle)) {
-      return middle;
+    if (first.direction == last.direction &&
+        _areOppositeWiggleDirections(first.direction, middle.direction)) {
+      if (middle.direction == HandMoveDirection.down &&
+          (!first.isCleanDownPatternStep ||
+              !middle.isCleanDownPatternStep ||
+              !last.isCleanDownPatternStep)) {
+        return HandMoveDirection.none;
+      }
+
+      return middle.direction;
     }
 
     return HandMoveDirection.none;
+  }
+
+  bool _isDownWiggleInProgress() {
+    if (_wiggleSteps.isEmpty) return false;
+
+    final suffix = <_WiggleStep>[];
+    for (final step in _wiggleSteps.reversed) {
+      final isVertical =
+          step.direction == HandMoveDirection.up ||
+          step.direction == HandMoveDirection.down;
+      if (!isVertical || !step.isCleanDownPatternStep) break;
+
+      suffix.insert(0, step);
+      if (suffix.length == 2) break;
+    }
+
+    if (suffix.length == 1) {
+      return suffix.first.direction == HandMoveDirection.up;
+    }
+
+    if (suffix.length == 2) {
+      return suffix.first.direction == HandMoveDirection.up &&
+          suffix.last.direction == HandMoveDirection.down;
+    }
+
+    return false;
   }
 
   bool _areOppositeWiggleDirections(
@@ -672,10 +812,7 @@ class DirectionGestureDetector {
 
   /// Uses hand bounding-box size as the scale reference for thresholds.
   double _handSize(Hand hand) {
-    final box = hand.boundingBox;
-    final handWidth = (box.right - box.left).abs();
-    final handHeight = (box.bottom - box.top).abs();
-    return math.max(handWidth, handHeight);
+    return geometry.handSizeFromBoundingBox(hand.boundingBox);
   }
 }
 
@@ -684,6 +821,17 @@ class _FingerWiggleSample {
   const _FingerWiggleSample(this.points);
 
   final Map<HandLandmarkType, _NormalizedFingerPoint> points;
+}
+
+/// One accepted fingertip wiggle step in recent history.
+class _WiggleStep {
+  const _WiggleStep({
+    required this.direction,
+    required this.isCleanDownPatternStep,
+  });
+
+  final HandMoveDirection direction;
+  final bool isCleanDownPatternStep;
 }
 
 /// Palm-relative fingertip coordinate normalized by hand size.

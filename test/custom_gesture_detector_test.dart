@@ -62,6 +62,76 @@ void main() {
         expect(result.isCancelEverything, isFalse);
       }
     });
+
+    test('invalid hand resets partial circle history', () {
+      final detector = CustomGestureDetector();
+      final points = _circlePoints(center: const Offset(200, 130), radius: 5);
+
+      for (final point in points.take(4)) {
+        expect(
+          detector
+              .detect(
+                hand: _indexOnlyHand(indexTip: point),
+                imageSize: _imageSize,
+                mirrorHorizontally: false,
+              )
+              .isCancelEverything,
+          isFalse,
+        );
+      }
+
+      expect(
+        detector
+            .detect(
+              hand: _indexOnlyHand(indexTip: points.last, score: double.nan),
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+            )
+            .hasAny,
+        isFalse,
+      );
+      expect(
+        detector
+            .detect(
+              hand: _indexOnlyHand(indexTip: points.last),
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+            )
+            .isCancelEverything,
+        isFalse,
+      );
+    });
+
+    test('clearState resets partial circle history', () {
+      final detector = CustomGestureDetector();
+      final points = _circlePoints(center: const Offset(200, 130), radius: 5);
+
+      for (final point in points.take(4)) {
+        expect(
+          detector
+              .detect(
+                hand: _indexOnlyHand(indexTip: point),
+                imageSize: _imageSize,
+                mirrorHorizontally: false,
+              )
+              .isCancelEverything,
+          isFalse,
+        );
+      }
+
+      detector.clearState();
+
+      expect(
+        detector
+            .detect(
+              hand: _indexOnlyHand(indexTip: points.last),
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+            )
+            .isCancelEverything,
+        isFalse,
+      );
+    });
   });
 
   group('CustomGestureDetector punch', () {
@@ -75,6 +145,18 @@ void main() {
       );
 
       expect(result.isPunch, isTrue);
+    });
+
+    test('rejects punch for non-finite hand confidence', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(score: double.infinity),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.hasAny, isFalse);
     });
 
     test('treats package thumb down as punch', () {
@@ -107,6 +189,25 @@ void main() {
             type: GestureType.thumbDown,
             confidence:
                 HandGestureThresholds.punchGestureMinPackageConfidence - 0.01,
+          ),
+        ),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
+    });
+
+    test('does not punch for non-finite package thumb down confidence', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(
+          fingersCurled: false,
+          thumbTucked: false,
+          gesture: const GestureResult(
+            type: GestureType.thumbDown,
+            confidence: double.infinity,
           ),
         ),
         imageSize: _imageSize,
@@ -210,7 +311,11 @@ List<Offset> _circlePoints({required Offset center, required double radius}) {
   });
 }
 
-Hand _indexOnlyHand({required Offset indexTip, double indexTipZ = 0}) {
+Hand _indexOnlyHand({
+  required Offset indexTip,
+  double indexTipZ = 0,
+  double score = 1,
+}) {
   const wrist = Offset(200, 260);
   const indexMcp = Offset(200, 220);
   const middleMcp = Offset(210, 225);
@@ -242,7 +347,7 @@ Hand _indexOnlyHand({required Offset indexTip, double indexTipZ = 0}) {
 
   return Hand(
     boundingBox: BoundingBox.ltrb(100, 80, 320, 300),
-    score: 1,
+    score: score,
     landmarks: landmarks,
     imageWidth: _imageSize.width.toInt(),
     imageHeight: _imageSize.height.toInt(),
@@ -256,6 +361,7 @@ Hand _punchHand({
   double scale = 1,
   Offset palmOffset = Offset.zero,
   GestureResult? gesture,
+  double score = 1,
 }) {
   const basePalmCenter = Offset(204, 220);
 
@@ -269,38 +375,29 @@ Hand _punchHand({
   const wrist = Offset(200, 300);
   const thumbMcp = Offset(230, 230);
   const thumbIp = Offset(210, 238);
-  final thumbTip = thumbTucked
-      ? const Offset(205, 232)
-      : const Offset(300, 235);
+  final thumbTip =
+      thumbTucked ? const Offset(205, 232) : const Offset(300, 235);
   const indexMcp = Offset(160, 200);
   const middleMcp = Offset(190, 200);
   const ringMcp = Offset(220, 200);
   const pinkyMcp = Offset(250, 200);
 
-  final indexPip = fingersCurled
-      ? const Offset(160, 245)
-      : const Offset(160, 150);
-  final indexTip = fingersCurled
-      ? const Offset(205, 265)
-      : const Offset(160, 90);
-  final middlePip = fingersCurled
-      ? const Offset(190, 245)
-      : const Offset(190, 145);
-  final middleTip = fingersCurled
-      ? const Offset(230, 260)
-      : const Offset(190, 80);
-  final ringPip = fingersCurled
-      ? const Offset(220, 245)
-      : const Offset(220, 145);
-  final ringTip = fingersCurled
-      ? const Offset(180, 260)
-      : const Offset(220, 80);
-  final pinkyPip = fingersCurled
-      ? const Offset(250, 245)
-      : const Offset(250, 150);
-  final pinkyTip = fingersCurled
-      ? const Offset(205, 260)
-      : const Offset(250, 90);
+  final indexPip =
+      fingersCurled ? const Offset(160, 245) : const Offset(160, 150);
+  final indexTip =
+      fingersCurled ? const Offset(205, 265) : const Offset(160, 90);
+  final middlePip =
+      fingersCurled ? const Offset(190, 245) : const Offset(190, 145);
+  final middleTip =
+      fingersCurled ? const Offset(230, 260) : const Offset(190, 80);
+  final ringPip =
+      fingersCurled ? const Offset(220, 245) : const Offset(220, 145);
+  final ringTip =
+      fingersCurled ? const Offset(180, 260) : const Offset(220, 80);
+  final pinkyPip =
+      fingersCurled ? const Offset(250, 245) : const Offset(250, 150);
+  final pinkyTip =
+      fingersCurled ? const Offset(205, 260) : const Offset(250, 90);
 
   final landmarks = <HandLandmark>[
     _landmark(HandLandmarkType.wrist, point(wrist)),
@@ -339,7 +436,7 @@ Hand _punchHand({
 
   return Hand(
     boundingBox: BoundingBox.ltrb(40, 40, 360, 360),
-    score: 1,
+    score: score,
     landmarks: landmarks,
     imageWidth: _imageSize.width.toInt(),
     imageHeight: _imageSize.height.toInt(),
@@ -449,9 +546,10 @@ List<Offset> _straightChain(Offset base, Offset vector) {
 List<Offset> _foldedChain(Offset base, Offset vector) {
   final tip = base + vector;
   final vectorLength = vector.distance;
-  final bendOffset = vectorLength == 0
-      ? Offset.zero
-      : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 35;
+  final bendOffset =
+      vectorLength == 0
+          ? Offset.zero
+          : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 35;
   final pip = Offset.lerp(base, tip, 0.5)! + bendOffset;
   final dip = Offset.lerp(pip, tip, 0.5)!;
 

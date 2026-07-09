@@ -6,17 +6,21 @@ import '../constants/hand_gesture_thresholds.dart';
 import '../enums/follow_object_sequence_phase.dart';
 import '../enums/follow_object_release_reason.dart';
 import '../models/follow_object_sequence_result.dart';
+import 'hand_geometry_service.dart';
 import 'open_palm_gesture_detector.dart';
 
 /// State machine for "open palm, closed fist, release" object following.
 class FollowObjectSequenceDetector {
   FollowObjectSequenceDetector({
     OpenPalmGestureDetector? openPalmGestureDetector,
+    HandGeometryService geometry = const HandGeometryService(),
     this.onDebug,
   }) : _openPalmGestureDetector =
-           openPalmGestureDetector ?? OpenPalmGestureDetector();
+           openPalmGestureDetector ?? OpenPalmGestureDetector(),
+       _geometry = geometry;
 
   final OpenPalmGestureDetector _openPalmGestureDetector;
+  final HandGeometryService _geometry;
   final void Function(String message)? onDebug;
 
   FollowObjectSequencePhase _phase = FollowObjectSequencePhase.idle;
@@ -57,6 +61,10 @@ class FollowObjectSequenceDetector {
         isTargetSelectionActive: false,
         packageGestureType: _currentPackageGestureType,
       );
+    }
+
+    if (!_geometry.isReliableHand(hand)) {
+      return _handleUnreliableHand();
     }
 
     final openPalm = _isOpenPalmGesture(
@@ -255,21 +263,18 @@ class FollowObjectSequenceDetector {
     required String debugLabel,
   }) {
     final gesture = hand.gesture;
-
-    final detected =
-        gesture != null &&
-        gesture.type == type &&
-        gesture.confidence >= HandGestureThresholds.minPackageGestureConfidence;
-
-    if (detected) {
-      _currentPackageGestureType = gesture.type;
-      _debug(
-        'package $debugLabel detected | '
-        'confidence=${gesture.confidence.toStringAsFixed(2)}',
-      );
+    if (gesture == null ||
+        !_geometry.isReliablePackageGesture(gesture, type: type)) {
+      return false;
     }
 
-    return detected;
+    _currentPackageGestureType = gesture.type;
+    _debug(
+      'package $debugLabel detected | '
+      'confidence=${gesture.confidence.toStringAsFixed(2)}',
+    );
+
+    return true;
   }
 
   /// Holds a completed sequence result long enough for the UI to show it.
@@ -283,6 +288,31 @@ class FollowObjectSequenceDetector {
   /// Internal check for the target-selection phase.
   bool get _isTargetSelectionActive =>
       _phase == FollowObjectSequencePhase.waitingForFinalOpen;
+
+  FollowObjectSequenceResult _handleUnreliableHand() {
+    _openPalmGestureDetector.clear();
+
+    if (_isTargetSelectionActive) {
+      _debug('unreliable hand while selecting target; keep last release point');
+      return FollowObjectSequenceResult(
+        isActive: true,
+        isDetected: false,
+        isTargetSelectionActive: true,
+        packageGestureType: _currentPackageGestureType,
+      );
+    }
+
+    if (_phase != FollowObjectSequencePhase.idle) {
+      _debug('unreliable hand interrupted sequence; reset');
+      clear();
+    }
+
+    return const FollowObjectSequenceResult(
+      isActive: false,
+      isDetected: false,
+      isTargetSelectionActive: false,
+    );
+  }
 
   /// Uses the hand bounding-box center as the target release point.
   Offset _handReleasePoint(Hand hand) {

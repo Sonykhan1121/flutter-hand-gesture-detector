@@ -9,6 +9,20 @@ const _imageSize = Size(400, 400);
 
 void main() {
   group('ZoomGestureDetector palm stability', () {
+    test('does not arm zoom from non-finite hand confidence', () {
+      var now = DateTime(2026);
+      final detector = ZoomGestureDetector(now: () => now);
+
+      expect(
+        _detect(detector, _zoomHand(tipDistance: 20, score: double.infinity)),
+        ZoomDirection.none,
+      );
+      expect(detector.isGestureActive, isFalse);
+
+      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
+      expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
+    });
+
     test('returns zoom in when pinch opens and palm stays stable', () {
       var now = DateTime(2026);
       final detector = ZoomGestureDetector(now: () => now);
@@ -300,6 +314,7 @@ Hand _zoomHand({
   double zOffset = 0,
   bool otherFingersFolded = true,
   Map<HandLandmarkType, Offset> fingerTipOffsets = const {},
+  double score = 1,
 }) {
   final halfDistance = tipDistance / 2;
   final landmarks = <HandLandmark>[];
@@ -359,7 +374,7 @@ Hand _zoomHand({
       offset.dx + 200,
       offset.dy + 200,
     ),
-    score: 1,
+    score: score,
     landmarks: landmarks,
     imageWidth: _imageSize.width.toInt(),
     imageHeight: _imageSize.height.toInt(),

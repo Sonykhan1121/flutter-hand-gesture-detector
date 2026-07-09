@@ -21,6 +21,59 @@ class HandPoint3D {
 class HandGeometryService {
   const HandGeometryService();
 
+  /// Returns true when the hand has landmarks, confidence, and usable bounds.
+  bool isReliableHand(Hand hand) {
+    return hand.hasLandmarks &&
+        hand.score.isFinite &&
+        hand.score >= HandGestureThresholds.minHandScore &&
+        handSizeFromBoundingBox(hand.boundingBox) > 0 &&
+        _hasAnyReliableLandmark(hand);
+  }
+
+  /// Returns true when a package gesture has a finite, trusted confidence.
+  bool isReliablePackageGesture(
+    GestureResult? gesture, {
+    GestureType? type,
+    double minConfidence = HandGestureThresholds.minPackageGestureConfidence,
+  }) {
+    return gesture != null &&
+        (type == null || gesture.type == type) &&
+        gesture.confidence.isFinite &&
+        gesture.confidence >= minConfidence;
+  }
+
+  /// Returns only hands trusted enough for gesture decisions.
+  List<Hand> reliableHands(Iterable<Hand> hands) {
+    return hands.where(isReliableHand).toList(growable: false);
+  }
+
+  /// Picks the highest-confidence reliable hand, or the nearest to focus.
+  Hand? bestReliableHand(Iterable<Hand> hands, {Rect? focusedHandBox}) {
+    final candidates = reliableHands(hands);
+    if (candidates.isEmpty) return null;
+
+    if (focusedHandBox == null) {
+      return candidates.reduce(
+        (currentBest, next) =>
+            next.score > currentBest.score ? next : currentBest,
+      );
+    }
+
+    final focusedCenter = focusedHandBox.center;
+    return candidates.reduce((currentBest, next) {
+      final currentDistance = distanceBetweenOffsets(
+        _handBoxCenter(currentBest),
+        focusedCenter,
+      );
+      final nextDistance = distanceBetweenOffsets(
+        _handBoxCenter(next),
+        focusedCenter,
+      );
+
+      return nextDistance < currentDistance ? next : currentBest;
+    });
+  }
+
   /// Returns a landmark only when it exists and has enough visibility.
   HandLandmark? visibleLandmark(
     Hand hand,
@@ -28,7 +81,15 @@ class HandGeometryService {
     double minVisibility = HandGestureThresholds.minLandmarkVisibility,
   }) {
     final landmark = hand.getLandmark(type);
-    if (landmark == null || landmark.visibility < minVisibility) return null;
+    if (landmark == null ||
+        !landmark.x.isFinite ||
+        !landmark.y.isFinite ||
+        !landmark.z.isFinite ||
+        !landmark.visibility.isFinite ||
+        landmark.visibility < minVisibility) {
+      return null;
+    }
+
     return landmark;
   }
 
@@ -77,6 +138,14 @@ class HandGeometryService {
       y: average(points.map((point) => point.y)),
       z: average(points.map((point) => point.z)),
     );
+  }
+
+  /// Uses the hand bounding box as a finite scale reference for thresholds.
+  double handSizeFromBoundingBox(BoundingBox box) {
+    final handWidth = (box.right - box.left).abs();
+    final handHeight = (box.bottom - box.top).abs();
+    final handSize = math.max(handWidth, handHeight);
+    return handSize.isFinite ? handSize : 0;
   }
 
   /// Checks if a finger tip reaches farther from the palm than its PIP joint.
@@ -319,7 +388,12 @@ class HandGeometryService {
     required Size imageSize,
     required bool mirrorHorizontally,
   }) {
-    if (imageSize.width <= 0 || imageSize.height <= 0) return 0;
+    if (!imageSize.width.isFinite ||
+        !imageSize.height.isFinite ||
+        imageSize.width <= 0 ||
+        imageSize.height <= 0) {
+      return 0;
+    }
 
     double visibleX(double rawX) =>
         mirrorHorizontally ? imageSize.width - rawX : rawX;
@@ -540,6 +614,24 @@ class HandGeometryService {
     return math.sqrt(dx * dx + dy * dy);
   }
 
+  /// Returns the center of a detected hand bounding box.
+  Offset _handBoxCenter(Hand hand) {
+    final box = hand.boundingBox;
+    return Offset((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+  }
+
+  /// Confirms at least one landmark is finite and visible enough to trust.
+  bool _hasAnyReliableLandmark(Hand hand) {
+    return hand.landmarks.any(
+      (landmark) =>
+          landmark.x.isFinite &&
+          landmark.y.isFinite &&
+          landmark.z.isFinite &&
+          landmark.visibility.isFinite &&
+          landmark.visibility >= HandGestureThresholds.minLandmarkVisibility,
+    );
+  }
+
   /// 3D distance between two [HandPoint3D] values using weighted depth.
   double distanceBetweenPoints3D(HandPoint3D first, HandPoint3D second) {
     final dx = first.x - second.x;
@@ -577,12 +669,11 @@ class HandGeometryService {
 
   /// Builds the convex hull around points using a monotonic chain algorithm.
   List<Offset> convexHull(List<Offset> points) {
-    final sortedPoints = [...points]
-      ..sort((a, b) {
-        final xCompare = a.dx.compareTo(b.dx);
-        if (xCompare != 0) return xCompare;
-        return a.dy.compareTo(b.dy);
-      });
+    final sortedPoints = [...points]..sort((a, b) {
+      final xCompare = a.dx.compareTo(b.dx);
+      if (xCompare != 0) return xCompare;
+      return a.dy.compareTo(b.dy);
+    });
 
     final uniquePoints = <Offset>[];
 

@@ -47,7 +47,41 @@ void main() {
       );
     });
 
-    test('non-down direction clears held down display', () {
+    test('shows up immediately when detected', () {
+      expect(
+        hold.resolve(detectedDirection: HandMoveDirection.up, now: now),
+        HandMoveDirection.up,
+      );
+    });
+
+    test('keeps up visible inside the display hold window', () {
+      hold.resolve(detectedDirection: HandMoveDirection.up, now: now);
+
+      expect(
+        hold.resolve(
+          detectedDirection: HandMoveDirection.none,
+          now: now.add(
+            HandGestureThresholds.movingUpDisplayHoldDuration -
+                const Duration(milliseconds: 1),
+          ),
+        ),
+        HandMoveDirection.up,
+      );
+    });
+
+    test('expires up after the display hold window', () {
+      hold.resolve(detectedDirection: HandMoveDirection.up, now: now);
+
+      expect(
+        hold.resolve(
+          detectedDirection: HandMoveDirection.none,
+          now: now.add(HandGestureThresholds.movingUpDisplayHoldDuration),
+        ),
+        HandMoveDirection.none,
+      );
+    });
+
+    test('left or right direction clears held display', () {
       hold.resolve(detectedDirection: HandMoveDirection.down, now: now);
 
       expect(

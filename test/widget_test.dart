@@ -22,35 +22,40 @@ void main() {
     expect(find.text('Control Settings'), findsOneWidget);
     expect(find.text('Hand Gesture'), findsOneWidget);
     expect(find.text('ON'), findsOneWidget);
-    expect(find.text('SOON'), findsNWidgets(2));
+    expect(find.text('GESTURE'), findsOneWidget);
+    expect(find.text('SOON'), findsNothing);
   });
 
   testWidgets(
-    'disabled mode tap calls its callback without changing selection',
+    'disabled visible mode tap calls its callback without changing selection',
     (tester) async {
-      var voiceTapCount = 0;
+      var handTapCount = 0;
+      var modeChangeCount = 0;
 
       await tester.pumpWidget(
         MaterialApp(
           home: StandControlHomePage(
             initialMode: StandControlMode.handGesture,
             disabledModes: const {
-              StandControlMode.automaticDetect,
-              StandControlMode.voiceCommand,
+              StandControlMode.handGesture,
             },
-            onVoiceCommandTap: () {
-              voiceTapCount += 1;
+            onModeChanged: (_) {
+              modeChangeCount += 1;
+            },
+            onHandGestureTap: () {
+              handTapCount += 1;
             },
           ),
         ),
       );
 
-      await tester.tap(find.text('Voice Command'));
+      await tester.tap(find.text('Hand Gesture'));
       await tester.pumpAndSettle();
 
-      expect(voiceTapCount, 1);
+      expect(handTapCount, 1);
+      expect(modeChangeCount, 0);
       expect(find.text('ON'), findsOneWidget);
-      expect(find.text('SOON'), findsNWidgets(2));
+      expect(find.text('SOON'), findsOneWidget);
     },
   );
 }

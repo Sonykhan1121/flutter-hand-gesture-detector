@@ -1,12 +1,12 @@
 import '../constants/hand_gesture_thresholds.dart';
 import '../enums/hand_move_direction.dart';
 
-/// Keeps the "moving down" label visible briefly after detection flickers off.
+/// Keeps brief movement labels visible after detection flickers off.
 class MoveDirectionDisplayHold {
   HandMoveDirection _heldDirection = HandMoveDirection.none;
   DateTime? _expiresAt;
 
-  /// Returns the detected direction, or a held-down direction while it expires.
+  /// Returns the detected direction, or a held direction while it expires.
   HandMoveDirection resolve({
     required HandMoveDirection detectedDirection,
     required DateTime now,
@@ -17,16 +17,22 @@ class MoveDirectionDisplayHold {
       return HandMoveDirection.down;
     }
 
+    if (detectedDirection == HandMoveDirection.up) {
+      _heldDirection = HandMoveDirection.up;
+      _expiresAt = now.add(HandGestureThresholds.movingUpDisplayHoldDuration);
+      return HandMoveDirection.up;
+    }
+
     if (detectedDirection != HandMoveDirection.none) {
       clear();
       return detectedDirection;
     }
 
     final expiresAt = _expiresAt;
-    if (_heldDirection == HandMoveDirection.down &&
+    if (_heldDirection != HandMoveDirection.none &&
         expiresAt != null &&
         now.isBefore(expiresAt)) {
-      return HandMoveDirection.down;
+      return _heldDirection;
     }
 
     clear();
