@@ -427,7 +427,7 @@ void main() {
     });
   });
 
-  group('DirectionGestureDetector fingertip wiggle moving down', () {
+  group('DirectionGestureDetector fingertip wiggle directions', () {
     late DirectionGestureDetector detector;
 
     setUp(() {
@@ -438,88 +438,129 @@ void main() {
       expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
     });
 
-    test('emits down after repeated small up and down fingertip motion', () {
-      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+    test('does not emit left for a right-left-right fingertip wiggle', () {
       expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
+        _detectWiggleSequence(detector, const [
+          Offset.zero,
+          Offset(8, 0),
+          Offset(-8, 0),
+          Offset(8, 0),
+        ]),
         HandMoveDirection.none,
       );
-      expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
-        HandMoveDirection.none,
-      );
-      expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
-        HandMoveDirection.down,
-      );
-      expect(detector.debugSummary, contains('FIRED'));
+      expect(detector.debugSummary, contains('left disabled'));
     });
 
-    test('emits down when the small shake starts downward', () {
-      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
+    test('emits right for a left-right-left fingertip wiggle', () {
       expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        _detectWiggleSequence(detector, const [
+          Offset.zero,
+          Offset(-8, 0),
+          Offset(8, 0),
+          Offset(-8, 0),
+        ]),
+        HandMoveDirection.right,
+      );
+    });
+
+    test('does not emit up for a down-up-down fingertip wiggle', () {
+      expect(
+        _detectWiggleSequence(detector, const [
+          Offset.zero,
+          Offset(0, 8),
+          Offset(0, -8),
+          Offset(0, 8),
+        ]),
         HandMoveDirection.none,
       );
+      expect(detector.debugSummary, contains('up disabled'));
+    });
+
+    test('emits down for an up-down-up fingertip wiggle', () {
       expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
-        HandMoveDirection.none,
-      );
-      expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        _detectWiggleSequence(detector, const [
+          Offset.zero,
+          Offset(0, -8),
+          Offset(0, 8),
+          Offset(0, -8),
+        ]),
         HandMoveDirection.down,
       );
     });
 
     test(
-      'emits down even when old left path is detected between wiggle frames',
+      'emits a wiggle direction even when old left path is detected between frames',
       () {
         expect(
-          _detect(detector, _handWithLeftFingerChains(tipYOffset: 0)),
+          _detect(
+            detector,
+            _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: 0),
+          ),
           HandMoveDirection.left,
         );
         expect(
-          _detect(detector, _handWithLeftFingerChains(tipYOffset: -8)),
+          _detect(
+            detector,
+            _handWithLeftFingerChains(tipXOffset: -8, tipYOffset: 0),
+          ),
           HandMoveDirection.left,
         );
         expect(
-          _detect(detector, _handWithLeftFingerChains(tipYOffset: 8)),
+          _detect(
+            detector,
+            _handWithLeftFingerChains(tipXOffset: 8, tipYOffset: 0),
+          ),
           HandMoveDirection.left,
         );
         expect(
-          _detect(detector, _handWithLeftFingerChains(tipYOffset: -8)),
-          HandMoveDirection.down,
+          _detect(
+            detector,
+            _handWithLeftFingerChains(tipXOffset: -8, tipYOffset: 0),
+          ),
+          HandMoveDirection.right,
         );
         expect(detector.debugSummary, contains('FIRED'));
       },
     );
 
+    test('emits down for down wiggle while fingers point left', () {
+      expect(
+        _detect(
+          detector,
+          _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: 0),
+        ),
+        HandMoveDirection.left,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: -8),
+        ),
+        HandMoveDirection.left,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: 8),
+        ),
+        HandMoveDirection.left,
+      );
+      expect(
+        _detect(
+          detector,
+          _handWithLeftFingerChains(tipXOffset: 0, tipYOffset: -8),
+        ),
+        HandMoveDirection.down,
+      );
+      expect(detector.debugSummary, contains('FIRED down'));
+    });
+
     test('does not emit when only two fingertips move', () {
-      expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
       expect(
-        _detect(
+        _detectWiggleSequence(
           detector,
-          _handWithWiggleTips(
-            movingTipYOffset: -8,
-            movingFingerIndexes: {0, 1},
-          ),
-        ),
-        HandMoveDirection.none,
-      );
-      expect(
-        _detect(
-          detector,
-          _handWithWiggleTips(movingTipYOffset: 8, movingFingerIndexes: {0, 1}),
-        ),
-        HandMoveDirection.none,
-      );
-      expect(
-        _detect(
-          detector,
-          _handWithWiggleTips(
-            movingTipYOffset: -8,
-            movingFingerIndexes: {0, 1},
-          ),
+          const [Offset.zero, Offset(8, 0), Offset(-8, 0), Offset(8, 0)],
+          movingFingerIndexes: {0, 1},
         ),
         HandMoveDirection.none,
       );
@@ -527,40 +568,35 @@ void main() {
 
     test('does not emit for tiny camera noise', () {
       expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
-      for (final offset in const [-1.0, 1.0, -1.0, 1.0]) {
+      for (final offset in const [
+        Offset(1, 0),
+        Offset(-1, 0),
+        Offset(1, 0),
+        Offset(-1, 0),
+      ]) {
         expect(
-          _detect(detector, _handWithWiggleTips(movingTipYOffset: offset)),
+          _detect(
+            detector,
+            _handWithWiggleTips(
+              movingTipXOffset: offset.dx,
+              movingTipYOffset: offset.dy,
+            ),
+          ),
           HandMoveDirection.none,
         );
       }
     });
 
     test(
-      'does not emit when the small motion has too much horizontal drift',
+      'does not emit when the small motion has too much cross-axis drift',
       () {
         expect(
-          _detect(detector, _handWithWiggleTips()),
-          HandMoveDirection.none,
-        );
-        expect(
-          _detect(
-            detector,
-            _handWithWiggleTips(movingTipXOffset: 40, movingTipYOffset: -8),
-          ),
-          HandMoveDirection.none,
-        );
-        expect(
-          _detect(
-            detector,
-            _handWithWiggleTips(movingTipXOffset: -40, movingTipYOffset: 8),
-          ),
-          HandMoveDirection.none,
-        );
-        expect(
-          _detect(
-            detector,
-            _handWithWiggleTips(movingTipXOffset: 40, movingTipYOffset: -8),
-          ),
+          _detectWiggleSequence(detector, const [
+            Offset.zero,
+            Offset(8, 8),
+            Offset(-8, -8),
+            Offset(8, 8),
+          ]),
           HandMoveDirection.none,
         );
       },
@@ -570,7 +606,7 @@ void main() {
       expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
       for (final offset in const [6.0, 12.0, 18.0, 24.0]) {
         expect(
-          _detect(detector, _handWithWiggleTips(movingTipYOffset: offset)),
+          _detect(detector, _handWithWiggleTips(movingTipXOffset: offset)),
           HandMoveDirection.none,
         );
       }
@@ -582,7 +618,7 @@ void main() {
         _detect(
           detector,
           _handWithWiggleTips(
-            movingTipYOffset: -8,
+            movingTipXOffset: 8,
             lowVisibilityTypes: {
               HandLandmarkType.ringFingerTip,
               HandLandmarkType.pinkyTip,
@@ -595,7 +631,7 @@ void main() {
         _detect(
           detector,
           _handWithWiggleTips(
-            movingTipYOffset: 8,
+            movingTipXOffset: -8,
             lowVisibilityTypes: {
               HandLandmarkType.ringFingerTip,
               HandLandmarkType.pinkyTip,
@@ -610,32 +646,40 @@ void main() {
     test('clearState allows a fresh fingertip wiggle sequence', () {
       expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
       expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
+        _detect(detector, _handWithWiggleTips(movingTipXOffset: 8)),
         HandMoveDirection.none,
       );
       expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        _detect(detector, _handWithWiggleTips(movingTipXOffset: -8)),
         HandMoveDirection.none,
-      );
-      expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
-        HandMoveDirection.down,
       );
 
       detector.clearState();
 
       expect(_detect(detector, _handWithWiggleTips()), HandMoveDirection.none);
       expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
+        _detect(detector, _handWithWiggleTips(movingTipXOffset: -8)),
         HandMoveDirection.none,
       );
       expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: -8)),
+        _detect(detector, _handWithWiggleTips(movingTipXOffset: 8)),
         HandMoveDirection.none,
       );
       expect(
-        _detect(detector, _handWithWiggleTips(movingTipYOffset: 8)),
-        HandMoveDirection.down,
+        _detect(detector, _handWithWiggleTips(movingTipXOffset: -8)),
+        HandMoveDirection.right,
+      );
+    });
+
+    test('mirrored coordinates flip horizontal wiggle output', () {
+      expect(
+        _detectWiggleSequence(detector, const [
+          Offset.zero,
+          Offset(8, 0),
+          Offset(-8, 0),
+          Offset(8, 0),
+        ], mirrorHorizontally: true),
+        HandMoveDirection.right,
       );
     });
   });
@@ -651,6 +695,28 @@ HandMoveDirection _detect(
     imageSize: _imageSize,
     mirrorHorizontally: mirrorHorizontally,
   );
+}
+
+HandMoveDirection _detectWiggleSequence(
+  DirectionGestureDetector detector,
+  List<Offset> movingTipOffsets, {
+  bool mirrorHorizontally = false,
+  Set<int> movingFingerIndexes = const {0, 1, 2, 3},
+}) {
+  var direction = HandMoveDirection.none;
+  for (final offset in movingTipOffsets) {
+    direction = _detect(
+      detector,
+      _handWithWiggleTips(
+        movingTipXOffset: offset.dx,
+        movingTipYOffset: offset.dy,
+        movingFingerIndexes: movingFingerIndexes,
+      ),
+      mirrorHorizontally: mirrorHorizontally,
+    );
+  }
+
+  return direction;
 }
 
 Hand _handWithFingerChainVectors(
@@ -718,12 +784,15 @@ Hand _handWithFingerChainVectors(
   );
 }
 
-Hand _handWithLeftFingerChains({required double tipYOffset}) {
+Hand _handWithLeftFingerChains({
+  required double tipXOffset,
+  required double tipYOffset,
+}) {
   return _handWithFingerChainVectors([
-    Offset(-90, tipYOffset),
-    Offset(-90, tipYOffset),
-    Offset(-90, tipYOffset),
-    Offset(-90, tipYOffset),
+    Offset(-90 + tipXOffset, tipYOffset),
+    Offset(-90 + tipXOffset, tipYOffset),
+    Offset(-90 + tipXOffset, tipYOffset),
+    Offset(-90 + tipXOffset, tipYOffset),
   ]);
 }
 
