@@ -4,9 +4,13 @@ import '../../domain/models/follow_target.dart';
 
 /// Debug painter that draws all face/object candidates on the preview.
 class FollowTargetDebugOverlayPainter extends CustomPainter {
-  const FollowTargetDebugOverlayPainter({required this.targets});
+  const FollowTargetDebugOverlayPainter({
+    required this.targets,
+    this.showLabels = true,
+  });
 
   final List<FollowTarget> targets;
+  final bool showLabels;
 
   @override
   /// Paints red boxes and labels for each detected follow candidate.
@@ -27,13 +31,15 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
       if (rect.isEmpty) continue;
 
       canvas.drawRect(rect, borderPaint);
-      _drawLabel(
-        canvas: canvas,
-        size: size,
-        rect: rect,
-        label: target.displayLabel,
-        backgroundPaint: labelBackgroundPaint,
-      );
+      if (showLabels) {
+        _drawLabel(
+          canvas: canvas,
+          size: size,
+          rect: rect,
+          label: target.displayLabel,
+          backgroundPaint: labelBackgroundPaint,
+        );
+      }
     }
   }
 
@@ -104,6 +110,7 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
   @override
   /// Repaints when the target list reference changes.
   bool shouldRepaint(covariant FollowTargetDebugOverlayPainter oldDelegate) {
-    return oldDelegate.targets != targets;
+    return oldDelegate.targets != targets ||
+        oldDelegate.showLabels != showLabels;
   }
 }

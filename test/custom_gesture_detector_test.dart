@@ -159,6 +159,18 @@ void main() {
       expect(result.hasAny, isFalse);
     });
 
+    test('does not punch when wrist is outside other landmarks in 2D', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(wrist: const Offset(200, 300)),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
+    });
+
     test('treats package thumb down as punch', () {
       final detector = CustomGestureDetector();
 
@@ -177,6 +189,29 @@ void main() {
 
       expect(result.isPunch, isTrue);
     });
+
+    test(
+      'package thumb down still fails when wrist is outside other landmarks',
+      () {
+        final detector = CustomGestureDetector();
+
+        final result = detector.detect(
+          hand: _punchHand(
+            wrist: const Offset(200, 300),
+            fingersCurled: false,
+            thumbTucked: false,
+            gesture: const GestureResult(
+              type: GestureType.thumbDown,
+              confidence: 1,
+            ),
+          ),
+          imageSize: _imageSize,
+          mirrorHorizontally: false,
+        );
+
+        expect(result.isPunch, isFalse);
+      },
+    );
 
     test('does not punch for low confidence package thumb down', () {
       final detector = CustomGestureDetector();
@@ -360,6 +395,7 @@ Hand _punchHand({
   bool thumbTucked = true,
   double scale = 1,
   Offset palmOffset = Offset.zero,
+  Offset wrist = const Offset(215, 225),
   GestureResult? gesture,
   double score = 1,
 }) {
@@ -372,32 +408,40 @@ Hand _punchHand({
     );
   }
 
-  const wrist = Offset(200, 300);
   const thumbMcp = Offset(230, 230);
   const thumbIp = Offset(210, 238);
-  final thumbTip =
-      thumbTucked ? const Offset(205, 232) : const Offset(300, 235);
+  final thumbTip = thumbTucked
+      ? const Offset(205, 232)
+      : const Offset(300, 235);
   const indexMcp = Offset(160, 200);
   const middleMcp = Offset(190, 200);
   const ringMcp = Offset(220, 200);
   const pinkyMcp = Offset(250, 200);
 
-  final indexPip =
-      fingersCurled ? const Offset(160, 245) : const Offset(160, 150);
-  final indexTip =
-      fingersCurled ? const Offset(205, 265) : const Offset(160, 90);
-  final middlePip =
-      fingersCurled ? const Offset(190, 245) : const Offset(190, 145);
-  final middleTip =
-      fingersCurled ? const Offset(230, 260) : const Offset(190, 80);
-  final ringPip =
-      fingersCurled ? const Offset(220, 245) : const Offset(220, 145);
-  final ringTip =
-      fingersCurled ? const Offset(180, 260) : const Offset(220, 80);
-  final pinkyPip =
-      fingersCurled ? const Offset(250, 245) : const Offset(250, 150);
-  final pinkyTip =
-      fingersCurled ? const Offset(205, 260) : const Offset(250, 90);
+  final indexPip = fingersCurled
+      ? const Offset(160, 245)
+      : const Offset(160, 150);
+  final indexTip = fingersCurled
+      ? const Offset(205, 265)
+      : const Offset(160, 90);
+  final middlePip = fingersCurled
+      ? const Offset(190, 245)
+      : const Offset(190, 145);
+  final middleTip = fingersCurled
+      ? const Offset(230, 260)
+      : const Offset(190, 80);
+  final ringPip = fingersCurled
+      ? const Offset(220, 245)
+      : const Offset(220, 145);
+  final ringTip = fingersCurled
+      ? const Offset(180, 260)
+      : const Offset(220, 80);
+  final pinkyPip = fingersCurled
+      ? const Offset(250, 245)
+      : const Offset(250, 150);
+  final pinkyTip = fingersCurled
+      ? const Offset(205, 260)
+      : const Offset(250, 90);
 
   final landmarks = <HandLandmark>[
     _landmark(HandLandmarkType.wrist, point(wrist)),
@@ -546,10 +590,9 @@ List<Offset> _straightChain(Offset base, Offset vector) {
 List<Offset> _foldedChain(Offset base, Offset vector) {
   final tip = base + vector;
   final vectorLength = vector.distance;
-  final bendOffset =
-      vectorLength == 0
-          ? Offset.zero
-          : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 35;
+  final bendOffset = vectorLength == 0
+      ? Offset.zero
+      : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 35;
   final pip = Offset.lerp(base, tip, 0.5)! + bendOffset;
   final dip = Offset.lerp(pip, tip, 0.5)!;
 

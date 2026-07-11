@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart'
     as ml_face;
-import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart'
-    as ml_object;
 import 'package:hand_detection/hand_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -15,17 +13,26 @@ import '../../../../../utils/app_snack_bar.dart';
 import '../../data/factories/hand_detector_factory.dart';
 import '../../domain/constants/hand_gesture_thresholds.dart';
 import '../../domain/enums/follow_target_type.dart';
+import '../../domain/enums/follow_target_tracking_phase.dart';
 import '../../domain/enums/hand_move_direction.dart';
 import '../../domain/enums/zoom_direction.dart';
+import '../../domain/models/app_object_detection.dart';
+import '../../domain/models/appearance_signature.dart';
 import '../../domain/models/custom_gesture_detection_result.dart';
 import '../../domain/models/follow_target.dart';
+import '../../domain/models/follow_target_identity.dart';
 import '../../domain/services/custom_gesture_detector.dart';
+import '../../domain/services/appearance_signature_extractor.dart';
 import '../../domain/services/direction_gesture_detector.dart';
 import '../../domain/services/follow_object_sequence_detector.dart';
 import '../../domain/services/follow_target_selector.dart';
+import '../../domain/services/follow_target_tracking_progress.dart';
 import '../../domain/services/hand_geometry_service.dart';
 import '../../domain/services/move_direction_display_hold.dart';
+import '../../domain/services/object_detection_request_controller.dart';
+import '../../domain/services/object_detection_service.dart';
 import '../../domain/services/zoom_gesture_detector.dart';
+import '../../domain/utils/camera_frame_box_mapper.dart';
 import '../painters/follow_target_debug_overlay_painter.dart';
 import '../painters/follow_target_overlay_painter.dart';
 import '../painters/hand_focus_overlay_painter.dart';
@@ -64,14 +71,20 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   CameraController? _controller;
   HandDetector? _handDetector;
   ml_face.FaceDetector? _faceDetector;
-  ml_object.ObjectDetector? _objectDetector;
+  ObjectDetectionService? _objectDetectionService;
+  Future<ObjectDetectionService>? _objectDetectionServiceStartup;
 
   final _customGestureDetector = CustomGestureDetector();
   final _directionGestureDetector = DirectionGestureDetector();
   final _moveDirectionDisplayHold = MoveDirectionDisplayHold();
   final _zoomGestureDetector = ZoomGestureDetector();
   final _followTargetSelector = const FollowTargetSelector();
+  final _followTargetProgress = FollowTargetTrackingProgress();
+  final _appearanceSignatureExtractor = const AppearanceSignatureExtractor();
   final _handGeometry = const HandGeometryService();
+  final _objectDetectionRequests = ObjectDetectionRequestController(
+    minInterval: HandGestureThresholds.objectDetectionMinInterval,
+  );
 
   late final FollowObjectSequenceDetector _followObjectSequenceDetector;
 
@@ -99,7 +112,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   bool _isTouchZoomGuideVisible = false;
   bool _isTouchZoomInteractionActive = false;
   // Set true to show red face/object detection boxes for follow-object debug.
-  final bool _showFollowTargetDebugOverlay = true;
+  final bool _showFollowTargetDebugOverlay = false;
 
   String _gestureText = 'Show your hand';
   String _handText = '';
@@ -118,14 +131,19 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   List<Hand> _hands = const [];
   List<FollowTarget> _followObjectCandidateFaces = const [];
   List<FollowTarget> _followObjectCandidateObjects = const [];
+  List<FollowTarget> _cachedObjectTargets = const [];
   Size? _detectionImageSize;
   Rect? _focusedHandBox;
   Size? _focusImageSize;
   FollowTarget? _lockedFollowTarget;
+  FollowTargetIdentity? _followTargetIdentity;
+  DateTime? _lastEvaluatedFollowDetectionAt;
+  DateTime? _cachedObjectDetectionCompletedAt;
   DateTime? _lockedFollowTargetLostAt;
   DateTime? _lastFrameProcessedAt;
   DateTime? _lastCameraFocusPointSetAt;
   DateTime? _lastOrientationDebugPrintedAt;
+  int _objectDetectionGeneration = 0;
   DateTime? _faceDetectGestureStartedAt;
   DateTime? _lastVictoryToastShownAt;
   DateTime? _lastPunchScreenShownAt;
@@ -170,7 +188,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
 
     unawaited(_handDetector?.dispose() ?? Future<void>.value());
     unawaited(_faceDetector?.close() ?? Future<void>.value());
-    unawaited(_objectDetector?.close() ?? Future<void>.value());
+    _closeObjectDetectionService();
     super.dispose();
   }
 

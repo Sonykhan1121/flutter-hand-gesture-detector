@@ -170,10 +170,10 @@ packages:
     dependency: transitive
     description:
       name: flutter_litert
-      sha256: "26788265d0cb19c4954678e855b4e2ee0f688343149857742cf4f9ff9b6ee4b4"
+      sha256: "0e98e7af177699657b5b8cc10dcf875b5e96f73acfd5020d2611c48b0487c6e8"
       url: "https://pub.dev"
     source: hosted
-    version: "3.3.1"
+    version: "3.4.1"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -216,14 +216,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.13.2"
-  google_mlkit_object_detection:
-    dependency: "direct main"
-    description:
-      name: google_mlkit_object_detection
-      sha256: "9dd35886972e18747e22098f8ebee78d30716a99a789bb2e3a65a24229e031e7"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.15.1"
   hand_detection:
     dependency: "direct main"
     description:
@@ -312,6 +304,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.5"
+  object_detection:
+    dependency: "direct main"
+    description:
+      name: object_detection
+      sha256: "50d2bd21b44ad840e3449165f20102119a77969b293dcf36abd2ed60e52c9661"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.2"
   opencv_dart:
     dependency: transitive
     description:

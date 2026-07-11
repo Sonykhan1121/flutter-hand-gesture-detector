@@ -143,11 +143,10 @@ class CustomGestureDetector {
 
     // A circle should have a reasonably consistent radius and little depth
     // movement; this rejects finger movement toward the camera.
-    final radii =
-        points
-            .map((point) => geometry.distanceBetweenOffsets(point, center))
-            .where((radius) => radius > 0)
-            .toList();
+    final radii = points
+        .map((point) => geometry.distanceBetweenOffsets(point, center))
+        .where((radius) => radius > 0)
+        .toList();
 
     if (radii.length < HandGestureThresholds.indexCircleMinSampleCount) {
       return _recentCancelEverythingDetected(now);
@@ -544,9 +543,10 @@ class CustomGestureDetector {
     required Size imageSize,
     required bool mirrorHorizontally,
   }) {
-    if (_isPackageThumbDownPunch(hand)) return true;
-
     if (!hand.hasLandmarks) return false;
+    if (!_isWristInsideOtherLandmarks2D(hand)) return false;
+
+    if (_isPackageThumbDownPunch(hand)) return true;
 
     final indexMcp = geometry.visibleLandmark(
       hand,
@@ -621,6 +621,31 @@ class CustomGestureDetector {
     final thumbAllowsFist = thumbTucked ?? true;
 
     return allLongFingersFolded && knucklesAlignedOnXAxis && thumbAllowsFist;
+  }
+
+  /// Requires landmark 0/wrist to sit inside the other visible landmarks in 2D.
+  bool _isWristInsideOtherLandmarks2D(Hand hand) {
+    final wrist = geometry.visibleLandmark(hand, HandLandmarkType.wrist);
+    if (wrist == null) return false;
+
+    final otherPoints = <Offset>[];
+    for (final landmark in hand.landmarks) {
+      if (landmark.type == HandLandmarkType.wrist) continue;
+      if (!landmark.x.isFinite ||
+          !landmark.y.isFinite ||
+          !landmark.visibility.isFinite ||
+          landmark.visibility < HandGestureThresholds.minLandmarkVisibility) {
+        continue;
+      }
+      otherPoints.add(Offset(landmark.x, landmark.y));
+    }
+
+    if (otherPoints.length < 3) return false;
+
+    return geometry.isPointInsideConvexHull(
+      point: Offset(wrist.x, wrist.y),
+      points: otherPoints,
+    );
   }
 
   /// Accepts the package thumb-down label as a high-confidence punch shortcut.

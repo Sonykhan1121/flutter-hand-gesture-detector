@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/enums/follow_target_type.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/models/appearance_signature.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/models/follow_target.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/models/follow_target_identity.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/follow_target_selector.dart';
 
 void main() {
@@ -91,6 +93,190 @@ void main() {
 
       expect(selected?.label, 'face');
     });
+
+    test('does not select a stale cached detection', () {
+      final now = DateTime(2026, 1, 1, 0, 0, 2);
+      final stale = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.30, 0.30, 0.10, 0.10),
+        label: 'stale',
+        detectedAt: now.subtract(const Duration(seconds: 2)),
+      );
+
+      final selected = selector.selectNearest(
+        releasePoint: const Offset(0.35, 0.35),
+        faces: const [],
+        objects: [stale],
+        detectedAfter: now.subtract(const Duration(milliseconds: 700)),
+      );
+
+      expect(selected, isNull);
+    });
+  });
+
+  group('FollowTargetSelector immutable identity', () {
+    const selector = FollowTargetSelector();
+
+    test('reacquires one strict object match', () {
+      final identity = FollowTargetIdentity.fromTarget(
+        _target(
+          type: FollowTargetType.object,
+          displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+          label: 'bottle',
+        ),
+      );
+      final bottle = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.45, 0.40, 0.10, 0.10),
+        label: 'bottle',
+      );
+
+      final selected = selector.reacquire(
+        identity: identity,
+        candidates: [
+          _target(
+            type: FollowTargetType.object,
+            displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+            label: 'cup',
+          ),
+          bottle,
+        ],
+      );
+
+      expect(selected, bottle);
+    });
+
+    test('ignores different-label objects', () {
+      final identity = FollowTargetIdentity.fromTarget(
+        _target(
+          type: FollowTargetType.object,
+          displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+          label: 'bottle',
+        ),
+      );
+
+      final selected = selector.reacquire(
+        identity: identity,
+        candidates: [
+          _target(
+            type: FollowTargetType.object,
+            displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+            label: 'cup',
+          ),
+        ],
+      );
+
+      expect(selected, isNull);
+    });
+
+    test('fails closed when same-identity candidates are ambiguous', () {
+      final identity = FollowTargetIdentity.fromTarget(
+        _target(
+          type: FollowTargetType.object,
+          displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+          label: 'bottle',
+        ),
+      );
+
+      final selected = selector.reacquire(
+        identity: identity,
+        candidates: [
+          _target(
+            type: FollowTargetType.object,
+            displayBox: const Rect.fromLTWH(0.46, 0.42, 0.10, 0.10),
+            label: 'bottle',
+          ),
+          _target(
+            type: FollowTargetType.object,
+            displayBox: const Rect.fromLTWH(0.80, 0.80, 0.10, 0.10),
+            label: 'bottle',
+          ),
+        ],
+      );
+
+      expect(selected, isNull);
+    });
+
+    test('reacquires face by tracking id before another matching face', () {
+      final identity = FollowTargetIdentity.fromTarget(
+        _target(
+          type: FollowTargetType.face,
+          displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+          label: 'Face',
+          trackingId: 7,
+        ),
+      );
+      final trackedFace = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.80, 0.80, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 7,
+      );
+
+      final selected = selector.reacquire(
+        identity: identity,
+        candidates: [
+          _target(
+            type: FollowTargetType.face,
+            displayBox: const Rect.fromLTWH(0.42, 0.40, 0.10, 0.10),
+            label: 'Face',
+            trackingId: 9,
+          ),
+          trackedFace,
+        ],
+      );
+
+      expect(selected, trackedFace);
+    });
+
+    test('rejects another class even if its label and box match', () {
+      final identity = FollowTargetIdentity.fromTarget(
+        _target(
+          type: FollowTargetType.object,
+          displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+          label: 'bottle',
+          classIndex: 1,
+        ),
+      );
+
+      final selected = selector.reacquire(
+        identity: identity,
+        candidates: [
+          _target(
+            type: FollowTargetType.object,
+            displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+            label: 'bottle',
+            classIndex: 2,
+          ),
+        ],
+      );
+
+      expect(selected, isNull);
+    });
+
+    test('visible tracking cannot transfer to a different label', () {
+      final previous = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'bottle',
+      );
+      final identity = FollowTargetIdentity.fromTarget(previous);
+
+      final selected = selector.track(
+        previous: previous,
+        identity: identity,
+        candidates: [
+          _target(
+            type: FollowTargetType.object,
+            displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+            label: 'cup',
+          ),
+        ],
+      );
+
+      expect(selected, isNull);
+      expect(identity.normalizedLabel, 'bottle');
+    });
   });
 }
 
@@ -98,12 +284,27 @@ FollowTarget _target({
   required FollowTargetType type,
   required Rect displayBox,
   required String label,
+  int? trackingId,
+  int? classIndex,
+  AppearanceSignature? appearanceSignature,
+  DateTime? detectedAt,
 }) {
   return FollowTarget(
     type: type,
     boundingBox: displayBox,
     displayBox: displayBox,
-    detectedAt: DateTime(2026),
+    detectedAt: detectedAt ?? DateTime(2026),
     label: label,
+    trackingId: trackingId,
+    classIndex: classIndex ?? (type == FollowTargetType.object ? 1 : null),
+    appearanceSignature: appearanceSignature ?? _signature(),
+  );
+}
+
+AppearanceSignature _signature() {
+  return AppearanceSignature(
+    hsvHistogram: [1, ...List<double>.filled(31, 0)],
+    grayscaleHash: List<bool>.filled(64, true),
+    aspectRatio: 1,
   );
 }

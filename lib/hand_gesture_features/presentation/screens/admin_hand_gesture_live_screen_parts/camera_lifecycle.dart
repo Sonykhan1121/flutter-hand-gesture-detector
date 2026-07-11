@@ -80,13 +80,6 @@ extension on _AdminHandGestureLiveScreenState {
         performanceMode: ml_face.FaceDetectorMode.fast,
       ),
     );
-    _objectDetector ??= ml_object.ObjectDetector(
-      options: ml_object.ObjectDetectorOptions(
-        mode: ml_object.DetectionMode.stream,
-        classifyObjects: true,
-        multipleObjects: true,
-      ),
-    );
   }
 
   /// Creates the active camera controller and starts the image stream.
@@ -115,12 +108,11 @@ extension on _AdminHandGestureLiveScreenState {
         selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup:
-            Platform.isIOS
-                ? ImageFormatGroup.bgra8888
-                : Platform.isAndroid
-                ? ImageFormatGroup.yuv420
-                : ImageFormatGroup.bgra8888,
+        imageFormatGroup: Platform.isIOS
+            ? ImageFormatGroup.bgra8888
+            : Platform.isAndroid
+            ? ImageFormatGroup.yuv420
+            : ImageFormatGroup.bgra8888,
       );
 
       _controller = controller;
@@ -138,6 +130,10 @@ extension on _AdminHandGestureLiveScreenState {
         await controller.dispose();
         return;
       }
+
+      _clearObjectDetectionCache();
+      _resetFollowTargetTrackingState();
+      _ensureObjectDetectionServiceStarted();
 
       _setScreenState(() {
         _hasCameraFailure = false;
@@ -158,6 +154,7 @@ extension on _AdminHandGestureLiveScreenState {
         _focusedHandBox = null;
         _focusImageSize = null;
         _lockedFollowTarget = null;
+        _followTargetIdentity = null;
         _followObjectCandidateFaces = const [];
         _followObjectCandidateObjects = const [];
         _lockedFollowTargetLostAt = null;
@@ -347,9 +344,10 @@ extension on _AdminHandGestureLiveScreenState {
     _moveDirectionDisplayHold.clear();
     _followObjectSequenceDetector.clear();
     _clearFollowObjectTargetCandidates();
-    _clearLockedFollowTarget();
+    _clearLockedFollowTarget(clearIdentity: true);
     _clearRecordingGestureHold();
     _clearFaceDetectGestureHold();
+    _closeObjectDetectionService();
     _zoomControlAutoHideTimer?.cancel();
     _gestureZoomSuppressedUntil = null;
     _lastGestureZoomAppliedAt = null;
@@ -374,16 +372,16 @@ extension on _AdminHandGestureLiveScreenState {
       _focusedHandBox = null;
       _focusImageSize = null;
       _lockedFollowTarget = null;
+      _followTargetIdentity = null;
       _lockedFollowTargetLostAt = null;
       _isZoomControlVisible = false;
       _isManualZoomInteractionActive = false;
       _pendingZoomLevel = null;
     });
 
-    _currentLensDirection =
-        _currentLensDirection == CameraLensDirection.front
-            ? CameraLensDirection.back
-            : CameraLensDirection.front;
+    _currentLensDirection = _currentLensDirection == CameraLensDirection.front
+        ? CameraLensDirection.back
+        : CameraLensDirection.front;
 
     await _initializeCamera();
 
@@ -435,9 +433,10 @@ extension on _AdminHandGestureLiveScreenState {
     _moveDirectionDisplayHold.clear();
     _followObjectSequenceDetector.clear();
     _clearFollowObjectTargetCandidates();
-    _clearLockedFollowTarget();
+    _clearLockedFollowTarget(clearIdentity: true);
     _clearRecordingGestureHold();
     _clearFaceDetectGestureHold();
+    _closeObjectDetectionService();
 
     if (!mounted) return;
 
@@ -458,6 +457,7 @@ extension on _AdminHandGestureLiveScreenState {
       _focusedHandBox = null;
       _focusImageSize = null;
       _lockedFollowTarget = null;
+      _followTargetIdentity = null;
       _lockedFollowTargetLostAt = null;
       _isZoomControlVisible = false;
     });

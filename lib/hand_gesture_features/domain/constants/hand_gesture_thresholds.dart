@@ -42,7 +42,27 @@ abstract final class HandGestureThresholds {
   static const Duration followTargetLostHoldDuration = Duration(
     milliseconds: 900,
   );
+  static const Duration followTargetDetectionFreshness = Duration(
+    milliseconds: 700,
+  );
+  static const Duration followTargetFreshDetectionWait = Duration(
+    milliseconds: 750,
+  );
+  static const int followTargetMissesBeforeLost = 2;
+  static const int followTargetReacquisitionConfirmations = 3;
+  static const double followTargetHistogramSimilarity = 0.88;
+  static const double followTargetHashSimilarity = 0.80;
+  static const double followTargetMaxAspectRatioChange = 1.50;
+  static const double followTargetReacquisitionSimilarity = 0.85;
+  static const double followTargetVisibleSimilarity = 0.72;
+  static const double followTargetAmbiguousScoreDelta = 0.03;
   static const Duration faceDetectHoldDuration = Duration(seconds: 2);
+  static const Duration objectDetectionMinInterval = Duration(
+    milliseconds: 350,
+  );
+  static const int objectDetectionMaxDimension = 640;
+  static const int objectDetectionMaxResults = 5;
+  static const double objectDetectionScoreThreshold = 0.60;
 
   /// Landmark filtering and depth scaling shared by 3D geometry checks.
   static const double minLandmarkVisibility = 0.35;

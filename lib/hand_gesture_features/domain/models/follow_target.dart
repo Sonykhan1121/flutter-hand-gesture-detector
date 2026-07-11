@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import '../enums/follow_target_type.dart';
+import 'appearance_signature.dart';
 
 /// A face or object that can be highlighted and followed by the camera.
 class FollowTarget {
@@ -11,6 +12,8 @@ class FollowTarget {
     required this.detectedAt,
     this.trackingId,
     this.label,
+    this.classIndex,
+    this.appearanceSignature,
   });
 
   final FollowTargetType type;
@@ -21,6 +24,8 @@ class FollowTarget {
   final DateTime detectedAt;
   final int? trackingId;
   final String? label;
+  final int? classIndex;
+  final AppearanceSignature? appearanceSignature;
 
   /// Chooses a detector label when available, otherwise falls back to type.
   String get displayLabel =>

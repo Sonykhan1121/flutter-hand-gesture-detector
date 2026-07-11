@@ -60,6 +60,12 @@ void main() {
         ),
         isTrue,
       );
+      expect(
+        painter.shouldRepaint(
+          FollowTargetDebugOverlayPainter(targets: targets, showLabels: false),
+        ),
+        isTrue,
+      );
     });
   });
 }

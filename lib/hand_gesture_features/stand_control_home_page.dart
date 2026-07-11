@@ -12,6 +12,7 @@ class StandControlHomePage extends StatefulWidget {
   final VoidCallback? onAutomaticDetectTap;
   final VoidCallback? onHandGestureTap;
   final VoidCallback? onVoiceCommandTap;
+  final VoidCallback? onDebugCameraTap;
 
   const StandControlHomePage({
     super.key,
@@ -21,6 +22,7 @@ class StandControlHomePage extends StatefulWidget {
     this.onAutomaticDetectTap,
     this.onHandGestureTap,
     this.onVoiceCommandTap,
+    this.onDebugCameraTap,
   });
 
   @override
@@ -76,6 +78,13 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FC),
+      floatingActionButton: FloatingActionButton(
+        key: const Key('faceObjectDebugCameraButton'),
+        heroTag: 'faceObjectDebugCameraButton',
+        tooltip: 'Face/Object Debug',
+        onPressed: widget.onDebugCameraTap,
+        child: const Icon(Icons.center_focus_strong),
+      ),
       body: SafeArea(
         child: Column(
           children: [

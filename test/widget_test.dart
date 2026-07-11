@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/enums/stand_control_mode.dart';
+import 'package:gesture_detector/hand_gesture_features/presentation/screens/face_object_debug_camera_screen.dart';
 import 'package:gesture_detector/hand_gesture_features/stand_control_home_page.dart';
 
 void main() {
@@ -24,6 +25,10 @@ void main() {
     expect(find.text('ON'), findsOneWidget);
     expect(find.text('GESTURE'), findsOneWidget);
     expect(find.text('SOON'), findsNothing);
+    expect(
+      find.byKey(const Key('faceObjectDebugCameraButton')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -36,9 +41,7 @@ void main() {
         MaterialApp(
           home: StandControlHomePage(
             initialMode: StandControlMode.handGesture,
-            disabledModes: const {
-              StandControlMode.handGesture,
-            },
+            disabledModes: const {StandControlMode.handGesture},
             onModeChanged: (_) {
               modeChangeCount += 1;
             },
@@ -58,4 +61,35 @@ void main() {
       expect(find.text('SOON'), findsOneWidget);
     },
   );
+
+  testWidgets('debug floating button opens face/object debug screen', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return StandControlHomePage(
+              onDebugCameraTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const FaceObjectDebugCameraScreen(
+                      autoStartCamera: false,
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('faceObjectDebugCameraButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FaceObjectDebugCameraScreen), findsOneWidget);
+    expect(find.text('Face/Object Debug'), findsOneWidget);
+  });
 }

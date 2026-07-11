@@ -184,9 +184,10 @@ extension on _AdminHandGestureLiveScreenState {
       _clearFollowObjectTargetCandidates();
 
       _setScreenState(() {
-        _gestureText = trackedFollowTarget == null
-            ? 'No hand detected'
-            : _followTargetText(trackedFollowTarget);
+        _gestureText = _followTargetStatusText(
+          visibleTarget: trackedFollowTarget,
+          fallbackText: 'No hand detected',
+        );
         _handText = '';
         _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
         _detectedHandsCount = 0;
@@ -240,9 +241,10 @@ extension on _AdminHandGestureLiveScreenState {
           _detectionImageSize = detectionImageSize;
           _detectedHandsCount = hands.length;
           _handText = '';
-          _gestureText = trackedFollowTarget == null
-              ? 'Move hand closer'
-              : _followTargetText(trackedFollowTarget);
+          _gestureText = _followTargetStatusText(
+            visibleTarget: trackedFollowTarget,
+            fallbackText: 'Move hand closer',
+          );
           _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
           _isFollowingHand = false;
           _focusedHandBox = null;
@@ -293,9 +295,10 @@ extension on _AdminHandGestureLiveScreenState {
         _detectionImageSize = detectionImageSize;
         _detectedHandsCount = hands.length;
         _handText = '';
-        _gestureText = trackedFollowTarget == null
-            ? 'Move hand closer'
-            : _followTargetText(trackedFollowTarget);
+        _gestureText = _followTargetStatusText(
+          visibleTarget: trackedFollowTarget,
+          fallbackText: 'Move hand closer',
+        );
         _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
         _isFollowingHand = false;
         _focusedHandBox = null;
@@ -307,7 +310,10 @@ extension on _AdminHandGestureLiveScreenState {
 
     final bestHand = _handGeometry.bestReliableHand(
       reliableHands,
-      focusedHandBox: _isFollowingHand && trackedFollowTarget == null
+      focusedHandBox:
+          _isFollowingHand &&
+              trackedFollowTarget == null &&
+              _followTargetIdentity == null
           ? _focusedHandBox
           : null,
     )!;
@@ -335,7 +341,9 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    if (rawCustomGestureResult.isOnlyCallMe && trackedFollowTarget == null) {
+    if (rawCustomGestureResult.isOnlyCallMe &&
+        trackedFollowTarget == null &&
+        _followTargetIdentity == null) {
       final startedAt = _faceDetectGestureStartedAt ?? now;
       _faceDetectGestureStartedAt = startedAt;
 
@@ -378,8 +386,7 @@ extension on _AdminHandGestureLiveScreenState {
       _clearAllActiveGestureTasks(resetCameraZoom: false);
 
       if (faceTarget != null) {
-        _lockedFollowTarget = faceTarget;
-        _lockedFollowTargetLostAt = null;
+        _setLockedFollowTarget(faceTarget, captureIdentity: false);
         unawaited(_updateCameraFocusPointForTarget(faceTarget));
       }
 
@@ -410,6 +417,13 @@ extension on _AdminHandGestureLiveScreenState {
     );
 
     var lockedFollowTarget = trackedFollowTarget;
+    if (followObjectSequence.isTargetSelectionActive) {
+      if (_followTargetProgress.phase != FollowTargetTrackingPhase.selecting) {
+        _clearLockedFollowTarget(clearIdentity: true);
+        _followTargetProgress.markSelecting();
+      }
+      lockedFollowTarget = null;
+    }
     var releaseHadNoTarget = false;
     final releasePoint = followObjectSequence.releasePoint;
     if (releasePoint != null) {
@@ -429,11 +443,10 @@ extension on _AdminHandGestureLiveScreenState {
 
       if (lockedFollowTarget == null) {
         releaseHadNoTarget = true;
-        _clearLockedFollowTarget();
+        _clearLockedFollowTarget(clearIdentity: true);
         _clearFollowObjectTargetCandidates();
       } else {
-        _lockedFollowTarget = lockedFollowTarget;
-        _lockedFollowTargetLostAt = null;
+        _setLockedFollowTarget(lockedFollowTarget, captureIdentity: true);
         _isFollowingHand = false;
         _focusedHandBox = null;
         _focusImageSize = null;
@@ -455,8 +468,12 @@ extension on _AdminHandGestureLiveScreenState {
     final followObjectDetected =
         followObjectSequence.isDetected && lockedFollowTarget == null;
     final followTargetActive = lockedFollowTarget != null;
+    final rememberedFollowTargetActive = _followTargetIdentity != null;
     final followTrackingActive =
-        followTargetActive || _isFollowingHand || followObjectSequenceActive;
+        followTargetActive ||
+        rememberedFollowTargetActive ||
+        _isFollowingHand ||
+        followObjectSequenceActive;
 
     final gesture = bestHand.gesture;
     final reliablePackageGesture =
@@ -580,6 +597,7 @@ extension on _AdminHandGestureLiveScreenState {
 
     final shouldFocusOnHand =
         !followTargetActive &&
+        !rememberedFollowTargetActive &&
         (_isFollowingHand ||
             (followObjectSequenceActive &&
                 followObjectSequence.packageGestureType ==
@@ -632,6 +650,9 @@ extension on _AdminHandGestureLiveScreenState {
       } else if (followObjectDetected) {
         _gestureText = 'Release on a face or object';
         _gestureConfidence = 1;
+      } else if (rememberedFollowTargetActive && lockedFollowTarget == null) {
+        _gestureText = _followTargetIdentityStatusText();
+        _gestureConfidence = 0;
       } else if (_isFollowingHand) {
         _gestureText = 'Following hand';
         _gestureConfidence = 1;
@@ -704,17 +725,61 @@ extension on _AdminHandGestureLiveScreenState {
     required CameraFrameRotation? rotation,
     required DateTime now,
   }) async {
-    final detections = await _refreshFollowObjectTargetCandidates(
+    var detections = await _refreshFollowObjectTargetCandidates(
       image: image,
       rotation: rotation,
       now: now,
     );
 
+    var freshFaces = _freshFollowTargets(detections.faces, now);
+    var freshObjects = _freshFollowTargets(detections.objects, now);
+    if (freshFaces.isEmpty && freshObjects.isEmpty) {
+      final pendingRequest = _objectDetectionRequests.pendingRequest;
+      if (pendingRequest != null) {
+        try {
+          await pendingRequest.timeout(
+            HandGestureThresholds.followTargetFreshDetectionWait,
+          );
+        } on TimeoutException {
+          // A slow detector must not make release selection use stale boxes.
+        } catch (error, stackTrace) {
+          debugPrint('Fresh follow-target wait ignored: $error\n$stackTrace');
+        }
+        detections = await _refreshFollowObjectTargetCandidates(
+          image: image,
+          rotation: rotation,
+          now: DateTime.now(),
+        );
+        final refreshedAt = DateTime.now();
+        freshFaces = _freshFollowTargets(detections.faces, refreshedAt);
+        freshObjects = _freshFollowTargets(detections.objects, refreshedAt);
+      }
+    }
+
+    final selectionAt = DateTime.now();
     return _followTargetSelector.selectNearest(
       releasePoint: releasePoint,
-      faces: detections.faces,
-      objects: detections.objects,
+      faces: freshFaces,
+      objects: freshObjects,
+      detectedAfter: selectionAt.subtract(
+        HandGestureThresholds.followTargetDetectionFreshness,
+      ),
     );
+  }
+
+  List<FollowTarget> _freshFollowTargets(
+    List<FollowTarget> targets,
+    DateTime now,
+  ) {
+    return targets
+        .where((target) => _isFreshFollowTarget(target, now))
+        .toList(growable: false);
+  }
+
+  bool _isFreshFollowTarget(FollowTarget target, DateTime now) {
+    final age = now.difference(target.detectedAt);
+    return !age.isNegative &&
+        age <= HandGestureThresholds.followTargetDetectionFreshness;
   }
 
   /// Updates cached face/object candidates for follow-object selection.
@@ -781,13 +846,12 @@ extension on _AdminHandGestureLiveScreenState {
     );
 
     if (target == null) {
-      _clearLockedFollowTarget();
+      _clearLockedFollowTarget(clearIdentity: true);
       _clearFollowObjectTargetCandidates();
       return const _FollowObjectReleaseSelection(target: null);
     }
 
-    _lockedFollowTarget = target;
-    _lockedFollowTargetLostAt = null;
+    _setLockedFollowTarget(target, captureIdentity: true);
     _isFollowingHand = false;
     _focusedHandBox = null;
     _focusImageSize = null;
@@ -827,34 +891,99 @@ extension on _AdminHandGestureLiveScreenState {
     required DateTime now,
   }) async {
     final previous = _lockedFollowTarget;
-    if (previous == null) return null;
+    final identity = _followTargetIdentity;
+    final targetType = previous?.type ?? identity?.type;
+    if (targetType == null) return null;
 
     final detections = await _detectFollowTargets(
       image: image,
       rotation: rotation,
       now: now,
-      includeFaces: previous.type == FollowTargetType.face,
-      includeObjects: previous.type == FollowTargetType.object,
+      includeFaces: targetType == FollowTargetType.face,
+      includeObjects: targetType == FollowTargetType.object,
     );
-    if (detections == null) return _keepOrClearLostFollowTarget(now);
+    if (detections == null) {
+      return identity == null ? _keepOrClearLostFollowTarget(now) : previous;
+    }
 
-    final candidates = previous.type == FollowTargetType.face
+    final candidates = targetType == FollowTargetType.face
         ? detections.faces
         : detections.objects;
-    final updated = _followTargetSelector.track(
-      previous: previous,
-      candidates: candidates,
+    final detectionCycleAt = targetType == FollowTargetType.face
+        ? detections.facesDetectedAt
+        : detections.objectsDetectedAt;
+
+    if (identity == null) {
+      if (previous == null) return null;
+      final updated = _followTargetSelector.track(
+        previous: previous,
+        candidates: candidates,
+      );
+      if (updated == null) return _keepOrClearLostFollowTarget(now);
+      _setVisibleFollowTarget(updated);
+      unawaited(_updateCameraFocusPointForTarget(updated));
+      return updated;
+    }
+
+    if (detectionCycleAt == null ||
+        detectionCycleAt == _lastEvaluatedFollowDetectionAt) {
+      return previous;
+    }
+    _lastEvaluatedFollowDetectionAt = detectionCycleAt;
+
+    final freshCandidates = candidates
+        .where((candidate) => _isFreshFollowTarget(candidate, now))
+        .toList(growable: false);
+
+    if (previous != null) {
+      final updated = _followTargetSelector.track(
+        previous: previous,
+        candidates: freshCandidates,
+        identity: identity,
+      );
+      if (updated != null) {
+        _followTargetProgress.markVisible();
+        _setVisibleFollowTarget(updated);
+        unawaited(_updateCameraFocusPointForTarget(updated));
+        return updated;
+      }
+
+      if (!_followTargetProgress.recordVisibleMiss()) {
+        return previous;
+      }
+      _enterLostFollowTargetState();
+    }
+
+    final candidate = _followTargetSelector.reacquire(
+      identity: identity,
+      candidates: freshCandidates,
     );
+    if (candidate == null) {
+      _followTargetProgress.markLost();
+      return null;
+    }
 
-    if (updated == null) return _keepOrClearLostFollowTarget(now);
+    final priorCandidate = _followTargetProgress.candidate;
+    final confirmed = _followTargetProgress.recordReacquisitionCandidate(
+      candidate,
+      isContinuous:
+          priorCandidate != null &&
+          _followTargetSelector.isSpatiallyContinuous(
+            priorCandidate,
+            candidate,
+          ),
+    );
+    if (!confirmed) {
+      return null;
+    }
 
-    _lockedFollowTarget = updated;
-    _lockedFollowTargetLostAt = null;
-    unawaited(_updateCameraFocusPointForTarget(updated));
-    return updated;
+    _followTargetProgress.markVisible();
+    _setVisibleFollowTarget(candidate);
+    unawaited(_updateCameraFocusPointForTarget(candidate));
+    return candidate;
   }
 
-  /// Runs ML Kit face/object detection and maps results to display boxes.
+  /// Runs face and object detection, then maps results to display boxes.
   Future<_FollowTargetDetections?> _detectFollowTargets({
     required CameraImage image,
     required CameraFrameRotation? rotation,
@@ -864,34 +993,32 @@ extension on _AdminHandGestureLiveScreenState {
   }) async {
     if (!Platform.isAndroid && !Platform.isIOS) return null;
 
-    final inputImage = _inputImageFromCameraImage(image, rotation);
-    if (inputImage == null) return null;
-
     final inputRotation = _inputImageRotationFromCameraFrameRotation(rotation);
     final imageSize = Size(image.width.toDouble(), image.height.toDouble());
     var faces = const <FollowTarget>[];
     var objects = const <FollowTarget>[];
+    DateTime? facesDetectedAt;
 
     if (includeFaces) {
       final faceDetector = _faceDetector;
       if (faceDetector != null) {
         try {
-          final detectedFaces = await faceDetector.processImage(inputImage);
+          final inputImage = _inputImageFromCameraImage(image, rotation);
+          final detectedFaces = inputImage == null
+              ? const <ml_face.Face>[]
+              : await faceDetector.processImage(inputImage);
           faces = [
             for (final face in detectedFaces)
-              FollowTarget(
-                type: FollowTargetType.face,
-                boundingBox: face.boundingBox,
-                displayBox: _mlKitRectToDisplayBox(
-                  face.boundingBox,
-                  imageSize: imageSize,
-                  rotation: inputRotation,
-                ),
+              _faceFollowTarget(
+                face: face,
+                image: image,
+                imageSize: imageSize,
+                inputRotation: inputRotation,
+                frameRotation: rotation,
                 detectedAt: now,
-                trackingId: face.trackingId,
-                label: 'Face',
               ),
           ];
+          facesDetectedAt = now;
         } catch (e, st) {
           debugPrint('Face detection ignored: $e\n$st');
         }
@@ -899,32 +1026,243 @@ extension on _AdminHandGestureLiveScreenState {
     }
 
     if (includeObjects) {
-      final objectDetector = _objectDetector;
-      if (objectDetector != null) {
-        try {
-          final detectedObjects = await objectDetector.processImage(inputImage);
-          objects = [
-            for (final object in detectedObjects)
-              FollowTarget(
-                type: FollowTargetType.object,
-                boundingBox: object.boundingBox,
-                displayBox: _mlKitRectToDisplayBox(
-                  object.boundingBox,
-                  imageSize: imageSize,
-                  rotation: inputRotation,
-                ),
-                detectedAt: now,
-                trackingId: object.trackingId,
-                label: _objectLabel(object),
-              ),
-          ];
-        } catch (e, st) {
-          debugPrint('Object detection ignored: $e\n$st');
-        }
-      }
+      objects = await _detectOrReuseObjectTargets(
+        image: image,
+        frameRotation: rotation,
+        now: now,
+      );
     }
 
-    return _FollowTargetDetections(faces: faces, objects: objects);
+    return _FollowTargetDetections(
+      faces: faces,
+      objects: objects,
+      facesDetectedAt: facesDetectedAt,
+      objectsDetectedAt: includeObjects
+          ? _cachedObjectDetectionCompletedAt
+          : null,
+    );
+  }
+
+  /// Runs object detection at a lower cadence and reuses the latest result.
+  Future<List<FollowTarget>> _detectOrReuseObjectTargets({
+    required CameraImage image,
+    required CameraFrameRotation? frameRotation,
+    required DateTime now,
+  }) async {
+    _ensureObjectDetectionServiceStarted();
+
+    final objectDetector = _objectDetectionService;
+    if (objectDetector == null) {
+      return _cachedObjectTargets;
+    }
+
+    final generation = _objectDetectionGeneration;
+    Future<List<AppObjectDetection>>? request;
+
+    try {
+      request = _objectDetectionRequests.submit(
+        now: now,
+        detectorBusy: objectDetector.isBusy,
+        detect: () => objectDetector.detect(image, rotation: frameRotation),
+      );
+    } catch (e, st) {
+      debugPrint('Object detection ignored: $e\n$st');
+    }
+
+    if (request != null) {
+      unawaited(
+        request
+            .then((detectedObjects) {
+              if (generation != _objectDetectionGeneration) return;
+
+              final completedAt = DateTime.now();
+              final objects = _objectTargetsFromDetections(
+                detectedObjects,
+                image: image,
+                frameRotation: frameRotation,
+                detectedAt: completedAt,
+              );
+              _cachedObjectTargets = objects;
+              _cachedObjectDetectionCompletedAt = completedAt;
+
+              if (_followObjectSequenceDetector.isTargetSelectionActive ||
+                  _lockedFollowTarget?.type == FollowTargetType.object) {
+                _followObjectCandidateObjects = objects;
+              }
+
+              if (!mounted) return;
+              _setScreenState(() {});
+            })
+            .catchError((Object e, StackTrace st) {
+              if (generation != _objectDetectionGeneration) return;
+              debugPrint('Object detection ignored: $e\n$st');
+            }),
+      );
+    }
+
+    return _cachedObjectTargets;
+  }
+
+  /// Maps package detections to follow-target boxes for the current preview.
+  List<FollowTarget> _objectTargetsFromDetections(
+    List<AppObjectDetection> detectedObjects, {
+    required CameraImage image,
+    required CameraFrameRotation? frameRotation,
+    required DateTime detectedAt,
+  }) {
+    return [
+      for (final object in detectedObjects)
+        _objectFollowTarget(
+          object: object,
+          image: image,
+          frameRotation: frameRotation,
+          detectedAt: detectedAt,
+        ),
+    ];
+  }
+
+  FollowTarget _faceFollowTarget({
+    required ml_face.Face face,
+    required CameraImage image,
+    required Size imageSize,
+    required ml_face.InputImageRotation inputRotation,
+    required CameraFrameRotation? frameRotation,
+    required DateTime detectedAt,
+  }) {
+    final displayBox = _mlKitRectToDisplayBox(
+      face.boundingBox,
+      imageSize: imageSize,
+      rotation: inputRotation,
+    );
+    return FollowTarget(
+      type: FollowTargetType.face,
+      boundingBox: face.boundingBox,
+      displayBox: displayBox,
+      detectedAt: detectedAt,
+      trackingId: face.trackingId,
+      label: 'Face',
+      appearanceSignature: _appearanceSignatureForTarget(
+        image: image,
+        displayBox: displayBox,
+        frameRotation: frameRotation,
+      ),
+    );
+  }
+
+  FollowTarget _objectFollowTarget({
+    required AppObjectDetection object,
+    required CameraImage image,
+    required CameraFrameRotation? frameRotation,
+    required DateTime detectedAt,
+  }) {
+    final displayBox = imageRectToDisplayBox(
+      rect: object.boundingBox,
+      imageSize: object.imageSize,
+      mirrorHorizontally: _shouldMirrorPreviewCoordinates(_controller),
+    );
+    return FollowTarget(
+      type: FollowTargetType.object,
+      boundingBox: object.boundingBox,
+      displayBox: displayBox,
+      detectedAt: detectedAt,
+      label: object.label,
+      classIndex: object.classIndex,
+      appearanceSignature: _appearanceSignatureForTarget(
+        image: image,
+        displayBox: displayBox,
+        frameRotation: frameRotation,
+      ),
+    );
+  }
+
+  AppearanceSignature? _appearanceSignatureForTarget({
+    required CameraImage image,
+    required Rect displayBox,
+    required CameraFrameRotation? frameRotation,
+  }) {
+    try {
+      return _appearanceSignatureExtractor.extract(
+        frame: CameraPixelFrameData.fromCameraImage(
+          image,
+          isBgra: Platform.isIOS || Platform.isMacOS,
+        ),
+        displayBox: displayBox,
+        rotation: frameRotation,
+        mirrorHorizontally: _shouldMirrorPreviewCoordinates(_controller),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Appearance signature ignored: $error\n$stackTrace');
+      return null;
+    }
+  }
+
+  /// Starts the object detector without blocking the live camera frame.
+  void _ensureObjectDetectionServiceStarted() {
+    if (_objectDetectionService != null ||
+        _objectDetectionServiceStartup != null) {
+      return;
+    }
+
+    final generation = _objectDetectionGeneration;
+    final startup = ObjectDetectionService.start();
+    _objectDetectionServiceStartup = startup;
+
+    unawaited(
+      startup
+          .then((objectDetector) {
+            if (generation != _objectDetectionGeneration) {
+              unawaited(objectDetector.close());
+              return;
+            }
+
+            _objectDetectionService = objectDetector;
+          })
+          .catchError((Object e, StackTrace st) {
+            if (generation != _objectDetectionGeneration) return;
+            debugPrint('Object detector startup ignored: $e\n$st');
+          })
+          .whenComplete(() {
+            if (identical(_objectDetectionServiceStartup, startup)) {
+              _objectDetectionServiceStartup = null;
+            }
+          }),
+    );
+  }
+
+  /// Clears cached object detections while keeping any warm detector alive.
+  void _clearObjectDetectionCache() {
+    _objectDetectionGeneration++;
+    _objectDetectionRequests.clear();
+    _cachedObjectTargets = const [];
+    _cachedObjectDetectionCompletedAt = null;
+  }
+
+  /// Stops the object detector and rejects stale async object results.
+  void _closeObjectDetectionService() {
+    _clearObjectDetectionCache();
+
+    final objectDetector = _objectDetectionService;
+    final startup = _objectDetectionServiceStartup;
+    _objectDetectionService = null;
+    _objectDetectionServiceStartup = null;
+
+    if (objectDetector != null) {
+      unawaited(objectDetector.close());
+    }
+
+    if (startup != null) {
+      unawaited(
+        startup
+            .then((startedDetector) {
+              if (!identical(startedDetector, objectDetector)) {
+                return startedDetector.close();
+              }
+            })
+            .catchError((Object e, StackTrace st) {
+              debugPrint('Object detector close ignored: $e\n$st');
+            }),
+      );
+    }
   }
 
   /// Converts a camera frame into the ML Kit input format for the platform.
@@ -1158,20 +1496,52 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
-  /// Chooses the best object label returned by ML Kit.
-  String _objectLabel(ml_object.DetectedObject object) {
-    if (object.labels.isEmpty) return 'Object';
-
-    final bestLabel = object.labels.reduce(
-      (currentBest, next) =>
-          next.confidence > currentBest.confidence ? next : currentBest,
-    );
-    return bestLabel.text.isEmpty ? 'Object' : bestLabel.text;
-  }
-
   /// Status text for a locked follow target.
   String _followTargetText(FollowTarget target) {
+    final identity = _followTargetIdentity;
+    if (identity != null) return 'Target locked: ${identity.displayLabel}';
     return 'Following ${target.displayLabel.toLowerCase()}';
+  }
+
+  String _followTargetStatusText({
+    required FollowTarget? visibleTarget,
+    required String fallbackText,
+  }) {
+    if (visibleTarget != null) return _followTargetText(visibleTarget);
+
+    if (_followTargetIdentity != null) return _followTargetIdentityStatusText();
+
+    return fallbackText;
+  }
+
+  String _followTargetIdentityStatusText() {
+    final identity = _followTargetIdentity;
+    if (identity == null) return 'No target selected';
+    if (_followTargetProgress.phase ==
+        FollowTargetTrackingPhase.confirmingReacquisition) {
+      return 'Confirming ${identity.displayLabel} '
+          '${_followTargetProgress.confirmationCount}/'
+          '${HandGestureThresholds.followTargetReacquisitionConfirmations}';
+    }
+    return 'Target lost — looking for ${identity.displayLabel}';
+  }
+
+  /// Stores a visible target and captures identity only for a new selection.
+  void _setLockedFollowTarget(
+    FollowTarget target, {
+    required bool captureIdentity,
+  }) {
+    if (captureIdentity) {
+      _followTargetIdentity = FollowTargetIdentity.fromTarget(target);
+      _followTargetProgress.markVisible();
+      _lastEvaluatedFollowDetectionAt = target.detectedAt;
+    }
+    _setVisibleFollowTarget(target);
+  }
+
+  void _setVisibleFollowTarget(FollowTarget target) {
+    _lockedFollowTarget = target;
+    _lockedFollowTargetLostAt = null;
   }
 
   /// Keeps a lost target briefly before clearing it.
@@ -1194,10 +1564,48 @@ extension on _AdminHandGestureLiveScreenState {
     return null;
   }
 
-  /// Clears the locked face/object follow target.
-  void _clearLockedFollowTarget() {
+  /// Clears the visible face/object follow target.
+  void _clearLockedFollowTarget({bool clearIdentity = false}) {
     _lockedFollowTarget = null;
     _lockedFollowTargetLostAt = null;
+    if (clearIdentity) {
+      _resetFollowTargetTrackingState();
+    }
+  }
+
+  void _enterLostFollowTargetState() {
+    _lockedFollowTarget = null;
+    _lockedFollowTargetLostAt = DateTime.now();
+    _followTargetProgress.markLost();
+    _isFollowingHand = false;
+    _focusedHandBox = null;
+    _focusImageSize = null;
+    _lastCameraFocusPointSetAt = null;
+    unawaited(_updateCameraFocusAtNormalizedPoint(const Offset(0.5, 0.5)));
+  }
+
+  void _resetFollowTargetTrackingState() {
+    _followTargetIdentity = null;
+    _followTargetProgress.reset();
+    _lastEvaluatedFollowDetectionAt = null;
+  }
+
+  void _cancelFollowTarget({required bool promptReselect}) {
+    _followObjectSequenceDetector.clear();
+    _clearFollowObjectTargetCandidates();
+    _clearLockedFollowTarget(clearIdentity: true);
+    _isFollowingHand = false;
+    _focusedHandBox = null;
+    _focusImageSize = null;
+    _lastCameraFocusPointSetAt = null;
+    unawaited(_updateCameraFocusAtNormalizedPoint(const Offset(0.5, 0.5)));
+
+    _setScreenState(() {
+      _gestureText = promptReselect
+          ? 'Show open palm to select a new target'
+          : 'Follow target cancelled';
+      _gestureConfidence = 0;
+    });
   }
 
   /// Clears the "call me" face-detection hold timer.
@@ -1244,7 +1652,7 @@ extension on _AdminHandGestureLiveScreenState {
     _moveDirectionDisplayHold.clear();
     _followObjectSequenceDetector.clear();
     _clearFollowObjectTargetCandidates();
-    _clearLockedFollowTarget();
+    _clearLockedFollowTarget(clearIdentity: true);
     _clearRecordingGestureHold();
     _clearFaceDetectGestureHold();
     _lastPunchScreenShownAt = null;
@@ -1325,10 +1733,17 @@ extension on _AdminHandGestureLiveScreenState {
 
 /// Cached face and object detections from the current frame.
 class _FollowTargetDetections {
-  const _FollowTargetDetections({required this.faces, required this.objects});
+  const _FollowTargetDetections({
+    required this.faces,
+    required this.objects,
+    this.facesDetectedAt,
+    this.objectsDetectedAt,
+  });
 
   final List<FollowTarget> faces;
   final List<FollowTarget> objects;
+  final DateTime? facesDetectedAt;
+  final DateTime? objectsDetectedAt;
 }
 
 /// Result of releasing follow-object selection when the hand is gone.
