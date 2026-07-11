@@ -7,10 +7,14 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
   const FollowTargetDebugOverlayPainter({
     required this.targets,
     this.showLabels = true,
+    this.color = Colors.red,
+    this.labelPrefix = '',
   });
 
   final List<FollowTarget> targets;
   final bool showLabels;
+  final Color color;
+  final String labelPrefix;
 
   @override
   /// Paints red boxes and labels for each detected follow candidate.
@@ -20,7 +24,7 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
     final borderPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
-      ..color = Colors.red;
+      ..color = color;
 
     final labelBackgroundPaint = Paint()
       ..style = PaintingStyle.fill
@@ -36,7 +40,7 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
           canvas: canvas,
           size: size,
           rect: rect,
-          label: target.displayLabel,
+          label: '$labelPrefix${target.displayLabel}',
           backgroundPaint: labelBackgroundPaint,
         );
       }
@@ -72,8 +76,8 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
     final textPainter = TextPainter(
       text: TextSpan(
         text: label,
-        style: const TextStyle(
-          color: Colors.red,
+        style: TextStyle(
+          color: color,
           fontSize: 12,
           fontWeight: FontWeight.w700,
           height: 1.15,
@@ -111,6 +115,8 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
   /// Repaints when the target list reference changes.
   bool shouldRepaint(covariant FollowTargetDebugOverlayPainter oldDelegate) {
     return oldDelegate.targets != targets ||
-        oldDelegate.showLabels != showLabels;
+        oldDelegate.showLabels != showLabels ||
+        oldDelegate.color != color ||
+        oldDelegate.labelPrefix != labelPrefix;
   }
 }

@@ -68,6 +68,7 @@ class FollowTargetSelector {
         .where(
           (candidate) =>
               identity == null ||
+              identity.type == FollowTargetType.object ||
               _visibleAppearanceMatches(identity, candidate),
         )
         .toList(growable: false);
@@ -106,41 +107,7 @@ class FollowTargetSelector {
     return bestCandidate;
   }
 
-  /// Returns one unambiguous strict identity match, otherwise fails closed.
-  FollowTarget? reacquire({
-    required FollowTargetIdentity identity,
-    required List<FollowTarget> candidates,
-  }) {
-    if (identity.type == FollowTargetType.face &&
-        identity.faceTrackingId != null) {
-      final trackedMatches = candidates.where(
-        (candidate) =>
-            candidate.trackingId == identity.faceTrackingId &&
-            _matchesIdentityClass(identity, candidate) &&
-            _strictAppearanceScore(identity, candidate) != null,
-      );
-      if (trackedMatches.length == 1) return trackedMatches.first;
-      if (trackedMatches.length > 1) return null;
-    }
-
-    final matches = <(FollowTarget, double)>[];
-    for (final candidate in candidates) {
-      if (!_matchesIdentityClass(identity, candidate)) continue;
-      final score = _strictAppearanceScore(identity, candidate);
-      if (score != null) matches.add((candidate, score));
-    }
-    if (matches.isEmpty) return null;
-
-    matches.sort((first, second) => second.$2.compareTo(first.$2));
-    if (matches.length > 1 &&
-        matches[0].$2 - matches[1].$2 <
-            HandGestureThresholds.followTargetAmbiguousScoreDelta) {
-      return null;
-    }
-    return matches.first.$1;
-  }
-
-  /// Ensures repeated reacquisition confirmations refer to one moving box.
+  /// Ensures repeated detector updates refer to one moving box.
   bool isSpatiallyContinuous(FollowTarget previous, FollowTarget candidate) {
     final overlap = _intersectionOverUnion(
       previous.displayBox,
@@ -184,31 +151,6 @@ class FollowTargetSelector {
     }
     return reference.compositeSimilarity(current) >=
         HandGestureThresholds.followTargetVisibleSimilarity;
-  }
-
-  double? _strictAppearanceScore(
-    FollowTargetIdentity identity,
-    FollowTarget candidate,
-  ) {
-    final reference = identity.appearanceSignature;
-    final current = candidate.appearanceSignature;
-    if (reference == null || current == null) return null;
-
-    final histogram = reference.histogramSimilarity(current);
-    final hash = reference.hashSimilarity(current);
-    final aspectSimilarity = reference.aspectRatioSimilarity(current);
-    final aspectChange = aspectSimilarity <= 0
-        ? double.infinity
-        : 1 / aspectSimilarity;
-    final composite = reference.compositeSimilarity(current);
-
-    if (histogram < HandGestureThresholds.followTargetHistogramSimilarity ||
-        hash < HandGestureThresholds.followTargetHashSimilarity ||
-        aspectChange > HandGestureThresholds.followTargetMaxAspectRatioChange ||
-        composite < HandGestureThresholds.followTargetReacquisitionSimilarity) {
-      return null;
-    }
-    return composite;
   }
 
   /// Finds the smallest padded target box under the release point.

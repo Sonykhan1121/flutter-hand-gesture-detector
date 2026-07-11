@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:hand_detection/hand_detection.dart';
@@ -74,6 +75,61 @@ Rect cameraFrameRectToDisplayBox({
   );
 }
 
+/// Maps a normalized preview rectangle back into normalized raw-frame space.
+Rect displayRectToCameraFrameRect({
+  required Rect displayRect,
+  required CameraFrameRotation? rotation,
+  required bool mirrorHorizontally,
+}) {
+  if (displayRect.isEmpty) return Rect.zero;
+  final points = [
+    displayPointToCameraFramePoint(
+      point: displayRect.topLeft,
+      rotation: rotation,
+      mirrorHorizontally: mirrorHorizontally,
+    ),
+    displayPointToCameraFramePoint(
+      point: displayRect.topRight,
+      rotation: rotation,
+      mirrorHorizontally: mirrorHorizontally,
+    ),
+    displayPointToCameraFramePoint(
+      point: displayRect.bottomLeft,
+      rotation: rotation,
+      mirrorHorizontally: mirrorHorizontally,
+    ),
+    displayPointToCameraFramePoint(
+      point: displayRect.bottomRight,
+      rotation: rotation,
+      mirrorHorizontally: mirrorHorizontally,
+    ),
+  ];
+  final xs = points.map((point) => point.dx);
+  final ys = points.map((point) => point.dy);
+  return Rect.fromLTRB(
+    xs.reduce(math.min).clamp(0.0, 1.0),
+    ys.reduce(math.min).clamp(0.0, 1.0),
+    xs.reduce(math.max).clamp(0.0, 1.0),
+    ys.reduce(math.max).clamp(0.0, 1.0),
+  );
+}
+
+/// Maps one normalized preview point back into normalized raw-frame space.
+Offset displayPointToCameraFramePoint({
+  required Offset point,
+  required CameraFrameRotation? rotation,
+  required bool mirrorHorizontally,
+}) {
+  final upright = mirrorHorizontally ? Offset(1 - point.dx, point.dy) : point;
+  final raw = switch (rotation) {
+    CameraFrameRotation.cw90 => Offset(upright.dy, 1 - upright.dx),
+    CameraFrameRotation.cw180 => Offset(1 - upright.dx, 1 - upright.dy),
+    CameraFrameRotation.cw270 => Offset(1 - upright.dy, upright.dx),
+    null => upright,
+  };
+  return Offset(raw.dx.clamp(0.0, 1.0), raw.dy.clamp(0.0, 1.0));
+}
+
 /// Maps one raw camera-frame point into normalized preview display space.
 Offset cameraFramePointToDisplayPoint({
   required Offset point,
@@ -88,9 +144,10 @@ Offset cameraFramePointToDisplayPoint({
     (point.dy / imageSize.height).clamp(0.0, 1.0),
   );
   final rotatedPoint = _rotateNormalizedPoint(normalizedPoint, rotation);
-  final displayPoint = mirrorHorizontally
-      ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
-      : rotatedPoint;
+  final displayPoint =
+      mirrorHorizontally
+          ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
+          : rotatedPoint;
 
   return Offset(
     displayPoint.dx.clamp(0.0, 1.0),

@@ -396,13 +396,24 @@ class _FaceObjectDebugCameraScreenState
                 FollowTarget(
                   type: FollowTargetType.object,
                   boundingBox: object.boundingBox,
-                  displayBox: imageRectToDisplayBox(
-                    rect: object.boundingBox,
-                    imageSize: object.imageSize,
-                    mirrorHorizontally: _shouldMirrorPreviewCoordinates,
-                  ),
+                  displayBox:
+                      object.source == AppObjectDetectionSource.googleMlKit
+                      ? _mlKitRectToDisplayBox(
+                          object.boundingBox,
+                          imageSize: object.imageSize,
+                          rotation: _inputImageRotationFromCameraFrameRotation(
+                            frameRotation,
+                          ),
+                        )
+                      : imageRectToDisplayBox(
+                          rect: object.boundingBox,
+                          imageSize: object.imageSize,
+                          mirrorHorizontally: _shouldMirrorPreviewCoordinates,
+                        ),
                   detectedAt: DateTime.now(),
                   label: object.label,
+                  classIndex: object.classIndex,
+                  trackingId: object.trackingId,
                 ),
             ];
 

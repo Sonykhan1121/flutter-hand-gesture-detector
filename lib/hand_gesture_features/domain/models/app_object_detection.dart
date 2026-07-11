@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:object_detection/object_detection.dart' as od;
 
+enum AppObjectDetectionSource { objectDetectionPackage, googleMlKit }
+
 /// One object candidate returned by the app's object detector.
 class AppObjectDetection {
   const AppObjectDetection({
@@ -10,6 +12,8 @@ class AppObjectDetection {
     required this.label,
     required this.confidence,
     required this.classIndex,
+    this.trackingId,
+    this.source = AppObjectDetectionSource.objectDetectionPackage,
   });
 
   /// Bounding box in [imageSize] pixel coordinates.
@@ -18,6 +22,14 @@ class AppObjectDetection {
   final String label;
   final double confidence;
   final int classIndex;
+  final int? trackingId;
+  final AppObjectDetectionSource source;
+
+  bool get isPerson => isPersonLabel(label);
+
+  /// Person candidates are owned exclusively by ML Kit face detection.
+  static bool isPersonLabel(String label) =>
+      label.trim().toLowerCase() == 'person';
 
   factory AppObjectDetection.fromDetectedObject(od.DetectedObject object) {
     final box = object.boundingBox;
@@ -32,6 +44,7 @@ class AppObjectDetection {
       label: object.categoryName,
       confidence: object.score,
       classIndex: object.category.index,
+      source: AppObjectDetectionSource.objectDetectionPackage,
     );
   }
 }

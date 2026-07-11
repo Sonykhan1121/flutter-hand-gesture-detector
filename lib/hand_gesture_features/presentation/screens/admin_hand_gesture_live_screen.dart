@@ -21,6 +21,9 @@ import '../../domain/models/appearance_signature.dart';
 import '../../domain/models/custom_gesture_detection_result.dart';
 import '../../domain/models/follow_target.dart';
 import '../../domain/models/follow_target_identity.dart';
+import '../../domain/models/object_detection_batch.dart';
+import '../../domain/models/object_optical_flow_track_result.dart';
+import '../../domain/models/object_tracking_frame.dart';
 import '../../domain/services/custom_gesture_detector.dart';
 import '../../domain/services/appearance_signature_extractor.dart';
 import '../../domain/services/direction_gesture_detector.dart';
@@ -31,12 +34,14 @@ import '../../domain/services/hand_geometry_service.dart';
 import '../../domain/services/move_direction_display_hold.dart';
 import '../../domain/services/object_detection_request_controller.dart';
 import '../../domain/services/object_detection_service.dart';
+import '../../domain/services/object_optical_flow_tracker.dart';
 import '../../domain/services/zoom_gesture_detector.dart';
 import '../../domain/utils/camera_frame_box_mapper.dart';
 import '../painters/follow_target_debug_overlay_painter.dart';
 import '../painters/follow_target_overlay_painter.dart';
 import '../painters/hand_focus_overlay_painter.dart';
 import '../painters/hand_landmark_overlay_painter.dart';
+import '../painters/object_optical_flow_debug_painter.dart';
 import '../painters/recording_hand_landmark_overlay_painter.dart';
 import '../utils/hand_gesture_label_mapper.dart';
 import '../widgets/gesture_status_panel.dart';
@@ -82,6 +87,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final _followTargetProgress = FollowTargetTrackingProgress();
   final _appearanceSignatureExtractor = const AppearanceSignatureExtractor();
   final _handGeometry = const HandGeometryService();
+  final _objectTrackingFrameFactory = const ObjectTrackingFrameFactory();
+  final _objectOpticalFlowTracker = ObjectOpticalFlowTracker();
   final _objectDetectionRequests = ObjectDetectionRequestController(
     minInterval: HandGestureThresholds.objectDetectionMinInterval,
   );
@@ -113,6 +120,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   bool _isTouchZoomInteractionActive = false;
   // Set true to show red face/object detection boxes for follow-object debug.
   final bool _showFollowTargetDebugOverlay = false;
+  // Set true to inspect optical-flow points, raw boxes, and confidence.
+  final bool _showObjectOpticalFlowDebugOverlay = false;
 
   String _gestureText = 'Show your hand';
   String _handText = '';
@@ -131,6 +140,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   List<Hand> _hands = const [];
   List<FollowTarget> _followObjectCandidateFaces = const [];
   List<FollowTarget> _followObjectCandidateObjects = const [];
+  FollowTarget? _predictedFollowTarget;
   List<FollowTarget> _cachedObjectTargets = const [];
   Size? _detectionImageSize;
   Rect? _focusedHandBox;
@@ -138,12 +148,15 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   FollowTarget? _lockedFollowTarget;
   FollowTargetIdentity? _followTargetIdentity;
   DateTime? _lastEvaluatedFollowDetectionAt;
-  DateTime? _cachedObjectDetectionCompletedAt;
+  ObjectDetectionBatch? _cachedObjectDetectionBatch;
   DateTime? _lockedFollowTargetLostAt;
   DateTime? _lastFrameProcessedAt;
   DateTime? _lastCameraFocusPointSetAt;
+  Offset? _lastCameraFocusPoint;
   DateTime? _lastOrientationDebugPrintedAt;
   int _objectDetectionGeneration = 0;
+  int _cameraFrameId = 0;
+  ObjectOpticalFlowTrackResult? _objectOpticalFlowResult;
   DateTime? _faceDetectGestureStartedAt;
   DateTime? _lastVictoryToastShownAt;
   DateTime? _lastPunchScreenShownAt;
@@ -167,9 +180,10 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
       onDebug: debugPrint,
     );
 
-    _currentLensDirection = widget.fontorback == 0
-        ? CameraLensDirection.back
-        : CameraLensDirection.front;
+    _currentLensDirection =
+        widget.fontorback == 0
+            ? CameraLensDirection.back
+            : CameraLensDirection.front;
 
     _requestCameraPermission();
   }
@@ -189,6 +203,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
     unawaited(_handDetector?.dispose() ?? Future<void>.value());
     unawaited(_faceDetector?.close() ?? Future<void>.value());
     _closeObjectDetectionService();
+    _objectOpticalFlowTracker.dispose();
     super.dispose();
   }
 

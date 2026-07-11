@@ -108,11 +108,12 @@ extension on _AdminHandGestureLiveScreenState {
         selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup: Platform.isIOS
-            ? ImageFormatGroup.bgra8888
-            : Platform.isAndroid
-            ? ImageFormatGroup.yuv420
-            : ImageFormatGroup.bgra8888,
+        imageFormatGroup:
+            Platform.isIOS
+                ? ImageFormatGroup.bgra8888
+                : Platform.isAndroid
+                ? ImageFormatGroup.yuv420
+                : ImageFormatGroup.bgra8888,
       );
 
       _controller = controller;
@@ -133,6 +134,8 @@ extension on _AdminHandGestureLiveScreenState {
 
       _clearObjectDetectionCache();
       _resetFollowTargetTrackingState();
+      _cameraFrameId = 0;
+      _lastCameraFocusPoint = null;
       _ensureObjectDetectionServiceStarted();
 
       _setScreenState(() {
@@ -157,6 +160,7 @@ extension on _AdminHandGestureLiveScreenState {
         _followTargetIdentity = null;
         _followObjectCandidateFaces = const [];
         _followObjectCandidateObjects = const [];
+        _predictedFollowTarget = null;
         _lockedFollowTargetLostAt = null;
         _lastFrameProcessedAt = null;
       });
@@ -286,6 +290,8 @@ extension on _AdminHandGestureLiveScreenState {
 
   /// Stops live image streaming and clears movement state.
   Future<void> _stopCameraStream() async {
+    _objectOpticalFlowTracker.reset();
+    _objectOpticalFlowResult = null;
     final controller = _controller;
 
     if (controller == null ||
@@ -379,9 +385,10 @@ extension on _AdminHandGestureLiveScreenState {
       _pendingZoomLevel = null;
     });
 
-    _currentLensDirection = _currentLensDirection == CameraLensDirection.front
-        ? CameraLensDirection.back
-        : CameraLensDirection.front;
+    _currentLensDirection =
+        _currentLensDirection == CameraLensDirection.front
+            ? CameraLensDirection.back
+            : CameraLensDirection.front;
 
     await _initializeCamera();
 

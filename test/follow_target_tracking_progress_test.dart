@@ -1,63 +1,34 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/enums/follow_target_tracking_phase.dart';
-import 'package:gesture_detector/hand_gesture_features/domain/enums/follow_target_type.dart';
-import 'package:gesture_detector/hand_gesture_features/domain/models/follow_target.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/follow_target_tracking_progress.dart';
 
 void main() {
-  test('enters lost only after two unique missed detection cycles', () {
+  test('clears a visible target after two fresh detector misses', () {
     final progress = FollowTargetTrackingProgress()..markVisible();
 
     expect(progress.recordVisibleMiss(), isFalse);
     expect(progress.phase, FollowTargetTrackingPhase.visible);
     expect(progress.recordVisibleMiss(), isTrue);
-    expect(progress.phase, FollowTargetTrackingPhase.lost);
+    expect(progress.missedDetectionCount, 2);
   });
 
-  test('requires three continuous confirmations to resume', () {
-    final progress = FollowTargetTrackingProgress()..markLost();
-    final first = _target(const Rect.fromLTWH(0.4, 0.4, 0.1, 0.1));
-    final second = _target(const Rect.fromLTWH(0.41, 0.4, 0.1, 0.1));
-    final third = _target(const Rect.fromLTWH(0.42, 0.4, 0.1, 0.1));
+  test('a successful match resets the detector miss count', () {
+    final progress = FollowTargetTrackingProgress()..markVisible();
 
-    expect(
-      progress.recordReacquisitionCandidate(first, isContinuous: false),
-      isFalse,
-    );
-    expect(progress.confirmationCount, 1);
-    expect(
-      progress.recordReacquisitionCandidate(second, isContinuous: true),
-      isFalse,
-    );
-    expect(progress.confirmationCount, 2);
-    expect(
-      progress.recordReacquisitionCandidate(third, isContinuous: true),
-      isTrue,
-    );
-    expect(progress.confirmationCount, 3);
+    progress.recordVisibleMiss();
+    progress.markVisible();
+
+    expect(progress.recordVisibleMiss(), isFalse);
+    expect(progress.missedDetectionCount, 1);
   });
 
-  test('a discontinuous candidate restarts confirmation at one', () {
-    final progress = FollowTargetTrackingProgress()..markLost();
-    final candidate = _target(const Rect.fromLTWH(0.4, 0.4, 0.1, 0.1));
+  test('reset forgets the previous target progress completely', () {
+    final progress = FollowTargetTrackingProgress()..markVisible();
+    progress.recordVisibleMiss();
 
-    progress.recordReacquisitionCandidate(candidate, isContinuous: false);
-    progress.recordReacquisitionCandidate(candidate, isContinuous: true);
-    progress.recordReacquisitionCandidate(candidate, isContinuous: false);
+    progress.reset();
 
-    expect(progress.confirmationCount, 1);
-    expect(progress.phase, FollowTargetTrackingPhase.confirmingReacquisition);
+    expect(progress.phase, FollowTargetTrackingPhase.idle);
+    expect(progress.missedDetectionCount, 0);
   });
-}
-
-FollowTarget _target(Rect box) {
-  return FollowTarget(
-    type: FollowTargetType.object,
-    boundingBox: box,
-    displayBox: box,
-    detectedAt: DateTime(2026),
-    label: 'bottle',
-    classIndex: 1,
-  );
 }

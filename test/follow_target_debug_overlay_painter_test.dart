@@ -62,7 +62,25 @@ void main() {
       );
       expect(
         painter.shouldRepaint(
+          FollowTargetDebugOverlayPainter(
+            targets: targets,
+            labelPrefix: 'Release → ',
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        painter.shouldRepaint(
           FollowTargetDebugOverlayPainter(targets: targets, showLabels: false),
+        ),
+        isTrue,
+      );
+      expect(
+        painter.shouldRepaint(
+          FollowTargetDebugOverlayPainter(
+            targets: targets,
+            color: Colors.green,
+          ),
         ),
         isTrue,
       );

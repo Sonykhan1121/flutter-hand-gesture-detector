@@ -14,6 +14,7 @@ class FollowTarget {
     this.label,
     this.classIndex,
     this.appearanceSignature,
+    this.sourceFrameId,
   });
 
   final FollowTargetType type;
@@ -26,6 +27,7 @@ class FollowTarget {
   final String? label;
   final int? classIndex;
   final AppearanceSignature? appearanceSignature;
+  final int? sourceFrameId;
 
   /// Chooses a detector label when available, otherwise falls back to type.
   String get displayLabel =>

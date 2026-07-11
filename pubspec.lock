@@ -42,7 +42,7 @@ packages:
     source: hosted
     version: "0.10.1"
   camera_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: camera_platform_interface
       sha256: "7ac852d77699acee79f0d438b793feee26721841e50973576419ff5c6d95e9b7"
@@ -204,18 +204,26 @@ packages:
     dependency: transitive
     description:
       name: google_mlkit_commons
-      sha256: "3e69fea4211727732cc385104e675ad1e40b29f12edd492ee52fa108423a6124"
+      sha256: c7fc384bdb66c3b83e24e3a41818e61d7a378d900f65f5e775344fbca95a0917
       url: "https://pub.dev"
     source: hosted
-    version: "0.11.1"
+    version: "0.12.0"
   google_mlkit_face_detection:
     dependency: "direct main"
     description:
       name: google_mlkit_face_detection
-      sha256: "7b6ddcc69dbd6fbfa313fb2d974ad0f0c3a0d1657560f0da6be465baf1889687"
+      sha256: "719735518c0a961072d1757a097af8fec458426accad0a58eae0763942a3f14c"
       url: "https://pub.dev"
     source: hosted
-    version: "0.13.2"
+    version: "0.14.0"
+  google_mlkit_object_detection:
+    dependency: "direct main"
+    description:
+      name: google_mlkit_object_detection
+      sha256: a97f01226d18d246639d916080b15ebf8c482046b88ccc271f8d275dafe31266
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.16.0"
   hand_detection:
     dependency: "direct main"
     description:
@@ -313,7 +321,7 @@ packages:
     source: hosted
     version: "0.2.2"
   opencv_dart:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: opencv_dart
       sha256: b50ea4788e6d61df6369874e0244445d98ef9210dbb90b8d3c1df198b4ee2333

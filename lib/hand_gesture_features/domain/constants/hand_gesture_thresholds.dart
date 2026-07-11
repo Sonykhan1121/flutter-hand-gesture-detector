@@ -48,21 +48,42 @@ abstract final class HandGestureThresholds {
   static const Duration followTargetFreshDetectionWait = Duration(
     milliseconds: 750,
   );
-  static const int followTargetMissesBeforeLost = 2;
-  static const int followTargetReacquisitionConfirmations = 3;
-  static const double followTargetHistogramSimilarity = 0.88;
-  static const double followTargetHashSimilarity = 0.80;
-  static const double followTargetMaxAspectRatioChange = 1.50;
-  static const double followTargetReacquisitionSimilarity = 0.85;
+  static const int followTargetLostDetectionCount = 2;
   static const double followTargetVisibleSimilarity = 0.72;
-  static const double followTargetAmbiguousScoreDelta = 0.03;
   static const Duration faceDetectHoldDuration = Duration(seconds: 2);
   static const Duration objectDetectionMinInterval = Duration(
     milliseconds: 350,
   );
+
+  /// `true` uses `object_detection`; `false` uses Google ML Kit objects.
+  static const bool useObjectDetectionPackage = true;
   static const int objectDetectionMaxDimension = 640;
   static const int objectDetectionMaxResults = 5;
   static const double objectDetectionScoreThreshold = 0.60;
+
+  /// Sparse optical-flow tracking used between object detector cycles.
+  static const int objectTrackingMaxDimension = 480;
+  static const int objectTrackingHistoryLength = 12;
+  static const int objectTrackingMaxFeatures = 80;
+  static const int objectTrackingMinFeatures = 12;
+  static const int objectTrackingReseedFeatureCount = 24;
+  static const int objectTrackingReseedFrameCount = 15;
+  static const double objectTrackingFeatureQuality = 0.01;
+  static const double objectTrackingFeatureMinDistance = 5;
+  static const double objectTrackingForwardBackwardError = 1.5;
+  static const double objectTrackingMinRetention = 0.40;
+  static const double objectTrackingMinInlierRatio = 0.60;
+  static const double objectTrackingMaxCenterJump = 0.20;
+  static const double objectTrackingMinFrameScale = 0.70;
+  static const double objectTrackingMaxFrameScale = 1.40;
+  static const double objectTrackingCorrectionBlend = 0.35;
+  static const double objectTrackingOneEuroMinCutoff = 1.0;
+  static const double objectTrackingOneEuroBeta = 0.10;
+  static const double objectTrackingOneEuroDerivativeCutoff = 1.0;
+  static const double followTargetFocusMovementDeadband = 0.03;
+  static const Duration followTargetFocusMinInterval = Duration(
+    milliseconds: 400,
+  );
 
   /// Landmark filtering and depth scaling shared by 3D geometry checks.
   static const double minLandmarkVisibility = 0.35;

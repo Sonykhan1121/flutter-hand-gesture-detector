@@ -78,4 +78,39 @@ void main() {
       expect(box.bottom, closeTo(0.30, 0.0001));
     });
   });
+
+  group('displayRectToCameraFrameRect', () {
+    test('round-trips rotation and front-camera mirroring', () {
+      const rawNormalized = Rect.fromLTRB(0.12, 0.20, 0.38, 0.62);
+
+      for (final rotation in <CameraFrameRotation?>[
+        null,
+        ...CameraFrameRotation.values,
+      ]) {
+        for (final mirrored in [false, true]) {
+          final display = cameraFrameRectToDisplayBox(
+            rect: Rect.fromLTRB(
+              rawNormalized.left * 1000,
+              rawNormalized.top * 500,
+              rawNormalized.right * 1000,
+              rawNormalized.bottom * 500,
+            ),
+            imageSize: const Size(1000, 500),
+            rotation: rotation,
+            mirrorHorizontally: mirrored,
+          );
+          final restored = displayRectToCameraFrameRect(
+            displayRect: display,
+            rotation: rotation,
+            mirrorHorizontally: mirrored,
+          );
+
+          expect(restored.left, closeTo(rawNormalized.left, 0.0001));
+          expect(restored.top, closeTo(rawNormalized.top, 0.0001));
+          expect(restored.right, closeTo(rawNormalized.right, 0.0001));
+          expect(restored.bottom, closeTo(rawNormalized.bottom, 0.0001));
+        }
+      }
+    });
+  });
 }
