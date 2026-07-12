@@ -84,6 +84,15 @@ void main() {
         ),
         isTrue,
       );
+      expect(
+        painter.shouldRepaint(
+          FollowTargetDebugOverlayPainter(
+            targets: targets,
+            previewQuarterTurns: 1,
+          ),
+        ),
+        isTrue,
+      );
     });
   });
 }

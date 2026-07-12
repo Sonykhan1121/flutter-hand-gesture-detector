@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:object_detection/object_detection.dart' as od;
 
-enum AppObjectDetectionSource { objectDetectionPackage, googleMlKit }
+enum AppObjectDetectionSource { objectDetectionPackage, ultralyticsYolo }
 
 /// One object candidate returned by the app's object detector.
 class AppObjectDetection {

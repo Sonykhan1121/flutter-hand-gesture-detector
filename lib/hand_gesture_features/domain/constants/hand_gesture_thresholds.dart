@@ -36,6 +36,11 @@ abstract final class HandGestureThresholds {
   static const Duration followObjectFirstOpenPalmHoldDuration = Duration(
     seconds: 1,
   );
+  static const int followObjectRelaxedReleaseMinExtendedFingers = 1;
+  static const int followObjectRelaxedReleaseConfirmationFrames = 2;
+  static const double followObjectRelaxedReleaseMinFingerAngleDegrees = 145;
+  static const double followObjectRelaxedReleaseTipPastPipRatio = 1.05;
+  static const double followObjectRelaxedReleaseMinReachRatio = 0.22;
   static const double followTargetReleasePointPadding = 0.10;
   static const double followTargetMinTrackingOverlap = 0.08;
   static const double followTargetMaxTrackingDistance = 0.18;
@@ -55,11 +60,15 @@ abstract final class HandGestureThresholds {
     milliseconds: 350,
   );
 
-  /// `true` uses `object_detection`; `false` uses Google ML Kit objects.
-  static const bool useObjectDetectionPackage = true;
+  /// `true` uses `object_detection`; `false` uses Ultralytics YOLO objects.
+  static const bool useObjectDetectionPackage = false;
   static const int objectDetectionMaxDimension = 640;
   static const int objectDetectionMaxResults = 5;
   static const double objectDetectionScoreThreshold = 0.60;
+  static const String ultralyticsYoloModelId = 'yolo26n';
+  static const bool ultralyticsYoloUseGpu = true;
+  static const double ultralyticsYoloIouThreshold = 0.70;
+  static const int ultralyticsYoloJpegQuality = 90;
 
   /// Sparse optical-flow tracking used between object detector cycles.
   static const int objectTrackingMaxDimension = 480;

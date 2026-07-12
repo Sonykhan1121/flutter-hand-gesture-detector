@@ -16,6 +16,7 @@ import '../../domain/models/follow_target.dart';
 import '../../domain/services/object_detection_request_controller.dart';
 import '../../domain/services/object_detection_service.dart';
 import '../../domain/utils/camera_frame_box_mapper.dart';
+import '../../domain/utils/camera_preview_geometry.dart';
 import '../../domain/utils/detection_debug_log_formatter.dart';
 import '../painters/follow_target_debug_overlay_painter.dart';
 import '../widgets/hand_camera_loading_view.dart';
@@ -396,20 +397,11 @@ class _FaceObjectDebugCameraScreenState
                 FollowTarget(
                   type: FollowTargetType.object,
                   boundingBox: object.boundingBox,
-                  displayBox:
-                      object.source == AppObjectDetectionSource.googleMlKit
-                      ? _mlKitRectToDisplayBox(
-                          object.boundingBox,
-                          imageSize: object.imageSize,
-                          rotation: _inputImageRotationFromCameraFrameRotation(
-                            frameRotation,
-                          ),
-                        )
-                      : imageRectToDisplayBox(
-                          rect: object.boundingBox,
-                          imageSize: object.imageSize,
-                          mirrorHorizontally: _shouldMirrorPreviewCoordinates,
-                        ),
+                  displayBox: imageRectToDisplayBox(
+                    rect: object.boundingBox,
+                    imageSize: object.imageSize,
+                    mirrorHorizontally: _shouldMirrorPreviewCoordinates,
+                  ),
                   detectedAt: DateTime.now(),
                   label: object.label,
                   classIndex: object.classIndex,
@@ -696,44 +688,26 @@ class _FaceObjectDebugCameraScreenState
     }
   }
 
-  Size _previewDisplaySize(CameraController? controller) {
-    if (controller == null || !controller.value.isInitialized) {
-      return const Size(9, 16);
-    }
-
-    final previewSize = controller.value.previewSize;
-    if (previewSize == null ||
-        previewSize.width <= 0 ||
-        previewSize.height <= 0) {
-      return const Size(9, 16);
-    }
-
-    final rawWidth = previewSize.width;
-    final rawHeight = previewSize.height;
-    return rawWidth > rawHeight
-        ? Size(rawHeight, rawWidth)
-        : Size(rawWidth, rawHeight);
+  Size _previewDisplaySize({required bool isLandscape}) {
+    final controller = _controller;
+    return orientedCameraPreviewSize(
+      rawPreviewSize:
+          controller != null && controller.value.isInitialized
+              ? controller.value.previewSize
+              : null,
+      isLandscape: isLandscape,
+    );
   }
 
-  double _previewAspectRatio() {
-    final previewDisplaySize = _previewDisplaySize(_controller);
+  double _previewAspectRatio({required bool isLandscape}) {
+    final previewDisplaySize = _previewDisplaySize(
+      isLandscape: isLandscape,
+    );
     return previewDisplaySize.width / previewDisplaySize.height;
   }
 
   Widget _buildCameraPreview(CameraController controller) {
-    if (!Platform.isAndroid) return CameraPreview(controller);
-
-    final previewDisplaySize = _previewDisplaySize(controller);
-    return ClipRect(
-      child: FittedBox(
-        fit: BoxFit.cover,
-        child: SizedBox(
-          width: previewDisplaySize.width,
-          height: previewDisplaySize.height,
-          child: controller.buildPreview(),
-        ),
-      ),
-    );
+    return CameraPreview(controller);
   }
 
   void _setCameraLoading({required String title, required String message}) {
@@ -772,6 +746,8 @@ class _FaceObjectDebugCameraScreenState
   Widget build(BuildContext context) {
     final controller = _controller;
     final targets = <FollowTarget>[..._faceTargets, ..._objectTargets];
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -791,7 +767,9 @@ class _FaceObjectDebugCameraScreenState
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: AspectRatio(
-                        aspectRatio: _previewAspectRatio(),
+                        aspectRatio: _previewAspectRatio(
+                          isLandscape: isLandscape,
+                        ),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
@@ -809,11 +787,14 @@ class _FaceObjectDebugCameraScreenState
                   ),
                 ),
                 SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                         RoundIconButton(
                           icon: Icons.arrow_back,
                           tooltip: 'Back',
@@ -828,7 +809,8 @@ class _FaceObjectDebugCameraScreenState
                           ),
                         ),
                         const SizedBox(width: 56, height: 56),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

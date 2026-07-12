@@ -28,6 +28,7 @@ extension on _AdminHandGestureLiveScreenState {
 
     try {
       final rotation = _cameraFrameRotation(image);
+      _observeCameraFrameRotation(rotation);
       final frameId = ++_cameraFrameId;
       final needsObjectTrackingFrame =
           _followObjectSequenceDetector.isTargetSelectionActive ||
@@ -120,7 +121,10 @@ extension on _AdminHandGestureLiveScreenState {
       sensorOrientation: controller.description.sensorOrientation,
       isFrontCamera:
           controller.description.lensDirection == CameraLensDirection.front,
-      deviceOrientation: controller.value.deviceOrientation,
+      deviceOrientation:
+          controller.value.recordingOrientation ??
+          controller.value.lockedCaptureOrientation ??
+          controller.value.deviceOrientation,
     );
 
     if (controller.value.isRecordingVideo) {
@@ -140,6 +144,15 @@ extension on _AdminHandGestureLiveScreenState {
     }
 
     return rotation;
+  }
+
+  /// Drops old-orientation boxes when the user physically rotates the device.
+  void _observeCameraFrameRotation(CameraFrameRotation? rotation) {
+    if (_hasCameraFrameRotation && _lastCameraFrameRotation != rotation) {
+      _resetForCameraOrientationChange();
+    }
+    _lastCameraFrameRotation = rotation;
+    _hasCameraFrameRotation = true;
   }
 
   /// Applies gesture priority and updates all live-screen gesture UI state.
@@ -1276,20 +1289,11 @@ extension on _AdminHandGestureLiveScreenState {
     required DateTime detectedAt,
     required int sourceFrameId,
   }) {
-    final displayBox =
-        object.source == AppObjectDetectionSource.googleMlKit
-            ? _mlKitRectToDisplayBox(
-              object.boundingBox,
-              imageSize: object.imageSize,
-              rotation: _inputImageRotationFromCameraFrameRotation(
-                frameRotation,
-              ),
-            )
-            : imageRectToDisplayBox(
-              rect: object.boundingBox,
-              imageSize: object.imageSize,
-              mirrorHorizontally: _shouldMirrorPreviewCoordinates(_controller),
-            );
+    final displayBox = imageRectToDisplayBox(
+      rect: object.boundingBox,
+      imageSize: object.imageSize,
+      mirrorHorizontally: _shouldMirrorPreviewCoordinates(_controller),
+    );
     return FollowTarget(
       type: FollowTargetType.object,
       boundingBox: object.boundingBox,
@@ -1598,36 +1602,15 @@ extension on _AdminHandGestureLiveScreenState {
       (point.dy / imageSize.height).clamp(0.0, 1.0),
     );
     final controller = _controller;
-    final rotatedPoint =
-        controller == null
-            ? normalizedPoint
-            : _rotateNormalizedPoint(
-              normalizedPoint,
-              _previewQuarterTurnsForOverlays(controller),
-            );
     final displayPoint =
         _shouldMirrorPreviewCoordinates(controller)
-            ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
-            : rotatedPoint;
+            ? Offset(1.0 - normalizedPoint.dx, normalizedPoint.dy)
+            : normalizedPoint;
 
     return Offset(
       displayPoint.dx.clamp(0.0, 1.0),
       displayPoint.dy.clamp(0.0, 1.0),
     );
-  }
-
-  /// Rotates a normalized point by quarter turns.
-  Offset _rotateNormalizedPoint(Offset point, int quarterTurns) {
-    switch (quarterTurns % 4) {
-      case 1:
-        return Offset(1 - point.dy, point.dx);
-      case 2:
-        return Offset(1 - point.dx, 1 - point.dy);
-      case 3:
-        return Offset(point.dy, 1 - point.dx);
-      default:
-        return point;
-    }
   }
 
   /// Status text for a locked follow target.

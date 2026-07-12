@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/models/object_optical_flow_track_result.dart';
+import '../../domain/utils/camera_preview_geometry.dart';
 
 /// Optional optical-flow diagnostics kept out of the normal camera UI.
 class ObjectOpticalFlowDebugPainter extends CustomPainter {
-  const ObjectOpticalFlowDebugPainter({required this.result});
+  const ObjectOpticalFlowDebugPainter({
+    required this.result,
+    this.previewQuarterTurns = 0,
+  });
 
   final ObjectOpticalFlowTrackResult result;
+  final int previewQuarterTurns;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -31,8 +36,12 @@ class ObjectOpticalFlowDebugPainter extends CustomPainter {
           ..style = PaintingStyle.fill
           ..color = Colors.yellowAccent;
     for (final point in result.featurePoints) {
+      final displayPoint = rotateNormalizedDisplayPoint(
+        point,
+        previewQuarterTurns,
+      );
       canvas.drawCircle(
-        Offset(point.dx * size.width, point.dy * size.height),
+        Offset(displayPoint.dx * size.width, displayPoint.dy * size.height),
         2,
         pointPaint,
       );
@@ -58,14 +67,14 @@ class ObjectOpticalFlowDebugPainter extends CustomPainter {
     label.paint(canvas, const Offset(6, 6));
   }
 
-  Rect _scale(Rect box, Size size) => Rect.fromLTRB(
-    box.left * size.width,
-    box.top * size.height,
-    box.right * size.width,
-    box.bottom * size.height,
+  Rect _scale(Rect box, Size size) => normalizedDisplayRectToCanvasRect(
+    box,
+    size,
+    previewQuarterTurns: previewQuarterTurns,
   );
 
   @override
   bool shouldRepaint(covariant ObjectOpticalFlowDebugPainter oldDelegate) =>
-      oldDelegate.result != result;
+      oldDelegate.result != result ||
+      oldDelegate.previewQuarterTurns != previewQuarterTurns;
 }

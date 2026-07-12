@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../../../utils/app_snack_bar.dart';
 import '../../data/factories/hand_detector_factory.dart';
 import '../../domain/constants/hand_gesture_thresholds.dart';
+import '../../domain/enums/camera_preview_mode.dart';
 import '../../domain/enums/follow_target_type.dart';
 import '../../domain/enums/follow_target_tracking_phase.dart';
 import '../../domain/enums/hand_move_direction.dart';
@@ -37,6 +39,7 @@ import '../../domain/services/object_detection_service.dart';
 import '../../domain/services/object_optical_flow_tracker.dart';
 import '../../domain/services/zoom_gesture_detector.dart';
 import '../../domain/utils/camera_frame_box_mapper.dart';
+import '../../domain/utils/camera_preview_geometry.dart';
 import '../painters/follow_target_debug_overlay_painter.dart';
 import '../painters/follow_target_overlay_painter.dart';
 import '../painters/hand_focus_overlay_painter.dart';
@@ -44,6 +47,7 @@ import '../painters/hand_landmark_overlay_painter.dart';
 import '../painters/object_optical_flow_debug_painter.dart';
 import '../painters/recording_hand_landmark_overlay_painter.dart';
 import '../utils/hand_gesture_label_mapper.dart';
+import '../utils/camera_orientation_preferences.dart';
 import '../widgets/gesture_status_panel.dart';
 import '../widgets/hand_camera_loading_view.dart';
 import '../widgets/round_icon_button.dart';
@@ -72,7 +76,7 @@ class AdminHandGestureLiveScreen extends StatefulWidget {
 
 /// Coordinates camera streaming, gesture detection, zoom, recording, and UI.
 class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   CameraController? _controller;
   HandDetector? _handDetector;
   ml_face.FaceDetector? _faceDetector;
@@ -102,6 +106,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   bool _isStreaming = false;
   bool _isProcessing = false;
   bool _isSwitchingCamera = false;
+  bool _isChangingPreviewOrientation = false;
   bool _isCameraSetupInProgress = false;
   bool _isFollowingHand = false;
   bool _hasCameraFailure = false;
@@ -154,6 +159,11 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   DateTime? _lastCameraFocusPointSetAt;
   Offset? _lastCameraFocusPoint;
   DateTime? _lastOrientationDebugPrintedAt;
+  CameraFrameRotation? _lastCameraFrameRotation;
+  bool _hasCameraFrameRotation = false;
+  CameraPreviewMode _cameraPreviewMode = CameraPreviewMode.portrait;
+  late final AnimationController _cameraPreviewRotationController;
+  bool _didLockLiveCameraUiOrientation = false;
   int _objectDetectionGeneration = 0;
   int _cameraFrameId = 0;
   ObjectOpticalFlowTrackResult? _objectOpticalFlowResult;
@@ -175,6 +185,11 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _cameraPreviewRotationController = AnimationController(
+      vsync: this,
+      duration: cameraPreviewRotationDuration,
+    )..addStatusListener(_handleCameraPreviewAnimationStatus);
+    unawaited(_lockLiveCameraUiOrientation());
 
     _followObjectSequenceDetector = FollowObjectSequenceDetector(
       onDebug: debugPrint,
@@ -204,6 +219,10 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
     unawaited(_faceDetector?.close() ?? Future<void>.value());
     _closeObjectDetectionService();
     _objectOpticalFlowTracker.dispose();
+    _cameraPreviewRotationController
+      ..removeStatusListener(_handleCameraPreviewAnimationStatus)
+      ..dispose();
+    unawaited(_restoreSupportedCameraOrientations());
     super.dispose();
   }
 

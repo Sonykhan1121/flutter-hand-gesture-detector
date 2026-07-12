@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/models/follow_target.dart';
+import '../../domain/utils/camera_preview_geometry.dart';
 
 /// Debug painter that draws all face/object candidates on the preview.
 class FollowTargetDebugOverlayPainter extends CustomPainter {
@@ -9,26 +10,30 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
     this.showLabels = true,
     this.color = Colors.red,
     this.labelPrefix = '',
+    this.previewQuarterTurns = 0,
   });
 
   final List<FollowTarget> targets;
   final bool showLabels;
   final Color color;
   final String labelPrefix;
+  final int previewQuarterTurns;
 
   @override
   /// Paints red boxes and labels for each detected follow candidate.
   void paint(Canvas canvas, Size size) {
     if (targets.isEmpty) return;
 
-    final borderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..color = color;
+    final borderPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = color;
 
-    final labelBackgroundPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = Colors.black.withValues(alpha: 0.62);
+    final labelBackgroundPaint =
+        Paint()
+          ..style = PaintingStyle.fill
+          ..color = Colors.black.withValues(alpha: 0.62);
 
     for (final target in targets) {
       final rect = _displayRect(target, size);
@@ -49,19 +54,10 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
 
   /// Converts a normalized target display box into canvas coordinates.
   Rect _displayRect(FollowTarget target, Size size) {
-    final box = target.displayBox;
-    final rect = Rect.fromLTRB(
-      box.left * size.width,
-      box.top * size.height,
-      box.right * size.width,
-      box.bottom * size.height,
-    );
-
-    return Rect.fromLTRB(
-      rect.left.clamp(0, size.width),
-      rect.top.clamp(0, size.height),
-      rect.right.clamp(0, size.width),
-      rect.bottom.clamp(0, size.height),
+    return normalizedDisplayRectToCanvasRect(
+      target.displayBox,
+      size,
+      previewQuarterTurns: previewQuarterTurns,
     );
   }
 
@@ -99,9 +95,10 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
       0.0,
       size.height,
     );
-    final labelTop = preferredTop >= 0
-        ? preferredTop
-        : (rect.top + 2).clamp(0.0, maxLabelTop).toDouble();
+    final labelTop =
+        preferredTop >= 0
+            ? preferredTop
+            : (rect.top + 2).clamp(0.0, maxLabelTop).toDouble();
     final labelRect = Offset(labelLeft, labelTop) & labelSize;
 
     canvas.drawRect(labelRect, backgroundPaint);
@@ -117,6 +114,7 @@ class FollowTargetDebugOverlayPainter extends CustomPainter {
     return oldDelegate.targets != targets ||
         oldDelegate.showLabels != showLabels ||
         oldDelegate.color != color ||
-        oldDelegate.labelPrefix != labelPrefix;
+        oldDelegate.labelPrefix != labelPrefix ||
+        oldDelegate.previewQuarterTurns != previewQuarterTurns;
   }
 }

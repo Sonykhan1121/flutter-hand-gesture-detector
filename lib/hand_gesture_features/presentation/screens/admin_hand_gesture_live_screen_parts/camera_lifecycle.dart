@@ -118,6 +118,7 @@ extension on _AdminHandGestureLiveScreenState {
 
       _controller = controller;
       await controller.initialize();
+      await _lockLiveCaptureOrientation(controller);
       await _initializeZoomLevels(controller);
       _customGestureDetector.clearState();
       _directionGestureDetector.clearState();
@@ -135,6 +136,8 @@ extension on _AdminHandGestureLiveScreenState {
       _clearObjectDetectionCache();
       _resetFollowTargetTrackingState();
       _cameraFrameId = 0;
+      _lastCameraFrameRotation = null;
+      _hasCameraFrameRotation = false;
       _lastCameraFocusPoint = null;
       _ensureObjectDetectionServiceStarted();
 
@@ -330,6 +333,130 @@ extension on _AdminHandGestureLiveScreenState {
         !_isRecordingActionInProgress &&
         !_isStartingVideoRecording &&
         !_isStoppingVideoRecording;
+  }
+
+  /// True when the preview can safely move between portrait and landscape.
+  bool get _canRotateCameraPreview {
+    final controller = _controller;
+    return controller != null &&
+        controller.value.isInitialized &&
+        !controller.value.isRecordingVideo &&
+        !_isChangingPreviewOrientation &&
+        !_isSwitchingCamera &&
+        !_isRecordingActionInProgress &&
+        !_isStartingVideoRecording &&
+        !_isStoppingVideoRecording;
+  }
+
+  /// Rotates only the camera card between portrait 9:16 and landscape 16:9.
+  void _toggleCameraPreviewOrientation() {
+    if (!_canRotateCameraPreview) return;
+
+    final nextMode =
+        _cameraPreviewMode.isLandscape
+            ? CameraPreviewMode.portrait
+            : CameraPreviewMode.landscape;
+
+    _setScreenState(() {
+      _cameraPreviewMode = nextMode;
+      _isChangingPreviewOrientation = true;
+      _gestureText = 'Rotating camera...';
+      _gestureConfidence = 0;
+    });
+
+    _cameraPreviewRotationController.animateTo(
+      nextMode.isLandscape ? 1 : 0,
+      duration: cameraPreviewRotationDuration,
+      curve: Curves.easeInOutCubic,
+    );
+  }
+
+  /// Completes the visual rotation without resetting detectors or target lock.
+  void _handleCameraPreviewAnimationStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed &&
+        status != AnimationStatus.dismissed) {
+      return;
+    }
+    if (!_isChangingPreviewOrientation) return;
+
+    _setScreenState(() {
+      _isChangingPreviewOrientation = false;
+      _gestureText =
+          _cameraPreviewMode.isLandscape
+              ? 'Landscape camera — show your hand'
+              : 'Portrait camera — show your hand';
+      _gestureConfidence = 0;
+    });
+  }
+
+  /// Clears frame-space state so boxes from the old orientation never linger.
+  void _resetForCameraOrientationChange() {
+    _customGestureDetector.clearState();
+    _zoomGestureDetector.clearState();
+    _directionGestureDetector.clearState();
+    _moveDirectionDisplayHold.clear();
+    _followObjectSequenceDetector.clear();
+    _clearFollowObjectTargetCandidates();
+    _clearLockedFollowTarget(clearIdentity: true);
+    _clearObjectDetectionCache();
+    _cameraFrameId = 0;
+    _lastCameraFrameRotation = null;
+    _hasCameraFrameRotation = false;
+    _lastFrameProcessedAt = null;
+    _lastCameraFocusPointSetAt = null;
+    _lastCameraFocusPoint = null;
+
+    _setScreenState(() {
+      _hands = const [];
+      _detectionImageSize = null;
+      _detectedHandsCount = 0;
+      _isFollowingHand = false;
+      _focusedHandBox = null;
+      _focusImageSize = null;
+      _lockedFollowTarget = null;
+      _followTargetIdentity = null;
+      _objectOpticalFlowResult = null;
+    });
+  }
+
+  /// Keeps the entire Flutter page upright while this camera screen is active.
+  Future<void> _lockLiveCameraUiOrientation() async {
+    try {
+      await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
+        DeviceOrientation.portraitUp,
+      ]);
+      if (!mounted) {
+        await SystemChrome.setPreferredOrientations(
+          supportedCameraDeviceOrientations,
+        );
+        return;
+      }
+      _didLockLiveCameraUiOrientation = true;
+    } catch (error) {
+      debugPrint('Live camera UI orientation lock ignored: $error');
+    }
+  }
+
+  /// Keeps normal detector and preview frames in stable portrait coordinates.
+  Future<void> _lockLiveCaptureOrientation(CameraController controller) async {
+    try {
+      await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+    } catch (error) {
+      debugPrint('Live capture orientation lock ignored: $error');
+    }
+  }
+
+  /// Restores sensor-driven portrait/landscape rotation after this page exits.
+  Future<void> _restoreSupportedCameraOrientations() async {
+    if (!_didLockLiveCameraUiOrientation) return;
+    _didLockLiveCameraUiOrientation = false;
+    try {
+      await SystemChrome.setPreferredOrientations(
+        supportedCameraDeviceOrientations,
+      );
+    } catch (error) {
+      debugPrint('Camera orientation restore ignored: $error');
+    }
   }
 
   /// Switches lens direction and optionally restarts an interrupted recording.

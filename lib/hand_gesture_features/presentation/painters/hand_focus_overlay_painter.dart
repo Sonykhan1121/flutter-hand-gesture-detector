@@ -103,13 +103,11 @@ class HandFocusOverlayPainter extends CustomPainter {
   Offset _mapPoint(double x, double y, Size canvasSize) {
     final normalizedX = (x / imageSize.width).clamp(0.0, 1.0);
     final normalizedY = (y / imageSize.height).clamp(0.0, 1.0);
-    final rotatedPoint = _rotateNormalizedPoint(
-      Offset(normalizedX, normalizedY),
-    );
-    final displayPoint =
+    final mirroredPoint =
         mirrorHorizontally
-            ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
-            : rotatedPoint;
+            ? Offset(1.0 - normalizedX, normalizedY)
+            : Offset(normalizedX, normalizedY);
+    final displayPoint = _rotateNormalizedPoint(mirroredPoint);
 
     return Offset(
       displayPoint.dx * canvasSize.width,

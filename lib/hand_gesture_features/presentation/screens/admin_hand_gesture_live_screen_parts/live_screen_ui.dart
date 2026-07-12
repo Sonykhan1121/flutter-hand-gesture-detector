@@ -1,81 +1,28 @@
 part of '../admin_hand_gesture_live_screen.dart';
 
 extension on _AdminHandGestureLiveScreenState {
-  /// Returns the portrait-oriented preview size used by AspectRatio.
-  Size _previewDisplaySize(CameraController? controller) {
-    if (controller == null || !controller.value.isInitialized) {
-      return const Size(9, 16);
-    }
-
-    final previewSize = controller.value.previewSize;
-    if (previewSize == null ||
-        previewSize.width <= 0 ||
-        previewSize.height <= 0) {
-      return const Size(9, 16);
-    }
-
-    final rawWidth = previewSize.width;
-    final rawHeight = previewSize.height;
-    return rawWidth > rawHeight
-        ? Size(rawHeight, rawWidth)
-        : Size(rawWidth, rawHeight);
-  }
-
-  /// Aspect ratio for the visible camera preview container.
-  double _previewAspectRatio() {
-    final controller = _controller;
-    final previewDisplaySize = _previewDisplaySize(controller);
-    return previewDisplaySize.width / previewDisplaySize.height;
-  }
-
-  /// Builds the camera preview, applying Android recording correction if needed.
-  Widget _buildCameraPreview(CameraController controller) {
-    if (!Platform.isAndroid) {
-      return CameraPreview(controller);
-    }
-
-    final previewDisplaySize = _previewDisplaySize(controller);
-    final applyRecordingCorrection = _shouldApplyRecordingPreviewCorrection(
-      controller,
-    );
-    final mirrorRecordingPreview =
-        applyRecordingCorrection &&
-        controller.description.lensDirection == CameraLensDirection.front;
-    final preview = controller.buildPreview();
+  /// Rotates and resizes only the camera pixels inside the fixed upright UI.
+  Widget _buildCameraPreview(
+    CameraController controller, {
+    required Size cardSize,
+    required double rotationProgress,
+  }) {
+    final rotatedSize = Size(cardSize.height, cardSize.width);
+    final cameraSize =
+        Size.lerp(cardSize, rotatedSize, rotationProgress.clamp(0.0, 1.0))!;
 
     return ClipRect(
-      child: FittedBox(
-        fit: BoxFit.cover,
-        child: _mirrorPreviewIfNeeded(
-          mirrorHorizontally: mirrorRecordingPreview,
-          child:
-              applyRecordingCorrection
-                  ? RotatedBox(
-                    quarterTurns: 3,
-                    child: SizedBox(
-                      width: previewDisplaySize.height,
-                      height: previewDisplaySize.width,
-                      child: preview,
-                    ),
-                  )
-                  : SizedBox(
-                    width: previewDisplaySize.width,
-                    height: previewDisplaySize.height,
-                    child: preview,
-                  ),
+      child: Center(
+        child: Transform.rotate(
+          angle: math.pi * 0.5 * rotationProgress,
+          child: SizedBox(
+            width: cameraSize.width,
+            height: cameraSize.height,
+            child: CameraPreview(controller),
+          ),
         ),
       ),
     );
-  }
-
-  /// Mirrors a preview widget for front-camera recording correction.
-  Widget _mirrorPreviewIfNeeded({
-    required bool mirrorHorizontally,
-    required Widget child,
-  }) {
-    if (!mirrorHorizontally) return child;
-
-    return Transform.flip(flipX: true, child: child);
   }
 
   /// True when overlay coordinates must mirror to match the preview.
@@ -107,16 +54,18 @@ extension on _AdminHandGestureLiveScreenState {
     return controller?.description.lensDirection == CameraLensDirection.back;
   }
 
-  /// Android recording preview needs correction while recording starts/stops.
-  bool _shouldApplyRecordingPreviewCorrection(CameraController controller) {
-    return Platform.isAndroid &&
-        (_isRecordingPreviewCorrectionActive ||
-            controller.value.isRecordingVideo);
+  /// Native landscape recording is already rotated by CameraPreview itself.
+  double _cameraVisualRotationProgress(CameraController controller) {
+    if (controller.value.isRecordingVideo ||
+        _isRecordingPreviewCorrectionActive) {
+      return 0;
+    }
+    return _cameraPreviewRotationController.value;
   }
 
-  /// Quarter-turns used by overlay painters for the current preview mode.
+  /// Rotates only painter output; detector-space coordinates remain unchanged.
   int _previewQuarterTurnsForOverlays(CameraController controller) {
-    return _shouldApplyRecordingPreviewCorrection(controller) ? 3 : 0;
+    return cameraPreviewQuarterTurns(_cameraVisualRotationProgress(controller));
   }
 
   /// Full-screen scrim shown while recording mode transitions settle.
@@ -191,126 +140,210 @@ extension on _AdminHandGestureLiveScreenState {
               ? Stack(
                 fit: StackFit.expand,
                 children: [
-                  Center(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white24),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: AspectRatio(
-                          aspectRatio: _previewAspectRatio(),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              _buildCameraPreview(controller),
-                              if (_detectionImageSize != null)
-                                CustomPaint(
-                                  painter: _handLandmarkPainterForCurrentMode(
-                                    controller,
+                  Positioned.fill(
+                    child: AnimatedBuilder(
+                      animation: _cameraPreviewRotationController,
+                      builder: (context, _) {
+                        final animationProgress =
+                            _cameraPreviewRotationController.value;
+                        final visualRotationProgress =
+                            _cameraVisualRotationProgress(controller);
+                        final overlayQuarterTurns =
+                            _previewQuarterTurnsForOverlays(controller);
+                        final overlayOpacity = cameraOverlayOpacity(
+                          animationProgress,
+                        );
+
+                        return LayoutBuilder(
+                          builder: (context, constraints) {
+                            final viewportSize = constraints.biggest;
+                            final cardSize = interpolatedCameraPreviewSize(
+                              viewportSize: viewportSize,
+                              rawPreviewSize: controller.value.previewSize,
+                              progress: animationProgress,
+                            );
+
+                            return Center(
+                              child: SizedBox(
+                                key: const Key('cameraPreviewCard'),
+                                width: cardSize.width,
+                                height: cardSize.height,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.white24),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                ),
-                              if (_focusedHandBox != null &&
-                                  _focusImageSize != null)
-                                CustomPaint(
-                                  painter: HandFocusOverlayPainter(
-                                    handBox: _focusedHandBox!,
-                                    imageSize: _focusImageSize!,
-                                    mirrorHorizontally:
-                                        _shouldMirrorPreviewCoordinates(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        _buildCameraPreview(
                                           controller,
+                                          cardSize: cardSize,
+                                          rotationProgress:
+                                              visualRotationProgress,
                                         ),
-                                    previewQuarterTurns:
-                                        _previewQuarterTurnsForOverlays(
-                                          controller,
+                                        Opacity(
+                                          opacity: overlayOpacity,
+                                          child: Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              if (_detectionImageSize != null)
+                                                CustomPaint(
+                                                  painter:
+                                                      _handLandmarkPainterForCurrentMode(
+                                                        controller,
+                                                      ),
+                                                ),
+                                              if (_focusedHandBox != null &&
+                                                  _focusImageSize != null)
+                                                CustomPaint(
+                                                  painter: HandFocusOverlayPainter(
+                                                    handBox: _focusedHandBox!,
+                                                    imageSize: _focusImageSize!,
+                                                    mirrorHorizontally:
+                                                        _shouldMirrorPreviewCoordinates(
+                                                          controller,
+                                                        ),
+                                                    previewQuarterTurns:
+                                                        overlayQuarterTurns,
+                                                  ),
+                                                ),
+                                              if (_lockedFollowTarget != null)
+                                                CustomPaint(
+                                                  painter:
+                                                      FollowTargetOverlayPainter(
+                                                        target:
+                                                            _lockedFollowTarget!,
+                                                        previewQuarterTurns:
+                                                            overlayQuarterTurns,
+                                                      ),
+                                                ),
+                                              if (_showObjectOpticalFlowDebugOverlay &&
+                                                  _objectOpticalFlowResult !=
+                                                      null)
+                                                CustomPaint(
+                                                  painter:
+                                                      ObjectOpticalFlowDebugPainter(
+                                                        result:
+                                                            _objectOpticalFlowResult!,
+                                                        previewQuarterTurns:
+                                                            overlayQuarterTurns,
+                                                      ),
+                                                ),
+                                              if (closedFistTargetCandidates
+                                                  .isNotEmpty)
+                                                CustomPaint(
+                                                  painter:
+                                                      FollowTargetDebugOverlayPainter(
+                                                        targets:
+                                                            closedFistTargetCandidates,
+                                                        showLabels: true,
+                                                        color: const Color(
+                                                          0xFF00FB46,
+                                                        ),
+                                                        labelPrefix:
+                                                            'Release → ',
+                                                        previewQuarterTurns:
+                                                            overlayQuarterTurns,
+                                                      ),
+                                                ),
+                                              if (followTargetDebugOverlayTargets
+                                                  .isNotEmpty)
+                                                CustomPaint(
+                                                  painter:
+                                                      FollowTargetDebugOverlayPainter(
+                                                        targets:
+                                                            followTargetDebugOverlayTargets,
+                                                        showLabels: false,
+                                                        previewQuarterTurns:
+                                                            overlayQuarterTurns,
+                                                      ),
+                                                ),
+                                            ],
+                                          ),
                                         ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              if (_lockedFollowTarget != null)
-                                CustomPaint(
-                                  painter: FollowTargetOverlayPainter(
-                                    target: _lockedFollowTarget!,
-                                  ),
-                                ),
-                              if (_showObjectOpticalFlowDebugOverlay &&
-                                  _objectOpticalFlowResult != null)
-                                CustomPaint(
-                                  painter: ObjectOpticalFlowDebugPainter(
-                                    result: _objectOpticalFlowResult!,
-                                  ),
-                                ),
-                              if (closedFistTargetCandidates.isNotEmpty)
-                                CustomPaint(
-                                  painter: FollowTargetDebugOverlayPainter(
-                                    targets: closedFistTargetCandidates,
-                                    showLabels: true,
-                                    color: const Color(0xFF00FB46),
-                                    labelPrefix: 'Release → ',
-                                  ),
-                                ),
-                              if (followTargetDebugOverlayTargets.isNotEmpty)
-                                CustomPaint(
-                                  painter: FollowTargetDebugOverlayPainter(
-                                    targets: followTargetDebugOverlayTargets,
-                                    showLabels: false,
-                                  ),
-                                ),
-                              if (_shouldShowTouchZoomGuideOverlay)
-                                Positioned.fill(
-                                  child: TouchZoomGuideOverlay(
-                                    currentZoomLevel: _currentZoomLevel,
-                                    minZoomLevel: _minZoomLevel,
-                                    maxZoomLevel: _maxZoomLevel,
-                                    onZoomChanged: _handleTouchZoomChanged,
-                                    onInteractionStart:
-                                        _beginTouchZoomInteraction,
-                                    onInteractionEnd: _endTouchZoomInteraction,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
+                              ),
+                            );
+                          },
+                        );
+                      },
                     ),
                   ),
+                  if (_shouldShowTouchZoomGuideOverlay)
+                    Positioned.fill(
+                      child: TouchZoomGuideOverlay(
+                        currentZoomLevel: _currentZoomLevel,
+                        minZoomLevel: _minZoomLevel,
+                        maxZoomLevel: _maxZoomLevel,
+                        onZoomChanged: _handleTouchZoomChanged,
+                        onInteractionStart: _beginTouchZoomInteraction,
+                        onInteractionEnd: _endTouchZoomInteraction,
+                      ),
+                    ),
                   SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          RoundIconButton(
-                            icon: Icons.arrow_back,
-                            tooltip: 'Back',
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                          const Text(
-                            'Show Your Hand',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.max,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            RoundIconButton(
+                              icon: Icons.arrow_back,
+                              tooltip: 'Back',
+                              onPressed: () => Navigator.pop(context),
                             ),
-                          ),
-                          cameras.length > 1
-                              ? RoundIconButton(
-                                icon: Icons.flip_camera_ios,
-                                tooltip: 'Switch camera',
-                                onPressed:
-                                    _canSwitchCamera
-                                        ? () => unawaited(
-                                          _switchCamera(
-                                            restartRecordingAfterSwitch:
-                                                controller
-                                                    .value
-                                                    .isRecordingVideo,
-                                          ),
-                                        )
-                                        : null,
-                              )
-                              : const SizedBox(width: 40),
-                        ],
+                            const Expanded(
+                              child: Center(
+                                child: Text(
+                                  'Show Your Hand',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            RoundIconButton(
+                              key: const Key('rotateCameraPreviewButton'),
+                              icon: Icons.screen_rotation,
+                              tooltip:
+                                  _cameraPreviewMode.isLandscape
+                                      ? 'Use portrait 9:16'
+                                      : 'Use landscape 16:9',
+                              onPressed:
+                                  _canRotateCameraPreview
+                                      ? _toggleCameraPreviewOrientation
+                                      : null,
+                            ),
+                            const SizedBox(width: 8),
+                            cameras.length > 1
+                                ? RoundIconButton(
+                                  icon: Icons.flip_camera_ios,
+                                  tooltip: 'Switch camera',
+                                  onPressed:
+                                      _canSwitchCamera
+                                          ? () => unawaited(
+                                            _switchCamera(
+                                              restartRecordingAfterSwitch:
+                                                  controller
+                                                      .value
+                                                      .isRecordingVideo,
+                                            ),
+                                          )
+                                          : null,
+                                )
+                                : const SizedBox(width: 40),
+                          ],
+                        ),
                       ),
                     ),
                   ),

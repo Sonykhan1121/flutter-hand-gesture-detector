@@ -92,10 +92,140 @@ void main() {
       expect(releaseResult.gestureConfidence, closeTo(0.66, 0.001));
     });
 
+    for (final extendedFingerCount in const [1, 2]) {
+      test('final release accepts $extendedFingerCount extended finger(s) '
+          'after two reliable frames', () {
+        final openPalm = _FakeOpenPalmGestureDetector();
+        final detector = FollowObjectSequenceDetector(
+          openPalmGestureDetector: openPalm,
+        );
+        final now = DateTime(2026);
+        _startTargetSelection(detector, openPalm, now);
+
+        final firstFrame = detector.update(
+          _relaxedReleaseHand(extendedFingerCount: extendedFingerCount),
+          now.add(const Duration(milliseconds: 1300)),
+          mirrorHorizontally: false,
+        );
+        expect(firstFrame.isDetected, isFalse);
+        expect(firstFrame.isTargetSelectionActive, isTrue);
+
+        final releaseResult = detector.update(
+          _relaxedReleaseHand(
+            extendedFingerCount: extendedFingerCount,
+            box: BoundingBox.ltrb(160, 180, 320, 400),
+          ),
+          now.add(const Duration(milliseconds: 1400)),
+          mirrorHorizontally: false,
+        );
+
+        expect(releaseResult.isDetected, isTrue);
+        expect(releaseResult.releaseReason, FollowObjectReleaseReason.openPalm);
+        expect(releaseResult.releasePoint?.dx, 240);
+        expect(releaseResult.releasePoint?.dy, 290);
+        expect(detector.isTargetSelectionActive, isFalse);
+      });
+    }
+
+    test('closed-fist classification prevents accidental relaxed release', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+      _startTargetSelection(detector, openPalm, now);
+
+      for (var frame = 0; frame < 3; frame++) {
+        final result = detector.update(
+          _relaxedReleaseHand(
+            extendedFingerCount: 2,
+            gestureType: GestureType.closedFist,
+          ),
+          now.add(Duration(milliseconds: 1300 + frame * 100)),
+          mirrorHorizontally: false,
+        );
+        expect(result.isDetected, isFalse);
+        expect(result.isTargetSelectionActive, isTrue);
+      }
+    });
+
+    test('an interrupted relaxed pose restarts frame confirmation', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+      _startTargetSelection(detector, openPalm, now);
+
+      detector.update(
+        _relaxedReleaseHand(extendedFingerCount: 1),
+        now.add(const Duration(milliseconds: 1300)),
+        mirrorHorizontally: false,
+      );
+      detector.update(
+        _relaxedReleaseHand(extendedFingerCount: 0),
+        now.add(const Duration(milliseconds: 1400)),
+        mirrorHorizontally: false,
+      );
+      final restarted = detector.update(
+        _relaxedReleaseHand(extendedFingerCount: 1),
+        now.add(const Duration(milliseconds: 1500)),
+        mirrorHorizontally: false,
+      );
+
+      expect(restarted.isDetected, isFalse);
+      expect(restarted.isTargetSelectionActive, isTrue);
+      expect(
+        detector
+            .update(
+              _relaxedReleaseHand(extendedFingerCount: 1),
+              now.add(const Duration(milliseconds: 1600)),
+              mirrorHorizontally: false,
+            )
+            .isDetected,
+        isTrue,
+      );
+    });
+
+    test('a partly straightened single finger is enough for final release', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+      _startTargetSelection(detector, openPalm, now);
+
+      final hand = _relaxedReleaseHand(
+        extendedFingerCount: 1,
+        partiallyStraightened: true,
+      );
+      expect(
+        detector
+            .update(
+              hand,
+              now.add(const Duration(milliseconds: 1300)),
+              mirrorHorizontally: false,
+            )
+            .isDetected,
+        isFalse,
+      );
+      expect(
+        detector
+            .update(
+              hand,
+              now.add(const Duration(milliseconds: 1400)),
+              mirrorHorizontally: false,
+            )
+            .isDetected,
+        isTrue,
+      );
+    });
+
     test('carries custom open-palm confidence while active', () {
-      final openPalm = _FakeOpenPalmGestureDetector()
-        ..isDetected = true
-        ..confidence = 0.72;
+      final openPalm =
+          _FakeOpenPalmGestureDetector()
+            ..isDetected = true
+            ..confidence = 0.72;
       final detector = FollowObjectSequenceDetector(
         openPalmGestureDetector: openPalm,
       );
@@ -248,6 +378,27 @@ void main() {
   });
 }
 
+void _startTargetSelection(
+  FollowObjectSequenceDetector detector,
+  _FakeOpenPalmGestureDetector openPalm,
+  DateTime now,
+) {
+  openPalm.isDetected = true;
+  detector.update(_hand(), now, mirrorHorizontally: false);
+  detector.update(
+    _hand(),
+    now.add(const Duration(seconds: 1)),
+    mirrorHorizontally: false,
+  );
+  openPalm.isDetected = false;
+  final result = detector.update(
+    _hand(gestureType: GestureType.closedFist),
+    now.add(const Duration(milliseconds: 1200)),
+    mirrorHorizontally: false,
+  );
+  expect(result.isTargetSelectionActive, isTrue);
+}
+
 class _FakeOpenPalmGestureDetector extends OpenPalmGestureDetector {
   bool isDetected = false;
   double confidence = 1;
@@ -287,8 +438,82 @@ Hand _hand({
     imageWidth: 400,
     imageHeight: 400,
     handedness: Handedness.right,
-    gesture: gestureType == null
-        ? null
-        : GestureResult(type: gestureType, confidence: gestureConfidence),
+    gesture:
+        gestureType == null
+            ? null
+            : GestureResult(type: gestureType, confidence: gestureConfidence),
   );
+}
+
+Hand _relaxedReleaseHand({
+  required int extendedFingerCount,
+  BoundingBox? box,
+  GestureType? gestureType,
+  bool partiallyStraightened = false,
+}) {
+  final boundingBox = box ?? BoundingBox.ltrb(100, 80, 300, 340);
+  final landmarks = <HandLandmark>[_landmark(HandLandmarkType.wrist, 200, 310)];
+  final chains = const [
+    [
+      HandLandmarkType.indexFingerMCP,
+      HandLandmarkType.indexFingerPIP,
+      HandLandmarkType.indexFingerDIP,
+      HandLandmarkType.indexFingerTip,
+    ],
+    [
+      HandLandmarkType.middleFingerMCP,
+      HandLandmarkType.middleFingerPIP,
+      HandLandmarkType.middleFingerDIP,
+      HandLandmarkType.middleFingerTip,
+    ],
+    [
+      HandLandmarkType.ringFingerMCP,
+      HandLandmarkType.ringFingerPIP,
+      HandLandmarkType.ringFingerDIP,
+      HandLandmarkType.ringFingerTip,
+    ],
+    [
+      HandLandmarkType.pinkyMCP,
+      HandLandmarkType.pinkyPIP,
+      HandLandmarkType.pinkyDIP,
+      HandLandmarkType.pinkyTip,
+    ],
+  ];
+
+  for (var index = 0; index < chains.length; index++) {
+    final x = 140.0 + index * 40;
+    final extended = index < extendedFingerCount;
+    final relaxedBent = extended && partiallyStraightened && index == 0;
+    landmarks.addAll([
+      _landmark(chains[index][0], x, 240),
+      _landmark(chains[index][1], x, 200),
+      _landmark(
+        chains[index][2],
+        relaxedBent ? x + 15 : x,
+        relaxedBent ? 174 : (extended ? 150 : 220),
+      ),
+      _landmark(
+        chains[index][3],
+        relaxedBent ? x + 30 : x,
+        relaxedBent ? 148 : (extended ? 100 : 245),
+      ),
+    ]);
+  }
+
+  return Hand(
+    boundingBox: boundingBox,
+    score: 1,
+    landmarks: landmarks,
+    imageWidth: 400,
+    imageHeight: 400,
+    handedness: Handedness.right,
+    gesture:
+        gestureType == null
+            ? null
+            : GestureResult(type: gestureType, confidence: 1),
+  );
+}
+
+HandLandmark _landmark(HandLandmarkType type, double x, double y) {
+  return HandLandmark(type: type, x: x, y: y, z: 0, visibility: 1);
 }

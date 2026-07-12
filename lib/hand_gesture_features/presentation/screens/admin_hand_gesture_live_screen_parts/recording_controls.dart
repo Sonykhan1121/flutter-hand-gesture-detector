@@ -446,21 +446,25 @@ extension on _AdminHandGestureLiveScreenState {
     }
   }
 
-  /// Locks recording orientation to portrait for stable output.
+  /// Locks recording to the active portrait or landscape camera orientation.
   Future<void> _lockRecordingOrientation(CameraController controller) async {
     try {
       _debugCameraOrientation(
         'before-lock-orientation',
         controller: controller,
       );
-      await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+      final recordingOrientation = recordingCameraDeviceOrientation(
+        _cameraPreviewMode,
+      );
+
+      await controller.lockCaptureOrientation(recordingOrientation);
       _debugCameraOrientation('after-lock-orientation', controller: controller);
     } catch (e) {
       debugPrint('Recording orientation lock ignored: $e');
     }
   }
 
-  /// Unlocks capture orientation after recording ends.
+  /// Returns capture to portrait while the Flutter UI remains upright.
   Future<void> _unlockRecordingOrientation(CameraController controller) async {
     try {
       if (controller.value.isInitialized) {
@@ -468,7 +472,7 @@ extension on _AdminHandGestureLiveScreenState {
           'before-unlock-orientation',
           controller: controller,
         );
-        await controller.unlockCaptureOrientation();
+        await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
         _debugCameraOrientation(
           'after-unlock-orientation',
           controller: controller,
@@ -495,17 +499,16 @@ extension on _AdminHandGestureLiveScreenState {
 
     final value = activeController.value;
     final previewSize = value.previewSize;
-    final previewText = previewSize == null
-        ? ''
-        : ', preview=${previewSize.width.toStringAsFixed(0)}x'
-              '${previewSize.height.toStringAsFixed(0)}, '
-              'aspect=${(previewSize.width / previewSize.height).toStringAsFixed(4)}';
-    final imageText = image == null
-        ? ''
-        : ', image=${image.width}x${image.height}';
-    final frameRotationText = frameRotation == null
-        ? ''
-        : ', frameRotation=$frameRotation';
+    final previewText =
+        previewSize == null
+            ? ''
+            : ', preview=${previewSize.width.toStringAsFixed(0)}x'
+                '${previewSize.height.toStringAsFixed(0)}, '
+                'aspect=${(previewSize.width / previewSize.height).toStringAsFixed(4)}';
+    final imageText =
+        image == null ? '' : ', image=${image.width}x${image.height}';
+    final frameRotationText =
+        frameRotation == null ? '' : ', frameRotation=$frameRotation';
 
     debugPrint(
       '[CameraOrientation][$label] '
@@ -687,24 +690,26 @@ extension on _AdminHandGestureLiveScreenState {
             _recordingIconButton(
               icon: Icons.flip_camera_ios_rounded,
               tooltip: 'Switch camera',
-              onPressed: _canSwitchCamera
-                  ? () => unawaited(
-                      _switchCamera(restartRecordingAfterSwitch: true),
-                    )
-                  : null,
+              onPressed:
+                  _canSwitchCamera
+                      ? () => unawaited(
+                        _switchCamera(restartRecordingAfterSwitch: true),
+                      )
+                      : null,
             ),
             const SizedBox(width: 8),
           ],
           _recordingControlButton(
             icon: isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
             label: isPaused ? 'Resume' : 'Pause',
-            onPressed: _isRecordingActionInProgress
-                ? null
-                : () => unawaited(
-                    _runRecordingGestureAction(
-                      _RecordingGestureAction.togglePause,
+            onPressed:
+                _isRecordingActionInProgress
+                    ? null
+                    : () => unawaited(
+                      _runRecordingGestureAction(
+                        _RecordingGestureAction.togglePause,
+                      ),
                     ),
-                  ),
           ),
           const SizedBox(width: 8),
           _recordingControlButton(
@@ -712,11 +717,12 @@ extension on _AdminHandGestureLiveScreenState {
             label: 'Stop',
             foregroundColor: Colors.white,
             backgroundColor: Colors.redAccent,
-            onPressed: _isRecordingActionInProgress
-                ? null
-                : () => unawaited(
-                    _runRecordingGestureAction(_RecordingGestureAction.stop),
-                  ),
+            onPressed:
+                _isRecordingActionInProgress
+                    ? null
+                    : () => unawaited(
+                      _runRecordingGestureAction(_RecordingGestureAction.stop),
+                    ),
           ),
         ],
       ),

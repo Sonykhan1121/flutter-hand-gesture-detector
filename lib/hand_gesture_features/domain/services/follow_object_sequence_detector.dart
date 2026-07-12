@@ -30,6 +30,7 @@ class FollowObjectSequenceDetector {
   Offset? _lastVisibleReleasePoint;
   GestureType? _currentPackageGestureType;
   double _currentGestureConfidence = 0;
+  int _relaxedReleasePositiveFrames = 0;
 
   bool? _lastOpenPalmDebugValue;
   bool? _lastClosedFistDebugValue;
@@ -41,8 +42,8 @@ class FollowObjectSequenceDetector {
   /// 3. User can show closed fist any time later.
   /// 4. Full-screen target scanning starts after the first closed fist.
   /// 5. User can move while staying on screen.
-  /// 6. Final open palm or hand leaving the screen releases at the last
-  ///    visible hand center.
+  /// 6. A final open palm, one relaxed extended long finger confirmed across
+  ///    two frames, or the hand leaving the screen releases at the hand center.
   ///
   /// Important: once closed fist has been detected, the presentation layer can
   /// call [releaseFromLastVisiblePoint] when the hand leaves the screen.
@@ -124,10 +125,11 @@ class FollowObjectSequenceDetector {
 
       case FollowObjectSequencePhase.waitingForClosed:
         if (closedFist) {
+          _relaxedReleasePositiveFrames = 0;
           _lastVisibleReleasePoint = _handReleasePoint(hand);
           _setPhase(
             FollowObjectSequencePhase.waitingForFinalOpen,
-            'closed fist detected; waiting for final open palm',
+            'closed fist detected; waiting for final finger release',
           );
         }
         break;
@@ -136,7 +138,33 @@ class FollowObjectSequenceDetector {
         final currentReleasePoint = _handReleasePoint(hand);
         _lastVisibleReleasePoint = currentReleasePoint;
 
-        if (openPalm) {
+        final relaxedExtendedFingerCount =
+            openPalm || closedFist ? 0 : _relaxedExtendedFingerCount(hand);
+        if (relaxedExtendedFingerCount >=
+            HandGestureThresholds
+                .followObjectRelaxedReleaseMinExtendedFingers) {
+          _relaxedReleasePositiveFrames += 1;
+          _debug(
+            'relaxed final release candidate | '
+            'extendedFingers=$relaxedExtendedFingerCount, '
+            'frames=$_relaxedReleasePositiveFrames/'
+            '${HandGestureThresholds.followObjectRelaxedReleaseConfirmationFrames}',
+          );
+        } else if (!openPalm) {
+          _relaxedReleasePositiveFrames = 0;
+        }
+
+        final relaxedReleaseConfirmed =
+            _relaxedReleasePositiveFrames >=
+            HandGestureThresholds.followObjectRelaxedReleaseConfirmationFrames;
+        if (openPalm || relaxedReleaseConfirmed) {
+          if (relaxedReleaseConfirmed && !openPalm) {
+            _currentPackageGestureType = GestureType.openPalm;
+            _currentGestureConfidence = math.min(
+              0.75,
+              0.55 + relaxedExtendedFingerCount * 0.10,
+            );
+          }
           _lastDetectedAt = now;
           detected = true;
           releasePoint = currentReleasePoint;
@@ -231,6 +259,7 @@ class FollowObjectSequenceDetector {
     _lastVisibleReleasePoint = null;
     _currentPackageGestureType = null;
     _currentGestureConfidence = 0;
+    _relaxedReleasePositiveFrames = 0;
     _lastOpenPalmDebugValue = null;
     _lastClosedFistDebugValue = null;
     _openPalmGestureDetector.clear();
@@ -302,6 +331,7 @@ class FollowObjectSequenceDetector {
 
   FollowObjectSequenceResult _handleUnreliableHand() {
     _openPalmGestureDetector.clear();
+    _relaxedReleasePositiveFrames = 0;
 
     if (_isTargetSelectionActive) {
       _debug('unreliable hand while selecting target; keep last release point');
@@ -330,6 +360,47 @@ class FollowObjectSequenceDetector {
   Offset _handReleasePoint(Hand hand) {
     final box = hand.boundingBox;
     return Offset((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+  }
+
+  /// Counts visibly straight long fingers for the forgiving final release.
+  int _relaxedExtendedFingerCount(Hand hand) {
+    final palmCenter = _geometry.palmCenter3D(hand);
+    final handSize = _geometry.handSizeFromBoundingBox(hand.boundingBox);
+    if (palmCenter == null || handSize <= 0) return 0;
+
+    var extendedCount = 0;
+    for (final chainTypes in HandGestureThresholds.directionFingerChainTypes) {
+      final chain = _geometry.visibleFingerChain(hand, chainTypes);
+      if (chain == null || chain.length < 4) continue;
+
+      final mcp = chain[0];
+      final pip = chain[1];
+      final tip = chain[3];
+      final angle = _geometry.fingerJointAngleDegrees3D(
+        mcp: mcp,
+        pip: pip,
+        tip: tip,
+      );
+      final tipDistance = _geometry.distanceToPoint3D(tip, palmCenter);
+      final pipDistance = _geometry.distanceToPoint3D(pip, palmCenter);
+      final isRelaxedExtended =
+          pipDistance > 0 &&
+          angle >=
+              HandGestureThresholds
+                  .followObjectRelaxedReleaseMinFingerAngleDegrees &&
+          tipDistance >=
+              pipDistance *
+                  HandGestureThresholds
+                      .followObjectRelaxedReleaseTipPastPipRatio &&
+          tipDistance >=
+              handSize *
+                  HandGestureThresholds
+                      .followObjectRelaxedReleaseMinReachRatio;
+      if (isRelaxedExtended) {
+        extendedCount += 1;
+      }
+    }
+    return extendedCount;
   }
 
   /// Prints debug output only when open-palm or fist pose state changes.

@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../../domain/enums/follow_target_type.dart';
 import '../../domain/models/follow_target.dart';
+import '../../domain/utils/camera_preview_geometry.dart';
 
 /// Painter for the locked face/object follow target highlight.
 class FollowTargetOverlayPainter extends CustomPainter {
-  const FollowTargetOverlayPainter({required this.target});
+  const FollowTargetOverlayPainter({
+    required this.target,
+    this.previewQuarterTurns = 0,
+  });
 
   final FollowTarget target;
+  final int previewQuarterTurns;
 
   @override
   /// Dims the rest of the preview and highlights the selected target box.
@@ -15,39 +20,44 @@ class FollowTargetOverlayPainter extends CustomPainter {
     final targetRect = _displayRect(size);
     if (targetRect.isEmpty) return;
 
-    final overlayPath = Path()
-      ..fillType = PathFillType.evenOdd
-      ..addRect(Offset.zero & size)
-      ..addRRect(
-        RRect.fromRectAndRadius(targetRect, const Radius.circular(14)),
-      );
+    final overlayPath =
+        Path()
+          ..fillType = PathFillType.evenOdd
+          ..addRect(Offset.zero & size)
+          ..addRRect(
+            RRect.fromRectAndRadius(targetRect, const Radius.circular(14)),
+          );
 
     canvas.drawPath(
       overlayPath,
       Paint()..color = Colors.black.withValues(alpha: 0.38),
     );
 
-    final color = target.type == FollowTargetType.face
-        ? const Color(0xFF46D8FF)
-        : const Color(0xFF00FB46);
+    final color =
+        target.type == FollowTargetType.face
+            ? const Color(0xFF46D8FF)
+            : const Color(0xFF00FB46);
 
-    final glowPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 5
-      ..strokeCap = StrokeCap.round
-      ..color = color.withValues(alpha: 0.20);
+    final glowPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..strokeCap = StrokeCap.round
+          ..color = color.withValues(alpha: 0.20);
 
-    final borderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round
-      ..color = color;
+    final borderPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.2
+          ..strokeCap = StrokeCap.round
+          ..color = color;
 
-    final cornerPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.6
-      ..strokeCap = StrokeCap.round
-      ..color = Colors.white;
+    final cornerPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.6
+          ..strokeCap = StrokeCap.round
+          ..color = Colors.white;
 
     final rrect = RRect.fromRectAndRadius(
       targetRect,
@@ -61,19 +71,10 @@ class FollowTargetOverlayPainter extends CustomPainter {
 
   /// Converts the normalized target box into canvas coordinates.
   Rect _displayRect(Size size) {
-    final box = target.displayBox;
-    final rect = Rect.fromLTRB(
-      box.left * size.width,
-      box.top * size.height,
-      box.right * size.width,
-      box.bottom * size.height,
-    );
-
-    return Rect.fromLTRB(
-      rect.left.clamp(0, size.width),
-      rect.top.clamp(0, size.height),
-      rect.right.clamp(0, size.width),
-      rect.bottom.clamp(0, size.height),
+    return normalizedDisplayRectToCanvasRect(
+      target.displayBox,
+      size,
+      previewQuarterTurns: previewQuarterTurns,
     );
   }
 
@@ -129,6 +130,7 @@ class FollowTargetOverlayPainter extends CustomPainter {
   @override
   /// Repaints when the selected target changes.
   bool shouldRepaint(covariant FollowTargetOverlayPainter oldDelegate) {
-    return oldDelegate.target != target;
+    return oldDelegate.target != target ||
+        oldDelegate.previewQuarterTurns != previewQuarterTurns;
   }
 }
