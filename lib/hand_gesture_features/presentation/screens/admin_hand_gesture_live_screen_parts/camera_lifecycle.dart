@@ -164,6 +164,10 @@ extension on _AdminHandGestureLiveScreenState {
         _followObjectCandidateFaces = const [];
         _followObjectCandidateObjects = const [];
         _predictedFollowTarget = null;
+        _followTargetSelectionMemory = null;
+        _followTargetSelectionCandidateHidden = false;
+        _followTargetConfirmationDeadline = null;
+        _followTargetSelectionFailureUntil = null;
         _lockedFollowTargetLostAt = null;
         _lastFrameProcessedAt = null;
       });

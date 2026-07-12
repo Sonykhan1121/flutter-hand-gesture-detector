@@ -16,6 +16,11 @@ class FollowTargetTrackingProgress {
     missedDetectionCount = 0;
   }
 
+  void markConfirmingSelection() {
+    phase = FollowTargetTrackingPhase.confirmingSelection;
+    missedDetectionCount = 0;
+  }
+
   bool recordVisibleMiss() {
     missedDetectionCount++;
     return missedDetectionCount >=

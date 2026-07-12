@@ -23,6 +23,7 @@ import '../../domain/models/appearance_signature.dart';
 import '../../domain/models/custom_gesture_detection_result.dart';
 import '../../domain/models/follow_target.dart';
 import '../../domain/models/follow_target_identity.dart';
+import '../../domain/models/follow_target_selection_memory.dart';
 import '../../domain/models/object_detection_batch.dart';
 import '../../domain/models/object_optical_flow_track_result.dart';
 import '../../domain/models/object_tracking_frame.dart';
@@ -146,6 +147,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   List<FollowTarget> _followObjectCandidateFaces = const [];
   List<FollowTarget> _followObjectCandidateObjects = const [];
   FollowTarget? _predictedFollowTarget;
+  FollowTargetSelectionMemory? _followTargetSelectionMemory;
+  bool _followTargetSelectionCandidateHidden = false;
   List<FollowTarget> _cachedObjectTargets = const [];
   Size? _detectionImageSize;
   Rect? _focusedHandBox;
@@ -153,6 +156,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   FollowTarget? _lockedFollowTarget;
   FollowTargetIdentity? _followTargetIdentity;
   DateTime? _lastEvaluatedFollowDetectionAt;
+  DateTime? _followTargetConfirmationDeadline;
+  DateTime? _followTargetSelectionFailureUntil;
   ObjectDetectionBatch? _cachedObjectDetectionBatch;
   DateTime? _lockedFollowTargetLostAt;
   DateTime? _lastFrameProcessedAt;

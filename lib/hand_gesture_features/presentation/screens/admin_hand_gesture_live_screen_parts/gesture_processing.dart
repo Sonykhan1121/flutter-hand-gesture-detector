@@ -256,13 +256,26 @@ extension on _AdminHandGestureLiveScreenState {
         );
 
         if (followObjectSequence.isTargetSelectionActive) {
-          await _refreshFollowObjectTargetCandidates(
+          final detections = await _refreshFollowObjectTargetCandidates(
             image: image,
             rotation: rotation,
             now: now,
             objectTrackingFrame: objectTrackingFrame,
           );
           if (!mounted) return;
+          final handBox = hands.first.boundingBox;
+          _updateFollowTargetSelectionMemory(
+            handPoint: _handPointToDisplayPoint(
+              Offset(
+                (handBox.left + handBox.right) / 2,
+                (handBox.top + handBox.bottom) / 2,
+              ),
+              detectionImageSize,
+            ),
+            now: now,
+            facesDetectionCycleAt: detections.facesDetectedAt,
+            objectsDetectionCycleAt: detections.objectsDetectedAt,
+          );
         } else {
           _clearFollowObjectTargetCandidates();
         }
@@ -460,6 +473,8 @@ extension on _AdminHandGestureLiveScreenState {
     if (followObjectSequence.isTargetSelectionActive) {
       if (_followTargetProgress.phase != FollowTargetTrackingPhase.selecting) {
         _clearLockedFollowTarget(clearIdentity: true);
+        _clearFollowObjectTargetCandidates();
+        _followTargetSelectionFailureUntil = null;
         _followTargetProgress.markSelecting();
       }
       lockedFollowTarget = null;
@@ -473,7 +488,7 @@ extension on _AdminHandGestureLiveScreenState {
         releasePoint,
         detectionImageSize,
       );
-      lockedFollowTarget = await _selectFollowTargetAtReleasePoint(
+      final releaseSelection = await _selectFollowTargetAtReleasePoint(
         releaseDisplayPoint,
         image: image,
         rotation: rotation,
@@ -482,20 +497,23 @@ extension on _AdminHandGestureLiveScreenState {
       );
       if (!mounted) return;
 
-      if (lockedFollowTarget == null) {
+      if (releaseSelection == null) {
+        lockedFollowTarget = null;
         releaseHadNoTarget = true;
         _clearLockedFollowTarget(clearIdentity: true);
         _clearFollowObjectTargetCandidates();
       } else {
-        _setLockedFollowTarget(lockedFollowTarget, captureIdentity: true);
+        lockedFollowTarget = _applyFollowTargetReleaseSelection(
+          releaseSelection,
+          now: now,
+        );
         _isFollowingHand = false;
         _focusedHandBox = null;
         _focusImageSize = null;
         _clearFollowObjectTargetCandidates();
-        unawaited(_updateCameraFocusPointForTarget(lockedFollowTarget));
       }
     } else if (followObjectSequence.isTargetSelectionActive) {
-      await _refreshFollowObjectTargetCandidates(
+      final detections = await _refreshFollowObjectTargetCandidates(
         image: image,
         rotation: rotation,
         now: now,
@@ -510,13 +528,11 @@ extension on _AdminHandGestureLiveScreenState {
         ),
         detectionImageSize,
       );
-      _predictedFollowTarget = _followTargetSelector.selectNearest(
-        releasePoint: predictedReleasePoint,
-        faces: _freshFollowTargets(_followObjectCandidateFaces, now),
-        objects: _freshFollowTargets(_followObjectCandidateObjects, now),
-        detectedAfter: now.subtract(
-          HandGestureThresholds.followTargetDetectionFreshness,
-        ),
+      _updateFollowTargetSelectionMemory(
+        handPoint: predictedReleasePoint,
+        now: now,
+        facesDetectionCycleAt: detections.facesDetectedAt,
+        objectsDetectionCycleAt: detections.objectsDetectedAt,
       );
     } else {
       _clearFollowObjectTargetCandidates();
@@ -527,6 +543,9 @@ extension on _AdminHandGestureLiveScreenState {
         followObjectSequence.isDetected && lockedFollowTarget == null;
     final followTargetActive = lockedFollowTarget != null;
     final rememberedFollowTargetActive = _followTargetIdentity != null;
+    final selectionConfirmationFailed = _isFollowTargetSelectionFailureActive(
+      now,
+    );
     final followTrackingActive =
         followTargetActive ||
         rememberedFollowTargetActive ||
@@ -703,6 +722,9 @@ extension on _AdminHandGestureLiveScreenState {
       if (followTargetActive) {
         _gestureText = _followTargetText(lockedFollowTarget!);
         _gestureConfidence = 1;
+      } else if (selectionConfirmationFailed) {
+        _gestureText = 'Target not found — select again';
+        _gestureConfidence = 0;
       } else if (releaseHadNoTarget) {
         _gestureText = 'No face or object selected';
         _gestureConfidence = 0;
@@ -778,56 +800,81 @@ extension on _AdminHandGestureLiveScreenState {
     unawaited(_updateCameraFocusPoint(hand: hand, imageSize: imageSize));
   }
 
-  /// Refreshes targets and selects the nearest target to a release point.
-  Future<FollowTarget?> _selectFollowTargetAtReleasePoint(
+  /// Releases only the confirmed candidate remembered before any occlusion.
+  Future<_FollowTargetReleaseSelection?> _selectFollowTargetAtReleasePoint(
     Offset releasePoint, {
     required CameraImage image,
     required CameraFrameRotation? rotation,
     required DateTime now,
     required ObjectTrackingFrame? objectTrackingFrame,
   }) async {
-    var detections = await _refreshFollowObjectTargetCandidates(
+    final memory = _followTargetSelectionMemory;
+    if (memory == null ||
+        !memory.isReleasable ||
+        !memory.isValid(now: now, handPoint: releasePoint)) {
+      return null;
+    }
+
+    final detections = await _refreshFollowObjectTargetCandidates(
       image: image,
       rotation: rotation,
       now: now,
       objectTrackingFrame: objectTrackingFrame,
     );
-
-    var freshFaces = _freshFollowTargets(detections.faces, now);
-    var freshObjects = _freshFollowTargets(detections.objects, now);
-    if (freshFaces.isEmpty && freshObjects.isEmpty) {
-      final pendingRequest = _objectDetectionRequests.pendingRequest;
-      if (pendingRequest != null) {
-        try {
-          await pendingRequest.timeout(
-            HandGestureThresholds.followTargetFreshDetectionWait,
-          );
-        } on TimeoutException {
-          // A slow detector must not make release selection use stale boxes.
-        } catch (error, stackTrace) {
-          debugPrint('Fresh follow-target wait ignored: $error\n$stackTrace');
-        }
-        detections = await _refreshFollowObjectTargetCandidates(
-          image: image,
-          rotation: rotation,
-          now: DateTime.now(),
-          objectTrackingFrame: objectTrackingFrame,
-        );
-        final refreshedAt = DateTime.now();
-        freshFaces = _freshFollowTargets(detections.faces, refreshedAt);
-        freshObjects = _freshFollowTargets(detections.objects, refreshedAt);
-      }
+    final refreshedAt = DateTime.now();
+    if (!memory.isValid(now: refreshedAt, handPoint: releasePoint)) {
+      return null;
     }
+    final candidates =
+        memory.candidate.type == FollowTargetType.face
+            ? _freshFollowTargets(detections.faces, refreshedAt)
+            : _freshFollowTargets(detections.objects, refreshedAt);
+    final detectionCycleAt =
+        memory.candidate.type == FollowTargetType.face
+            ? detections.facesDetectedAt
+            : detections.objectsDetectedAt;
+    final latest = _followTargetSelector.uniqueSelectionConfirmation(
+      remembered: memory.candidate,
+      candidates:
+          detectionCycleAt != null &&
+                  detectionCycleAt != memory.lastDetectionCycle
+              ? candidates
+              : const <FollowTarget>[],
+    );
 
-    final selectionAt = DateTime.now();
-    return _followTargetSelector.selectNearest(
-      releasePoint: releasePoint,
+    return _FollowTargetReleaseSelection(
+      target: latest ?? memory.candidate,
+      requiresPostReleaseConfirmation: latest == null,
+      evaluatedDetectionCycleAt: detectionCycleAt,
+    );
+  }
+
+  void _updateFollowTargetSelectionMemory({
+    required Offset handPoint,
+    required DateTime now,
+    DateTime? facesDetectionCycleAt,
+    DateTime? objectsDetectionCycleAt,
+  }) {
+    final freshFaces = _freshFollowTargets(_followObjectCandidateFaces, now);
+    final freshObjects = _freshFollowTargets(
+      _followObjectCandidateObjects,
+      now,
+    );
+    final update = _followTargetSelector.updateSelectionMemory(
+      previous: _followTargetSelectionMemory,
+      handPoint: handPoint,
+      now: now,
       faces: freshFaces,
       objects: freshObjects,
-      detectedAfter: selectionAt.subtract(
+      facesDetectionCycleAt: facesDetectionCycleAt,
+      objectsDetectionCycleAt: objectsDetectionCycleAt,
+      detectedAfter: now.subtract(
         HandGestureThresholds.followTargetDetectionFreshness,
       ),
     );
+    _followTargetSelectionMemory = update.memory;
+    _predictedFollowTarget = update.candidate;
+    _followTargetSelectionCandidateHidden = update.isCandidateHidden;
   }
 
   List<FollowTarget> _freshFollowTargets(
@@ -869,6 +916,8 @@ extension on _AdminHandGestureLiveScreenState {
     return _FollowTargetDetections(
       faces: _followObjectCandidateFaces,
       objects: _followObjectCandidateObjects,
+      facesDetectedAt: detections?.facesDetectedAt,
+      objectsDetectedAt: detections?.objectsDetectedAt,
     );
   }
 
@@ -877,6 +926,8 @@ extension on _AdminHandGestureLiveScreenState {
     _followObjectCandidateFaces = const [];
     _followObjectCandidateObjects = const [];
     _predictedFollowTarget = null;
+    _followTargetSelectionMemory = null;
+    _followTargetSelectionCandidateHidden = false;
   }
 
   /// Completes follow-object selection when the hand leaves the frame.
@@ -905,7 +956,7 @@ extension on _AdminHandGestureLiveScreenState {
       releasePoint,
       detectionImageSize,
     );
-    final target = await _selectFollowTargetAtReleasePoint(
+    final releaseSelection = await _selectFollowTargetAtReleasePoint(
       releaseDisplayPoint,
       image: image,
       rotation: rotation,
@@ -913,18 +964,20 @@ extension on _AdminHandGestureLiveScreenState {
       objectTrackingFrame: objectTrackingFrame,
     );
 
-    if (target == null) {
+    if (releaseSelection == null) {
       _clearLockedFollowTarget(clearIdentity: true);
       _clearFollowObjectTargetCandidates();
       return const _FollowObjectReleaseSelection(target: null);
     }
 
-    _setLockedFollowTarget(target, captureIdentity: true);
+    final target = _applyFollowTargetReleaseSelection(
+      releaseSelection,
+      now: now,
+    );
     _isFollowingHand = false;
     _focusedHandBox = null;
     _focusImageSize = null;
     _clearFollowObjectTargetCandidates();
-    unawaited(_updateCameraFocusPointForTarget(target));
 
     return _FollowObjectReleaseSelection(target: target);
   }
@@ -963,9 +1016,13 @@ extension on _AdminHandGestureLiveScreenState {
     final identity = _followTargetIdentity;
     final targetType = previous?.type ?? identity?.type;
     if (targetType == null) return null;
+    final isConfirmingSelection =
+        _followTargetProgress.phase ==
+        FollowTargetTrackingPhase.confirmingSelection;
 
     var visiblePrevious = previous;
-    if (targetType == FollowTargetType.object &&
+    if (!isConfirmingSelection &&
+        targetType == FollowTargetType.object &&
         previous != null &&
         objectTrackingFrame != null) {
       final opticalResult =
@@ -995,6 +1052,9 @@ extension on _AdminHandGestureLiveScreenState {
       objectTrackingFrame: objectTrackingFrame,
     );
     if (detections == null) {
+      if (isConfirmingSelection) {
+        return _keepConfirmingSelectionOrFail(DateTime.now(), visiblePrevious);
+      }
       return identity == null
           ? _keepOrClearLostFollowTarget(now)
           : visiblePrevious;
@@ -1008,6 +1068,37 @@ extension on _AdminHandGestureLiveScreenState {
         targetType == FollowTargetType.face
             ? detections.facesDetectedAt
             : detections.objectsDetectedAt;
+
+    if (isConfirmingSelection) {
+      final confirmationNow = DateTime.now();
+      if (detectionCycleAt == null ||
+          detectionCycleAt == _lastEvaluatedFollowDetectionAt) {
+        return _keepConfirmingSelectionOrFail(confirmationNow, visiblePrevious);
+      }
+      _lastEvaluatedFollowDetectionAt = detectionCycleAt;
+      final freshCandidates = candidates
+          .where(
+            (candidate) => _isFreshFollowTarget(candidate, confirmationNow),
+          )
+          .toList(growable: false);
+      final confirmed =
+          visiblePrevious == null
+              ? null
+              : _followTargetSelector.uniqueSelectionConfirmation(
+                remembered: visiblePrevious,
+                candidates: freshCandidates,
+              );
+      if (confirmed == null) {
+        return _keepConfirmingSelectionOrFail(confirmationNow, visiblePrevious);
+      }
+
+      _followTargetConfirmationDeadline = null;
+      _followTargetSelectionFailureUntil = null;
+      _followTargetProgress.markVisible();
+      _setVisibleFollowTarget(confirmed);
+      unawaited(_updateCameraFocusPointForTarget(confirmed));
+      return confirmed;
+    }
 
     if (identity == null) {
       if (visiblePrevious == null) return null;
@@ -1616,6 +1707,11 @@ extension on _AdminHandGestureLiveScreenState {
   /// Status text for a locked follow target.
   String _followTargetText(FollowTarget target) {
     final identity = _followTargetIdentity;
+    if (identity != null &&
+        _followTargetProgress.phase ==
+            FollowTargetTrackingPhase.confirmingSelection) {
+      return 'Move hand away — confirming ${identity.displayLabel}';
+    }
     if (identity != null) return 'Target locked: ${identity.displayLabel}';
     return 'Following ${target.displayLabel.toLowerCase()}';
   }
@@ -1626,11 +1722,76 @@ extension on _AdminHandGestureLiveScreenState {
   }) {
     if (visibleTarget != null) return _followTargetText(visibleTarget);
 
+    if (_isFollowTargetSelectionFailureActive(DateTime.now())) {
+      return 'Target not found — select again';
+    }
+
     if (_followTargetIdentity != null) {
       return 'Target unavailable — select it again';
     }
 
     return fallbackText;
+  }
+
+  FollowTarget _applyFollowTargetReleaseSelection(
+    _FollowTargetReleaseSelection selection, {
+    required DateTime now,
+  }) {
+    if (selection.requiresPostReleaseConfirmation) {
+      _setConfirmingFollowTarget(
+        selection.target,
+        now: now,
+        evaluatedDetectionCycleAt: selection.evaluatedDetectionCycleAt,
+      );
+      _lastCameraFocusPointSetAt = null;
+      _lastCameraFocusPoint = null;
+    } else {
+      _setLockedFollowTarget(selection.target, captureIdentity: true);
+    }
+    unawaited(_updateCameraFocusPointForTarget(selection.target));
+    return selection.target;
+  }
+
+  void _setConfirmingFollowTarget(
+    FollowTarget target, {
+    required DateTime now,
+    DateTime? evaluatedDetectionCycleAt,
+  }) {
+    _followTargetIdentity = FollowTargetIdentity.fromTarget(target);
+    _followTargetProgress.markConfirmingSelection();
+    _followTargetConfirmationDeadline = now.add(
+      HandGestureThresholds.followTargetPostReleaseConfirmationDuration,
+    );
+    _followTargetSelectionFailureUntil = null;
+    _lastEvaluatedFollowDetectionAt = evaluatedDetectionCycleAt;
+    _objectOpticalFlowTracker.reset();
+    _objectOpticalFlowResult = null;
+    _setVisibleFollowTarget(target);
+  }
+
+  FollowTarget? _keepConfirmingSelectionOrFail(
+    DateTime now,
+    FollowTarget? previous,
+  ) {
+    final deadline = _followTargetConfirmationDeadline;
+    if (deadline != null && !now.isAfter(deadline)) return previous;
+
+    _clearLockedFollowTarget(clearIdentity: true);
+    _followTargetSelectionFailureUntil = now.add(
+      HandGestureThresholds.followObjectMessageHoldDuration,
+    );
+    _isFollowingHand = false;
+    _focusedHandBox = null;
+    _focusImageSize = null;
+    return null;
+  }
+
+  bool _isFollowTargetSelectionFailureActive(DateTime now) {
+    final until = _followTargetSelectionFailureUntil;
+    if (until == null) return false;
+    if (!now.isAfter(until)) return true;
+    _followTargetSelectionFailureUntil = null;
+    return false;
   }
 
   /// Stores a visible target and captures identity only for a new selection.
@@ -1642,6 +1803,8 @@ extension on _AdminHandGestureLiveScreenState {
       _followTargetIdentity = FollowTargetIdentity.fromTarget(target);
       _followTargetProgress.markVisible();
       _lastEvaluatedFollowDetectionAt = target.detectedAt;
+      _followTargetConfirmationDeadline = null;
+      _followTargetSelectionFailureUntil = null;
     }
     _setVisibleFollowTarget(target);
   }
@@ -1694,6 +1857,8 @@ extension on _AdminHandGestureLiveScreenState {
     _followTargetIdentity = null;
     _followTargetProgress.reset();
     _lastEvaluatedFollowDetectionAt = null;
+    _followTargetConfirmationDeadline = null;
+    _followTargetSelectionFailureUntil = null;
     _objectOpticalFlowTracker.reset();
     _objectOpticalFlowResult = null;
   }
@@ -1869,4 +2034,17 @@ class _FollowObjectReleaseSelection {
   const _FollowObjectReleaseSelection({required this.target});
 
   final FollowTarget? target;
+}
+
+/// Exact remembered selection plus whether it still needs post-release proof.
+class _FollowTargetReleaseSelection {
+  const _FollowTargetReleaseSelection({
+    required this.target,
+    required this.requiresPostReleaseConfirmation,
+    this.evaluatedDetectionCycleAt,
+  });
+
+  final FollowTarget target;
+  final bool requiresPostReleaseConfirmation;
+  final DateTime? evaluatedDetectionCycleAt;
 }

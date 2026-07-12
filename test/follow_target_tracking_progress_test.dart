@@ -31,4 +31,14 @@ void main() {
     expect(progress.phase, FollowTargetTrackingPhase.idle);
     expect(progress.missedDetectionCount, 0);
   });
+
+  test('post-release confirmation has a distinct tracking phase', () {
+    final progress = FollowTargetTrackingProgress()..markConfirmingSelection();
+
+    expect(progress.phase, FollowTargetTrackingPhase.confirmingSelection);
+    expect(progress.missedDetectionCount, 0);
+
+    progress.markVisible();
+    expect(progress.phase, FollowTargetTrackingPhase.visible);
+  });
 }

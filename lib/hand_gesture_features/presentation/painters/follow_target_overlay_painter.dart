@@ -9,10 +9,12 @@ class FollowTargetOverlayPainter extends CustomPainter {
   const FollowTargetOverlayPainter({
     required this.target,
     this.previewQuarterTurns = 0,
+    this.colorOverride,
   });
 
   final FollowTarget target;
   final int previewQuarterTurns;
+  final Color? colorOverride;
 
   @override
   /// Dims the rest of the preview and highlights the selected target box.
@@ -34,9 +36,10 @@ class FollowTargetOverlayPainter extends CustomPainter {
     );
 
     final color =
-        target.type == FollowTargetType.face
+        colorOverride ??
+        (target.type == FollowTargetType.face
             ? const Color(0xFF46D8FF)
-            : const Color(0xFF00FB46);
+            : const Color(0xFF00FB46));
 
     final glowPaint =
         Paint()
@@ -131,6 +134,7 @@ class FollowTargetOverlayPainter extends CustomPainter {
   /// Repaints when the selected target changes.
   bool shouldRepaint(covariant FollowTargetOverlayPainter oldDelegate) {
     return oldDelegate.target != target ||
-        oldDelegate.previewQuarterTurns != previewQuarterTurns;
+        oldDelegate.previewQuarterTurns != previewQuarterTurns ||
+        oldDelegate.colorOverride != colorOverride;
   }
 }

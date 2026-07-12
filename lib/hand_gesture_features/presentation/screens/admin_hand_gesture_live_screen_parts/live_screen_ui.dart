@@ -118,6 +118,21 @@ extension on _AdminHandGestureLiveScreenState {
         showClosedFistTargetCandidate && _predictedFollowTarget != null
             ? <FollowTarget>[_predictedFollowTarget!]
             : const <FollowTarget>[];
+    final selectionMemory = _followTargetSelectionMemory;
+    final selectionCandidateReady = selectionMemory?.isReleasable ?? false;
+    final selectionCandidateColor =
+        selectionCandidateReady
+            ? const Color(0xFF00FB46)
+            : const Color(0xFFFFB020);
+    final selectionCandidateLabelPrefix =
+        !selectionCandidateReady
+            ? 'Hold over '
+            : _followTargetSelectionCandidateHidden
+            ? 'Last seen: '
+            : 'Release → ';
+    final confirmingSelection =
+        _followTargetProgress.phase ==
+        FollowTargetTrackingPhase.confirmingSelection;
     final showFollowTargetDebugOverlay =
         _showFollowTargetDebugOverlay &&
         !showClosedFistTargetCandidate &&
@@ -218,6 +233,12 @@ extension on _AdminHandGestureLiveScreenState {
                                                             _lockedFollowTarget!,
                                                         previewQuarterTurns:
                                                             overlayQuarterTurns,
+                                                        colorOverride:
+                                                            confirmingSelection
+                                                                ? const Color(
+                                                                  0xFFFFB020,
+                                                                )
+                                                                : null,
                                                       ),
                                                 ),
                                               if (_showObjectOpticalFlowDebugOverlay &&
@@ -235,19 +256,17 @@ extension on _AdminHandGestureLiveScreenState {
                                               if (closedFistTargetCandidates
                                                   .isNotEmpty)
                                                 CustomPaint(
-                                                  painter:
-                                                      FollowTargetDebugOverlayPainter(
-                                                        targets:
-                                                            closedFistTargetCandidates,
-                                                        showLabels: true,
-                                                        color: const Color(
-                                                          0xFF00FB46,
-                                                        ),
-                                                        labelPrefix:
-                                                            'Release → ',
-                                                        previewQuarterTurns:
-                                                            overlayQuarterTurns,
-                                                      ),
+                                                  painter: FollowTargetDebugOverlayPainter(
+                                                    targets:
+                                                        closedFistTargetCandidates,
+                                                    showLabels: true,
+                                                    color:
+                                                        selectionCandidateColor,
+                                                    labelPrefix:
+                                                        selectionCandidateLabelPrefix,
+                                                    previewQuarterTurns:
+                                                        overlayQuarterTurns,
+                                                  ),
                                                 ),
                                               if (followTargetDebugOverlayTargets
                                                   .isNotEmpty)

@@ -5,6 +5,7 @@ import '../constants/hand_gesture_thresholds.dart';
 import '../enums/follow_target_type.dart';
 import '../models/follow_target.dart';
 import '../models/follow_target_identity.dart';
+import '../models/follow_target_selection_memory.dart';
 
 /// Picks and tracks the face/object target selected by a release gesture.
 class FollowTargetSelector {
@@ -119,6 +120,127 @@ class FollowTargetSelector {
     );
     return overlap >= HandGestureThresholds.followTargetMinTrackingOverlap ||
         distance <= HandGestureThresholds.followTargetMaxTrackingDistance;
+  }
+
+  /// Checks whether two selection observations describe the same candidate.
+  bool isSameSelectionCandidate(FollowTarget previous, FollowTarget candidate) {
+    if (candidate.type != previous.type) return false;
+    final previousLabel = FollowTargetIdentity.normalizeLabel(
+      previous.label ?? previous.type.displayLabel,
+    );
+    final candidateLabel = FollowTargetIdentity.normalizeLabel(
+      candidate.label ?? candidate.type.displayLabel,
+    );
+    if (candidateLabel != previousLabel) return false;
+
+    if (candidate.type == FollowTargetType.object &&
+        (previous.classIndex == null ||
+            candidate.classIndex != previous.classIndex)) {
+      return false;
+    }
+
+    final previousTrackingId = previous.trackingId;
+    final candidateTrackingId = candidate.trackingId;
+    if (candidate.type == FollowTargetType.face &&
+        previousTrackingId != null &&
+        candidateTrackingId != null &&
+        previousTrackingId != candidateTrackingId) {
+      return false;
+    }
+
+    return isSpatiallyContinuous(previous, candidate);
+  }
+
+  /// Returns a confirmation only when exactly one candidate matches safely.
+  FollowTarget? uniqueSelectionConfirmation({
+    required FollowTarget remembered,
+    required List<FollowTarget> candidates,
+  }) {
+    final matches = candidates
+        .where((candidate) => isSameSelectionCandidate(remembered, candidate))
+        .toList(growable: false);
+    return matches.length == 1 ? matches.single : null;
+  }
+
+  /// Updates the short selection memory without substituting an occluded target.
+  FollowTargetSelectionMemoryUpdate updateSelectionMemory({
+    required FollowTargetSelectionMemory? previous,
+    required Offset handPoint,
+    required DateTime now,
+    required List<FollowTarget> faces,
+    required List<FollowTarget> objects,
+    DateTime? facesDetectionCycleAt,
+    DateTime? objectsDetectionCycleAt,
+    DateTime? detectedAfter,
+  }) {
+    final closest = selectNearest(
+      releasePoint: handPoint,
+      faces: faces,
+      objects: objects,
+      detectedAfter: detectedAfter,
+    );
+
+    if (previous != null && previous.isValid(now: now, handPoint: handPoint)) {
+      final previousDetectionCycleAt =
+          previous.candidate.type == FollowTargetType.face
+              ? facesDetectionCycleAt
+              : objectsDetectionCycleAt;
+      final hasNewPreviousDetectionCycle =
+          previousDetectionCycleAt != null &&
+          previousDetectionCycleAt != previous.lastDetectionCycle;
+      final compatible = <FollowTarget>[...faces, ...objects]
+          .where(
+            (candidate) =>
+                (detectedAfter == null ||
+                    !candidate.detectedAt.isBefore(detectedAfter)) &&
+                isSameSelectionCandidate(previous.candidate, candidate),
+          )
+          .toList(growable: false);
+
+      if (compatible.length == 1 &&
+          closest != null &&
+          isSameSelectionCandidate(compatible.single, closest)) {
+        return FollowTargetSelectionMemoryUpdate(
+          memory: previous.observeFreshCycle(
+            candidate: compatible.single,
+            observedAt: now,
+            handPoint: handPoint,
+            detectionCycleAt: previousDetectionCycleAt,
+          ),
+          isCandidateHidden: false,
+        );
+      }
+
+      if (compatible.isEmpty || compatible.length > 1) {
+        if (!previous.isReleasable && hasNewPreviousDetectionCycle) {
+          return const FollowTargetSelectionMemoryUpdate(
+            memory: null,
+            isCandidateHidden: false,
+          );
+        }
+        return FollowTargetSelectionMemoryUpdate(
+          memory: previous,
+          isCandidateHidden: true,
+        );
+      }
+      // The remembered target is visible, but another target is now closest.
+    }
+
+    return FollowTargetSelectionMemoryUpdate(
+      memory:
+          closest == null
+              ? null
+              : FollowTargetSelectionMemory.firstObservation(
+                candidate: closest,
+                observedAt: now,
+                handPoint: handPoint,
+                detectionCycleAt:
+                    closest.type == FollowTargetType.face
+                        ? facesDetectionCycleAt
+                        : objectsDetectionCycleAt,
+              ),
+      isCandidateHidden: false,
+    );
   }
 
   bool _matchesIdentityClass(

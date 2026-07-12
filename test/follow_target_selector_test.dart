@@ -4,6 +4,7 @@ import 'package:gesture_detector/hand_gesture_features/domain/enums/follow_targe
 import 'package:gesture_detector/hand_gesture_features/domain/models/appearance_signature.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/models/follow_target.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/models/follow_target_identity.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/models/follow_target_selection_memory.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/follow_target_selector.dart';
 
 void main() {
@@ -222,6 +223,185 @@ void main() {
       );
 
       expect(selected, isNull);
+    });
+  });
+
+  group('FollowTargetSelector selection confirmation', () {
+    const selector = FollowTargetSelector();
+
+    test('accepts only the exact type, label, class, and nearby box', () {
+      final remembered = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'bottle',
+        classIndex: 39,
+      );
+      final exact = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.44, 0.41, 0.10, 0.10),
+        label: 'Bottle',
+        classIndex: 39,
+      );
+      final wrongClass = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.41, 0.40, 0.10, 0.10),
+        label: 'bottle',
+        classIndex: 40,
+      );
+
+      expect(selector.isSameSelectionCandidate(remembered, exact), isTrue);
+      expect(
+        selector.isSameSelectionCandidate(remembered, wrongClass),
+        isFalse,
+      );
+      expect(
+        selector.uniqueSelectionConfirmation(
+          remembered: remembered,
+          candidates: [wrongClass, exact],
+        ),
+        exact,
+      );
+    });
+
+    test('fails closed when two same-class candidates are compatible', () {
+      final remembered = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.20, 0.20),
+        label: 'bottle',
+        classIndex: 39,
+      );
+      final first = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.39, 0.40, 0.20, 0.20),
+        label: 'bottle',
+        classIndex: 39,
+      );
+      final second = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.43, 0.40, 0.20, 0.20),
+        label: 'bottle',
+        classIndex: 39,
+      );
+
+      expect(
+        selector.uniqueSelectionConfirmation(
+          remembered: remembered,
+          candidates: [first, second],
+        ),
+        isNull,
+      );
+    });
+
+    test('keeps the remembered target when only unrelated objects remain', () {
+      final firstCycle = DateTime(2026, 1, 1, 12);
+      final remembered = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'bottle',
+        classIndex: 39,
+        detectedAt: firstCycle,
+      );
+      final memory = FollowTargetSelectionMemory(
+        candidate: remembered,
+        lastDetectionCycle: firstCycle,
+        lastSeenAt: firstCycle,
+        lastHandPoint: const Offset(0.45, 0.45),
+        consecutiveConfirmationCount: 2,
+      );
+      final cup = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.42, 0.42, 0.10, 0.10),
+        label: 'cup',
+        classIndex: 41,
+        detectedAt: firstCycle.add(const Duration(milliseconds: 350)),
+      );
+
+      final update = selector.updateSelectionMemory(
+        previous: memory,
+        handPoint: const Offset(0.45, 0.45),
+        now: firstCycle.add(const Duration(milliseconds: 350)),
+        faces: const [],
+        objects: [cup],
+      );
+
+      expect(update.memory, same(memory));
+      expect(update.candidate?.label, 'bottle');
+      expect(update.isCandidateHidden, isTrue);
+    });
+
+    test('an unconfirmed candidate is cleared by a fresh missed cycle', () {
+      final firstCycle = DateTime(2026, 1, 1, 12);
+      final bottle = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'bottle',
+        classIndex: 39,
+        detectedAt: firstCycle,
+      );
+      final memory = FollowTargetSelectionMemory.firstObservation(
+        candidate: bottle,
+        observedAt: firstCycle,
+        handPoint: const Offset(0.45, 0.45),
+        detectionCycleAt: firstCycle,
+      );
+
+      final update = selector.updateSelectionMemory(
+        previous: memory,
+        handPoint: const Offset(0.45, 0.45),
+        now: firstCycle.add(const Duration(milliseconds: 350)),
+        faces: const [],
+        objects: const [],
+        objectsDetectionCycleAt: firstCycle.add(
+          const Duration(milliseconds: 350),
+        ),
+      );
+
+      expect(update.memory, isNull);
+      expect(update.isCandidateHidden, isFalse);
+    });
+
+    test('restarts confirmation when a different visible target is closer', () {
+      final firstCycle = DateTime(2026, 1, 1, 12);
+      final bottle = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.50, 0.50, 0.10, 0.10),
+        label: 'bottle',
+        classIndex: 39,
+        detectedAt: firstCycle,
+      );
+      final memory = FollowTargetSelectionMemory(
+        candidate: bottle,
+        lastDetectionCycle: firstCycle,
+        lastSeenAt: firstCycle,
+        lastHandPoint: const Offset(0.52, 0.52),
+        consecutiveConfirmationCount: 2,
+      );
+      final updatedBottle = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.51, 0.50, 0.10, 0.10),
+        label: 'bottle',
+        classIndex: 39,
+        detectedAt: firstCycle.add(const Duration(milliseconds: 350)),
+      );
+      final cup = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.46, 0.46, 0.04, 0.04),
+        label: 'cup',
+        classIndex: 41,
+        detectedAt: firstCycle.add(const Duration(milliseconds: 350)),
+      );
+
+      final update = selector.updateSelectionMemory(
+        previous: memory,
+        handPoint: const Offset(0.48, 0.48),
+        now: firstCycle.add(const Duration(milliseconds: 350)),
+        faces: const [],
+        objects: [updatedBottle, cup],
+      );
+
+      expect(update.candidate?.label, 'cup');
+      expect(update.memory?.consecutiveConfirmationCount, 1);
+      expect(update.isCandidateHidden, isFalse);
     });
   });
 }
