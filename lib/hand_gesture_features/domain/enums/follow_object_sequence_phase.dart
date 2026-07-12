@@ -13,4 +13,7 @@ enum FollowObjectSequencePhase {
   /// Closed fist is already detected.
   /// The hand must remain on screen while waiting for the final open palm.
   waitingForFinalOpen,
+
+  /// The closed fist left the frame and may return before auto-release.
+  waitingForHandReturn,
 }

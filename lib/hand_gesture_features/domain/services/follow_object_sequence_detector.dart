@@ -28,6 +28,8 @@ class FollowObjectSequenceDetector {
   DateTime? _lastDetectedAt;
   DateTime? _firstOpenPalmStartedAt;
   Offset? _lastVisibleReleasePoint;
+  DateTime? _handMissingStartedAt;
+  DateTime? _handReturnDeadline;
   GestureType? _currentPackageGestureType;
   double _currentGestureConfidence = 0;
   int _relaxedReleasePositiveFrames = 0;
@@ -42,11 +44,11 @@ class FollowObjectSequenceDetector {
   /// 3. User can show closed fist any time later.
   /// 4. Full-screen target scanning starts after the first closed fist.
   /// 5. User can move while staying on screen.
-  /// 6. A final open palm, one relaxed extended long finger confirmed across
-  ///    two frames, or the hand leaving the screen releases at the hand center.
+  /// 6. A final open palm or relaxed extended finger releases at hand center.
+  /// 7. A lost hand gets two seconds to return closed before auto-release.
   ///
   /// Important: once closed fist has been detected, the presentation layer can
-  /// call [releaseFromLastVisiblePoint] when the hand leaves the screen.
+  /// call [handleHandMissing] while the hand remains outside the screen.
   FollowObjectSequenceResult update(
     Hand hand,
     DateTime now, {
@@ -68,7 +70,13 @@ class FollowObjectSequenceDetector {
     }
 
     if (!_geometry.isReliableHand(hand)) {
-      return _handleUnreliableHand();
+      return handleHandMissing(now);
+    }
+
+    if (_phase == FollowObjectSequencePhase.waitingForHandReturn &&
+        _handReturnDeadline != null &&
+        !now.isBefore(_handReturnDeadline!)) {
+      return _completeHandLostTimeout(now);
     }
 
     final openPalm = _isOpenPalmGesture(
@@ -179,6 +187,51 @@ class FollowObjectSequenceDetector {
           clear(keepLastDetected: true);
         }
         break;
+
+      case FollowObjectSequencePhase.waitingForHandReturn:
+        final currentReleasePoint = _handReleasePoint(hand);
+        if (closedFist) {
+          _lastVisibleReleasePoint = currentReleasePoint;
+          _handMissingStartedAt = null;
+          _handReturnDeadline = null;
+          _relaxedReleasePositiveFrames = 0;
+          _setPhase(
+            FollowObjectSequencePhase.waitingForFinalOpen,
+            'closed fist returned inside grace period',
+          );
+          break;
+        }
+
+        final relaxedExtendedFingerCount =
+            openPalm ? 0 : _relaxedExtendedFingerCount(hand);
+        if (relaxedExtendedFingerCount >=
+            HandGestureThresholds
+                .followObjectRelaxedReleaseMinExtendedFingers) {
+          _relaxedReleasePositiveFrames += 1;
+        } else if (!openPalm) {
+          _relaxedReleasePositiveFrames = 0;
+        }
+        final relaxedReleaseConfirmed =
+            _relaxedReleasePositiveFrames >=
+            HandGestureThresholds.followObjectRelaxedReleaseConfirmationFrames;
+        if (openPalm || relaxedReleaseConfirmed) {
+          if (relaxedReleaseConfirmed && !openPalm) {
+            _currentPackageGestureType = GestureType.openPalm;
+            _currentGestureConfidence = math.min(
+              0.75,
+              0.55 + relaxedExtendedFingerCount * 0.10,
+            );
+          }
+          _lastDetectedAt = now;
+          detected = true;
+          releasePoint = currentReleasePoint;
+          releaseReason = FollowObjectReleaseReason.openPalm;
+          packageGestureType = _currentPackageGestureType;
+          gestureConfidence = _currentGestureConfidence;
+          _debug('hand returned with release pose -> complete selection');
+          clear(keepLastDetected: true);
+        }
+        break;
     }
 
     final isActive = _phase != FollowObjectSequencePhase.idle;
@@ -192,14 +245,19 @@ class FollowObjectSequenceDetector {
       gestureConfidence: math.max(gestureConfidence, _currentGestureConfidence),
       releasePoint: releasePoint,
       releaseReason: releaseReason,
+      isWaitingForHandReturn:
+          _phase == FollowObjectSequencePhase.waitingForHandReturn,
+      handReturnDeadline: _handReturnDeadline,
+      handReturnProgress: _handReturnProgress(now),
+      savedHandPoint: _lastVisibleReleasePoint,
     );
   }
 
   /// True while the detector is waiting for final open palm or hand release.
   bool get isTargetSelectionActive => _isTargetSelectionActive;
 
-  /// Completes the sequence from the last saved hand center after hand loss.
-  FollowObjectSequenceResult releaseFromLastVisiblePoint(DateTime now) {
+  /// Starts or advances the two-second grace period after the hand is lost.
+  FollowObjectSequenceResult handleHandMissing(DateTime now) {
     if (!_isTargetSelectionActive) {
       if (_phase != FollowObjectSequencePhase.idle) {
         clear();
@@ -212,8 +270,7 @@ class FollowObjectSequenceDetector {
       );
     }
 
-    final releasePoint = _lastVisibleReleasePoint;
-    if (releasePoint == null) {
+    if (_lastVisibleReleasePoint == null) {
       _debug('hand lost without a saved release point; reset sequence');
       clear();
 
@@ -224,26 +281,40 @@ class FollowObjectSequenceDetector {
       );
     }
 
-    _lastDetectedAt = now;
-    final packageGestureType = _currentPackageGestureType;
-    final gestureConfidence = _currentGestureConfidence;
-    _debug(
-      'hand lost -> release from last visible point '
-      '(${releasePoint.dx.toStringAsFixed(1)}, '
-      '${releasePoint.dy.toStringAsFixed(1)})',
-    );
-    clear(keepLastDetected: true);
+    if (_phase == FollowObjectSequencePhase.waitingForFinalOpen) {
+      _openPalmGestureDetector.clear();
+      _handMissingStartedAt = now;
+      _handReturnDeadline = now.add(
+        HandGestureThresholds.followObjectHandReturnGraceDuration,
+      );
+      _relaxedReleasePositiveFrames = 0;
+      _setPhase(
+        FollowObjectSequencePhase.waitingForHandReturn,
+        'hand lost; wait two seconds for closed fist return',
+      );
+    }
+
+    final deadline = _handReturnDeadline;
+    if (deadline != null && !now.isBefore(deadline)) {
+      return _completeHandLostTimeout(now);
+    }
 
     return FollowObjectSequenceResult(
       isActive: true,
-      isDetected: true,
-      isTargetSelectionActive: false,
-      packageGestureType: packageGestureType,
-      gestureConfidence: gestureConfidence,
-      releasePoint: releasePoint,
-      releaseReason: FollowObjectReleaseReason.handLost,
+      isDetected: false,
+      isTargetSelectionActive: true,
+      packageGestureType: _currentPackageGestureType,
+      gestureConfidence: _currentGestureConfidence,
+      isWaitingForHandReturn: true,
+      handReturnDeadline: deadline,
+      handReturnProgress: _handReturnProgress(now),
+      savedHandPoint: _lastVisibleReleasePoint,
     );
   }
+
+  /// Backward-compatible entry point with the new delayed-release behavior.
+  FollowObjectSequenceResult releaseFromLastVisiblePoint(DateTime now) =>
+      handleHandMissing(now);
 
   /// Resets phase data, optionally keeping the recent success message alive.
   void clear({bool keepLastDetected = false}) {
@@ -257,6 +328,8 @@ class FollowObjectSequenceDetector {
     _phase = FollowObjectSequencePhase.idle;
     _firstOpenPalmStartedAt = null;
     _lastVisibleReleasePoint = null;
+    _handMissingStartedAt = null;
+    _handReturnDeadline = null;
     _currentPackageGestureType = null;
     _currentGestureConfidence = 0;
     _relaxedReleasePositiveFrames = 0;
@@ -327,33 +400,47 @@ class FollowObjectSequenceDetector {
 
   /// Internal check for the target-selection phase.
   bool get _isTargetSelectionActive =>
-      _phase == FollowObjectSequencePhase.waitingForFinalOpen;
+      _phase == FollowObjectSequencePhase.waitingForFinalOpen ||
+      _phase == FollowObjectSequencePhase.waitingForHandReturn;
 
-  FollowObjectSequenceResult _handleUnreliableHand() {
-    _openPalmGestureDetector.clear();
-    _relaxedReleasePositiveFrames = 0;
-
-    if (_isTargetSelectionActive) {
-      _debug('unreliable hand while selecting target; keep last release point');
-      return FollowObjectSequenceResult(
-        isActive: true,
+  FollowObjectSequenceResult _completeHandLostTimeout(DateTime now) {
+    final releasePoint = _lastVisibleReleasePoint;
+    if (releasePoint == null) {
+      clear();
+      return const FollowObjectSequenceResult(
+        isActive: false,
         isDetected: false,
-        isTargetSelectionActive: true,
-        packageGestureType: _currentPackageGestureType,
-        gestureConfidence: _currentGestureConfidence,
+        isTargetSelectionActive: false,
       );
     }
 
-    if (_phase != FollowObjectSequencePhase.idle) {
-      _debug('unreliable hand interrupted sequence; reset');
-      clear();
-    }
-
-    return const FollowObjectSequenceResult(
-      isActive: false,
-      isDetected: false,
+    _lastDetectedAt = now;
+    final packageGestureType = _currentPackageGestureType;
+    final gestureConfidence = _currentGestureConfidence;
+    _debug('hand-return grace expired -> release from last visible point');
+    clear(keepLastDetected: true);
+    return FollowObjectSequenceResult(
+      isActive: true,
+      isDetected: true,
       isTargetSelectionActive: false,
+      packageGestureType: packageGestureType,
+      gestureConfidence: gestureConfidence,
+      releasePoint: releasePoint,
+      releaseReason: FollowObjectReleaseReason.handLostTimeout,
     );
+  }
+
+  double _handReturnProgress(DateTime now) {
+    final startedAt = _handMissingStartedAt;
+    if (startedAt == null) return 0;
+    final duration =
+        HandGestureThresholds
+            .followObjectHandReturnGraceDuration
+            .inMilliseconds;
+    if (duration <= 0) return 1;
+    return (now.difference(startedAt).inMilliseconds / duration)
+        .clamp(0.0, 1.0)
+        .toDouble();
   }
 
   /// Uses the hand bounding-box center as the target release point.
@@ -394,8 +481,7 @@ class FollowObjectSequenceDetector {
                       .followObjectRelaxedReleaseTipPastPipRatio &&
           tipDistance >=
               handSize *
-                  HandGestureThresholds
-                      .followObjectRelaxedReleaseMinReachRatio;
+                  HandGestureThresholds.followObjectRelaxedReleaseMinReachRatio;
       if (isRelaxedExtended) {
         extendedCount += 1;
       }

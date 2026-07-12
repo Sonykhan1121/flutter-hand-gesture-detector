@@ -14,6 +14,10 @@ class FollowObjectSequenceResult {
     this.gestureConfidence = 0,
     this.releasePoint,
     this.releaseReason,
+    this.isWaitingForHandReturn = false,
+    this.handReturnDeadline,
+    this.handReturnProgress = 0,
+    this.savedHandPoint,
   });
 
   final bool isActive;
@@ -25,4 +29,9 @@ class FollowObjectSequenceResult {
   /// Center point of the hand box when the final open/release pose is detected.
   final Offset? releasePoint;
   final FollowObjectReleaseReason? releaseReason;
+
+  final bool isWaitingForHandReturn;
+  final DateTime? handReturnDeadline;
+  final double handReturnProgress;
+  final Offset? savedHandPoint;
 }

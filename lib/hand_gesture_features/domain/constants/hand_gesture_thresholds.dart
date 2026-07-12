@@ -36,6 +36,9 @@ abstract final class HandGestureThresholds {
   static const Duration followObjectFirstOpenPalmHoldDuration = Duration(
     seconds: 1,
   );
+  static const Duration followObjectHandReturnGraceDuration = Duration(
+    seconds: 2,
+  );
   static const int followObjectRelaxedReleaseMinExtendedFingers = 1;
   static const int followObjectRelaxedReleaseConfirmationFrames = 2;
   static const int followTargetSelectionConfirmationCycles = 2;
@@ -75,7 +78,7 @@ abstract final class HandGestureThresholds {
   static const double objectDetectionScoreThreshold = 0.60;
   static const String ultralyticsYoloModelId = 'yolo26n';
   static const bool ultralyticsYoloUseGpu = true;
-  static const double ultralyticsYoloIouThreshold = 0.60;
+  static const double ultralyticsYoloIouThreshold = 0.50;
   static const int ultralyticsYoloJpegQuality = 90;
 
   /// Sparse optical-flow tracking used between object detector cycles.

@@ -8,7 +8,7 @@ import 'package:hand_detection/hand_detection.dart';
 void main() {
   group('FollowObjectSequenceDetector', () {
     test(
-      'releases from last visible hand center when hand is lost after closed fist',
+      'waits two seconds before releasing from the last visible hand center',
       () {
         final openPalm = _FakeOpenPalmGestureDetector();
         final detector = FollowObjectSequenceDetector(
@@ -42,17 +42,170 @@ void main() {
           mirrorHorizontally: false,
         );
 
-        final releaseResult = detector.releaseFromLastVisiblePoint(
+        final waitingResult = detector.handleHandMissing(
           now.add(const Duration(milliseconds: 1400)),
         );
 
+        expect(waitingResult.isDetected, isFalse);
+        expect(waitingResult.isWaitingForHandReturn, isTrue);
+        expect(waitingResult.handReturnProgress, 0);
+        expect(
+          waitingResult.handReturnDeadline,
+          now.add(const Duration(milliseconds: 3400)),
+        );
+        expect(waitingResult.savedHandPoint?.dx, 200);
+        expect(waitingResult.savedHandPoint?.dy, 270);
+        expect(detector.isTargetSelectionActive, isTrue);
+
+        final stillWaiting = detector.handleHandMissing(
+          now.add(const Duration(milliseconds: 3399)),
+        );
+        expect(stillWaiting.isDetected, isFalse);
+        expect(stillWaiting.isWaitingForHandReturn, isTrue);
+
+        final releaseResult = detector.handleHandMissing(
+          now.add(const Duration(milliseconds: 3400)),
+        );
         expect(releaseResult.isDetected, isTrue);
-        expect(releaseResult.releaseReason, FollowObjectReleaseReason.handLost);
+        expect(
+          releaseResult.releaseReason,
+          FollowObjectReleaseReason.handLostTimeout,
+        );
         expect(releaseResult.releasePoint?.dx, 200);
         expect(releaseResult.releasePoint?.dy, 270);
         expect(detector.isTargetSelectionActive, isFalse);
       },
     );
+
+    test('closed fist returning inside grace resumes target selection', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+      _startTargetSelection(detector, openPalm, now);
+
+      final waiting = detector.handleHandMissing(
+        now.add(const Duration(milliseconds: 1300)),
+      );
+      expect(waiting.isWaitingForHandReturn, isTrue);
+
+      final resumed = detector.update(
+        _hand(
+          box: BoundingBox.ltrb(180, 200, 300, 380),
+          gestureType: GestureType.closedFist,
+        ),
+        now.add(const Duration(milliseconds: 2500)),
+        mirrorHorizontally: false,
+      );
+
+      expect(resumed.isDetected, isFalse);
+      expect(resumed.isWaitingForHandReturn, isFalse);
+      expect(resumed.isTargetSelectionActive, isTrue);
+    });
+
+    test('open palm returning inside grace releases at its current center', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+      _startTargetSelection(detector, openPalm, now);
+      detector.handleHandMissing(now.add(const Duration(milliseconds: 1300)));
+
+      openPalm.isDetected = true;
+      final released = detector.update(
+        _hand(box: BoundingBox.ltrb(200, 220, 320, 400)),
+        now.add(const Duration(milliseconds: 2000)),
+        mirrorHorizontally: false,
+      );
+
+      expect(released.isDetected, isTrue);
+      expect(released.releaseReason, FollowObjectReleaseReason.openPalm);
+      expect(released.releasePoint?.dx, 260);
+      expect(released.releasePoint?.dy, 310);
+    });
+
+    test(
+      'relaxed finger return uses existing two-frame release confirmation',
+      () {
+        final openPalm = _FakeOpenPalmGestureDetector();
+        final detector = FollowObjectSequenceDetector(
+          openPalmGestureDetector: openPalm,
+        );
+        final now = DateTime(2026);
+        _startTargetSelection(detector, openPalm, now);
+        detector.handleHandMissing(now.add(const Duration(milliseconds: 1300)));
+
+        final first = detector.update(
+          _relaxedReleaseHand(extendedFingerCount: 1),
+          now.add(const Duration(milliseconds: 1800)),
+          mirrorHorizontally: false,
+        );
+        expect(first.isWaitingForHandReturn, isTrue);
+        expect(first.isDetected, isFalse);
+
+        final released = detector.update(
+          _relaxedReleaseHand(
+            extendedFingerCount: 1,
+            box: BoundingBox.ltrb(180, 200, 340, 420),
+          ),
+          now.add(const Duration(milliseconds: 1900)),
+          mirrorHorizontally: false,
+        );
+        expect(released.isDetected, isTrue);
+        expect(released.releaseReason, FollowObjectReleaseReason.openPalm);
+        expect(released.releasePoint?.dx, 260);
+        expect(released.releasePoint?.dy, 310);
+      },
+    );
+
+    test('other returned pose keeps the original point until timeout', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+      _startTargetSelection(detector, openPalm, now);
+      detector.handleHandMissing(now.add(const Duration(milliseconds: 1300)));
+
+      final returned = detector.update(
+        _hand(box: BoundingBox.ltrb(250, 260, 370, 440)),
+        now.add(const Duration(milliseconds: 2000)),
+        mirrorHorizontally: false,
+      );
+      expect(returned.isWaitingForHandReturn, isTrue);
+
+      final released = detector.handleHandMissing(
+        now.add(const Duration(milliseconds: 3300)),
+      );
+      expect(released.releaseReason, FollowObjectReleaseReason.handLostTimeout);
+      expect(released.releasePoint?.dx, 160);
+      expect(released.releasePoint?.dy, 190);
+    });
+
+    test('clear cancels a pending hand-return grace period', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+      _startTargetSelection(detector, openPalm, now);
+      expect(
+        detector
+            .handleHandMissing(now.add(const Duration(milliseconds: 1300)))
+            .isWaitingForHandReturn,
+        isTrue,
+      );
+
+      detector.clear();
+      final result = detector.handleHandMissing(
+        now.add(const Duration(milliseconds: 3400)),
+      );
+      expect(result.isDetected, isFalse);
+      expect(result.isWaitingForHandReturn, isFalse);
+      expect(detector.isTargetSelectionActive, isFalse);
+    });
 
     test('final open palm release uses the current hand center', () {
       final openPalm = _FakeOpenPalmGestureDetector();
@@ -304,7 +457,7 @@ void main() {
       expect(releaseResult.isDetected, isFalse);
     });
 
-    test('unreliable hand while selecting target keeps last release point', () {
+    test('unreliable hand starts grace and keeps last release point', () {
       final openPalm = _FakeOpenPalmGestureDetector();
       final detector = FollowObjectSequenceDetector(
         openPalmGestureDetector: openPalm,
@@ -336,13 +489,17 @@ void main() {
       );
 
       expect(unreliableResult.isTargetSelectionActive, isTrue);
+      expect(unreliableResult.isWaitingForHandReturn, isTrue);
 
-      final releaseResult = detector.releaseFromLastVisiblePoint(
-        now.add(const Duration(milliseconds: 1400)),
+      final releaseResult = detector.handleHandMissing(
+        now.add(const Duration(milliseconds: 3300)),
       );
 
       expect(releaseResult.isDetected, isTrue);
-      expect(releaseResult.releaseReason, FollowObjectReleaseReason.handLost);
+      expect(
+        releaseResult.releaseReason,
+        FollowObjectReleaseReason.handLostTimeout,
+      );
       expect(releaseResult.releasePoint?.dx, 160);
       expect(releaseResult.releasePoint?.dy, 210);
     });

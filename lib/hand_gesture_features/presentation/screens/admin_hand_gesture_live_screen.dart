@@ -14,6 +14,7 @@ import '../../../../../utils/app_snack_bar.dart';
 import '../../data/factories/hand_detector_factory.dart';
 import '../../domain/constants/hand_gesture_thresholds.dart';
 import '../../domain/enums/camera_preview_mode.dart';
+import '../../domain/enums/follow_object_release_reason.dart';
 import '../../domain/enums/follow_target_type.dart';
 import '../../domain/enums/follow_target_tracking_phase.dart';
 import '../../domain/enums/hand_move_direction.dart';
@@ -149,6 +150,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   FollowTarget? _predictedFollowTarget;
   FollowTargetSelectionMemory? _followTargetSelectionMemory;
   bool _followTargetSelectionCandidateHidden = false;
+  Offset? _handReturnGraceReleasePoint;
+  FollowTarget? _handReturnGraceFrozenTarget;
   List<FollowTarget> _cachedObjectTargets = const [];
   Size? _detectionImageSize;
   Rect? _focusedHandBox;

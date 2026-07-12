@@ -1,15 +1,13 @@
-import 'dart:async';
-import 'dart:io';
 import 'dart:ui';
-
+import 'dart:io';
+import 'dart:async';
 import 'package:camera/camera.dart';
-import 'package:object_detection/object_detection.dart' as od;
-import 'package:ultralytics_yolo/ultralytics_yolo.dart';
-
-import '../constants/hand_gesture_thresholds.dart';
-import '../models/app_object_detection.dart';
-import 'appearance_signature_extractor.dart';
 import 'yolo_camera_frame_encoder.dart';
+import 'appearance_signature_extractor.dart';
+import '../models/app_object_detection.dart';
+import '../constants/hand_gesture_thresholds.dart';
+import 'package:ultralytics_yolo/ultralytics_yolo.dart';
+import 'package:object_detection/object_detection.dart' as od;
 
 /// Stable app-facing wrapper around either supported object detector backend.
 class ObjectDetectionService {
@@ -140,7 +138,7 @@ class ObjectDetectionService {
 
     final result = await yolo.predict(
       encoded.jpegBytes,
-      confidenceThreshold: HandGestureThresholds.objectDetectionScoreThreshold,
+      confidenceThreshold: 0.5,
       iouThreshold: HandGestureThresholds.ultralyticsYoloIouThreshold,
     );
     if (_isClosed) return const [];

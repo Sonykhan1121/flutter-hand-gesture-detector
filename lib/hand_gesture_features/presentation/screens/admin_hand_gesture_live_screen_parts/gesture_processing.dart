@@ -191,6 +191,27 @@ extension on _AdminHandGestureLiveScreenState {
       if (!mounted) return;
 
       if (followObjectRelease != null) {
+        if (followObjectRelease.isWaitingForHandReturn) {
+          _clearFrameInterruptedGestureState(
+            now: now,
+            keepFollowObjectSequence: true,
+          );
+          _setScreenState(() {
+            _gestureText = _handReturnGraceText(
+              followObjectRelease.handReturnProgress,
+            );
+            _handText = '';
+            _gestureConfidence = 1 - followObjectRelease.handReturnProgress;
+            _detectedHandsCount = 0;
+            _hands = const [];
+            _detectionImageSize = detectionImageSize;
+            _isFollowingHand = false;
+            _focusedHandBox = null;
+            _focusImageSize = null;
+            _lockedFollowTarget = null;
+          });
+          return;
+        }
         final selectedTarget = followObjectRelease.target;
         _clearFrameInterruptedGestureState(
           now: now,
@@ -247,62 +268,6 @@ extension on _AdminHandGestureLiveScreenState {
     );
 
     if (reliableHands.isEmpty) {
-      if (_followObjectSequenceDetector.isTargetSelectionActive) {
-        final followObjectSequence = _followObjectSequenceDetector.update(
-          hands.first,
-          now,
-          mirrorHorizontally: mirrorPalmGestureCoordinates,
-          allowOppositePalmSide: allowBackCameraPalmFallback,
-        );
-
-        if (followObjectSequence.isTargetSelectionActive) {
-          final detections = await _refreshFollowObjectTargetCandidates(
-            image: image,
-            rotation: rotation,
-            now: now,
-            objectTrackingFrame: objectTrackingFrame,
-          );
-          if (!mounted) return;
-          final handBox = hands.first.boundingBox;
-          _updateFollowTargetSelectionMemory(
-            handPoint: _handPointToDisplayPoint(
-              Offset(
-                (handBox.left + handBox.right) / 2,
-                (handBox.top + handBox.bottom) / 2,
-              ),
-              detectionImageSize,
-            ),
-            now: now,
-            facesDetectionCycleAt: detections.facesDetectedAt,
-            objectsDetectionCycleAt: detections.objectsDetectedAt,
-          );
-        } else {
-          _clearFollowObjectTargetCandidates();
-        }
-
-        _clearFrameInterruptedGestureState(
-          now: now,
-          keepFollowObjectSequence: true,
-        );
-
-        _setScreenState(() {
-          _hands = hands;
-          _detectionImageSize = detectionImageSize;
-          _detectedHandsCount = hands.length;
-          _handText = '';
-          _gestureText = _followTargetStatusText(
-            visibleTarget: trackedFollowTarget,
-            fallbackText: 'Move hand closer',
-          );
-          _gestureConfidence = trackedFollowTarget == null ? 0 : 1;
-          _isFollowingHand = false;
-          _focusedHandBox = null;
-          _focusImageSize = null;
-          _lockedFollowTarget = trackedFollowTarget;
-        });
-        return;
-      }
-
       final followObjectRelease =
           await _releaseFollowObjectFromLastVisiblePoint(
             image: image,
@@ -314,6 +279,27 @@ extension on _AdminHandGestureLiveScreenState {
       if (!mounted) return;
 
       if (followObjectRelease != null) {
+        if (followObjectRelease.isWaitingForHandReturn) {
+          _clearFrameInterruptedGestureState(
+            now: now,
+            keepFollowObjectSequence: true,
+          );
+          _setScreenState(() {
+            _hands = hands;
+            _detectionImageSize = detectionImageSize;
+            _detectedHandsCount = hands.length;
+            _handText = '';
+            _gestureText = _handReturnGraceText(
+              followObjectRelease.handReturnProgress,
+            );
+            _gestureConfidence = 1 - followObjectRelease.handReturnProgress;
+            _isFollowingHand = false;
+            _focusedHandBox = null;
+            _focusImageSize = null;
+            _lockedFollowTarget = null;
+          });
+          return;
+        }
         final selectedTarget = followObjectRelease.target;
         _clearFrameInterruptedGestureState(
           now: now,
@@ -469,6 +455,44 @@ extension on _AdminHandGestureLiveScreenState {
       allowOppositePalmSide: allowBackCameraPalmFallback,
     );
 
+    if (followObjectSequence.isWaitingForHandReturn) {
+      final savedHandPoint = followObjectSequence.savedHandPoint;
+      if (savedHandPoint != null) {
+        final savedDisplayPoint =
+            _handReturnGraceReleasePoint ??= _handPointToDisplayPoint(
+              savedHandPoint,
+              detectionImageSize,
+            );
+        await _refreshHandReturnGraceCandidates(
+          image: image,
+          rotation: rotation,
+          now: now,
+          objectTrackingFrame: objectTrackingFrame,
+          releasePoint: savedDisplayPoint,
+        );
+        if (!mounted) return;
+      }
+      _clearFrameInterruptedGestureState(
+        now: now,
+        keepFollowObjectSequence: true,
+      );
+      _setScreenState(() {
+        _hands = hands;
+        _detectionImageSize = detectionImageSize;
+        _detectedHandsCount = hands.length;
+        _handText = bestHand.handedness.displayLabel;
+        _gestureText = _handReturnGraceText(
+          followObjectSequence.handReturnProgress,
+        );
+        _gestureConfidence = 1 - followObjectSequence.handReturnProgress;
+        _isFollowingHand = false;
+        _focusedHandBox = null;
+        _focusImageSize = null;
+        _lockedFollowTarget = null;
+      });
+      return;
+    }
+
     var lockedFollowTarget = trackedFollowTarget;
     if (followObjectSequence.isTargetSelectionActive) {
       if (_followTargetProgress.phase != FollowTargetTrackingPhase.selecting) {
@@ -482,18 +506,24 @@ extension on _AdminHandGestureLiveScreenState {
     var releaseHadNoTarget = false;
     final releasePoint = followObjectSequence.releasePoint;
     if (releasePoint != null) {
+      final isHandLostTimeout =
+          followObjectSequence.releaseReason ==
+          FollowObjectReleaseReason.handLostTimeout;
+      final frozenTarget = _handReturnGraceFrozenTarget;
       // Release points come from hand-detection image space; convert to the
       // normalized display space used by face/object candidates.
-      final releaseDisplayPoint = _handPointToDisplayPoint(
-        releasePoint,
-        detectionImageSize,
-      );
+      final releaseDisplayPoint =
+          isHandLostTimeout && _handReturnGraceReleasePoint != null
+              ? _handReturnGraceReleasePoint!
+              : _handPointToDisplayPoint(releasePoint, detectionImageSize);
       final releaseSelection = await _selectFollowTargetAtReleasePoint(
         releaseDisplayPoint,
         image: image,
         rotation: rotation,
         now: now,
         objectTrackingFrame: objectTrackingFrame,
+        preferredTarget: frozenTarget,
+        allowNearestFallback: isHandLostTimeout && frozenTarget == null,
       );
       if (!mounted) return;
 
@@ -513,6 +543,7 @@ extension on _AdminHandGestureLiveScreenState {
         _clearFollowObjectTargetCandidates();
       }
     } else if (followObjectSequence.isTargetSelectionActive) {
+      _resetHandReturnGraceSnapshot();
       final detections = await _refreshFollowObjectTargetCandidates(
         image: image,
         rotation: rotation,
@@ -807,11 +838,19 @@ extension on _AdminHandGestureLiveScreenState {
     required CameraFrameRotation? rotation,
     required DateTime now,
     required ObjectTrackingFrame? objectTrackingFrame,
+    FollowTarget? preferredTarget,
+    bool allowNearestFallback = false,
   }) async {
     final memory = _followTargetSelectionMemory;
-    if (memory == null ||
-        !memory.isReleasable ||
-        !memory.isValid(now: now, handPoint: releasePoint)) {
+    final usesSelectionMemory = preferredTarget == null;
+    final rememberedTarget =
+        preferredTarget ??
+        (memory != null &&
+                memory.isReleasable &&
+                memory.isValid(now: now, handPoint: releasePoint)
+            ? memory.candidate
+            : null);
+    if (rememberedTarget == null && !allowNearestFallback) {
       return null;
     }
 
@@ -822,30 +861,55 @@ extension on _AdminHandGestureLiveScreenState {
       objectTrackingFrame: objectTrackingFrame,
     );
     final refreshedAt = DateTime.now();
-    if (!memory.isValid(now: refreshedAt, handPoint: releasePoint)) {
+    if (usesSelectionMemory &&
+        rememberedTarget != null &&
+        (memory == null ||
+            !memory.isValid(now: refreshedAt, handPoint: releasePoint))) {
       return null;
     }
-    final candidates =
-        memory.candidate.type == FollowTargetType.face
-            ? _freshFollowTargets(detections.faces, refreshedAt)
-            : _freshFollowTargets(detections.objects, refreshedAt);
-    final detectionCycleAt =
-        memory.candidate.type == FollowTargetType.face
-            ? detections.facesDetectedAt
-            : detections.objectsDetectedAt;
-    final latest = _followTargetSelector.uniqueSelectionConfirmation(
-      remembered: memory.candidate,
-      candidates:
-          detectionCycleAt != null &&
-                  detectionCycleAt != memory.lastDetectionCycle
-              ? candidates
-              : const <FollowTarget>[],
-    );
 
+    if (rememberedTarget != null) {
+      final candidates =
+          rememberedTarget.type == FollowTargetType.face
+              ? _freshFollowTargets(detections.faces, refreshedAt)
+              : _freshFollowTargets(detections.objects, refreshedAt);
+      final detectionCycleAt =
+          rememberedTarget.type == FollowTargetType.face
+              ? detections.facesDetectedAt
+              : detections.objectsDetectedAt;
+      final canUseCurrentCycle =
+          preferredTarget != null ||
+          (memory != null &&
+              detectionCycleAt != null &&
+              detectionCycleAt != memory.lastDetectionCycle);
+      final latest = _followTargetSelector.uniqueSelectionConfirmation(
+        remembered: rememberedTarget,
+        candidates: canUseCurrentCycle ? candidates : const <FollowTarget>[],
+      );
+
+      return _FollowTargetReleaseSelection(
+        target: latest ?? rememberedTarget,
+        requiresPostReleaseConfirmation: latest == null,
+        evaluatedDetectionCycleAt: detectionCycleAt,
+      );
+    }
+
+    final nearest = _followTargetSelector.selectNearest(
+      releasePoint: releasePoint,
+      faces: _freshFollowTargets(detections.faces, refreshedAt),
+      objects: _freshFollowTargets(detections.objects, refreshedAt),
+      detectedAfter: refreshedAt.subtract(
+        HandGestureThresholds.followTargetDetectionFreshness,
+      ),
+    );
+    if (nearest == null) return null;
     return _FollowTargetReleaseSelection(
-      target: latest ?? memory.candidate,
-      requiresPostReleaseConfirmation: latest == null,
-      evaluatedDetectionCycleAt: detectionCycleAt,
+      target: nearest,
+      requiresPostReleaseConfirmation: false,
+      evaluatedDetectionCycleAt:
+          nearest.type == FollowTargetType.face
+              ? detections.facesDetectedAt
+              : detections.objectsDetectedAt,
     );
   }
 
@@ -928,9 +992,83 @@ extension on _AdminHandGestureLiveScreenState {
     _predictedFollowTarget = null;
     _followTargetSelectionMemory = null;
     _followTargetSelectionCandidateHidden = false;
+    _resetHandReturnGraceSnapshot();
   }
 
-  /// Completes follow-object selection when the hand leaves the frame.
+  void _resetHandReturnGraceSnapshot() {
+    _handReturnGraceReleasePoint = null;
+    _handReturnGraceFrozenTarget = null;
+  }
+
+  Future<void> _refreshHandReturnGraceCandidates({
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+    required DateTime now,
+    required ObjectTrackingFrame? objectTrackingFrame,
+    required Offset releasePoint,
+  }) async {
+    final detections = await _refreshFollowObjectTargetCandidates(
+      image: image,
+      rotation: rotation,
+      now: now,
+      objectTrackingFrame: objectTrackingFrame,
+    );
+    if (!mounted) return;
+
+    _handReturnGraceFrozenTarget ??=
+        _followTargetSelectionMemory?.isReleasable == true
+            ? _followTargetSelectionMemory!.candidate
+            : null;
+    final frozen = _handReturnGraceFrozenTarget;
+    if (frozen == null) {
+      _updateFollowTargetSelectionMemory(
+        handPoint: releasePoint,
+        now: now,
+        facesDetectionCycleAt: detections.facesDetectedAt,
+        objectsDetectionCycleAt: detections.objectsDetectedAt,
+      );
+      if (_followTargetSelectionMemory?.isReleasable == true) {
+        _handReturnGraceFrozenTarget = _followTargetSelectionMemory!.candidate;
+      }
+      return;
+    }
+
+    final freshCandidates =
+        frozen.type == FollowTargetType.face
+            ? _freshFollowTargets(detections.faces, now)
+            : _freshFollowTargets(detections.objects, now);
+    final latest = _followTargetSelector.uniqueSelectionConfirmation(
+      remembered: frozen,
+      candidates: freshCandidates,
+    );
+    if (latest == null) {
+      _predictedFollowTarget = frozen;
+      _followTargetSelectionCandidateHidden = true;
+      return;
+    }
+
+    final cycleAt =
+        (latest.type == FollowTargetType.face
+            ? detections.facesDetectedAt
+            : detections.objectsDetectedAt) ??
+        latest.detectedAt;
+    final previousMemory = _followTargetSelectionMemory;
+    _followTargetSelectionMemory = FollowTargetSelectionMemory(
+      candidate: latest,
+      lastDetectionCycle: cycleAt,
+      lastSeenAt: now,
+      lastHandPoint: releasePoint,
+      consecutiveConfirmationCount: math.max(
+        previousMemory?.consecutiveConfirmationCount ?? 0,
+        HandGestureThresholds.followTargetSelectionConfirmationCycles,
+      ),
+    );
+    _handReturnGraceFrozenTarget = latest;
+    _predictedFollowTarget = latest;
+    _followTargetSelectionCandidateHidden = false;
+  }
+
+  /// Waits for a returning fist, then releases from the last visible point.
   Future<_FollowObjectReleaseSelection?>
   _releaseFollowObjectFromLastVisiblePoint({
     required CameraImage image,
@@ -939,12 +1077,31 @@ extension on _AdminHandGestureLiveScreenState {
     required DateTime now,
     required ObjectTrackingFrame? objectTrackingFrame,
   }) async {
-    if (!_followObjectSequenceDetector.isTargetSelectionActive) {
-      return null;
+    final releaseResult = _followObjectSequenceDetector.handleHandMissing(now);
+    if (releaseResult.isWaitingForHandReturn) {
+      final savedHandPoint = releaseResult.savedHandPoint;
+      if (savedHandPoint == null) {
+        _clearFollowObjectTargetCandidates();
+        return null;
+      }
+      final savedDisplayPoint =
+          _handReturnGraceReleasePoint ??= _handPointToDisplayPoint(
+            savedHandPoint,
+            detectionImageSize,
+          );
+      await _refreshHandReturnGraceCandidates(
+        image: image,
+        rotation: rotation,
+        now: now,
+        objectTrackingFrame: objectTrackingFrame,
+        releasePoint: savedDisplayPoint,
+      );
+      if (!mounted) return null;
+      return _FollowObjectReleaseSelection.waitingForHandReturn(
+        progress: releaseResult.handReturnProgress,
+      );
     }
 
-    final releaseResult = _followObjectSequenceDetector
-        .releaseFromLastVisiblePoint(now);
     final releasePoint = releaseResult.releasePoint;
 
     if (releasePoint == null) {
@@ -952,16 +1109,18 @@ extension on _AdminHandGestureLiveScreenState {
       return null;
     }
 
-    final releaseDisplayPoint = _handPointToDisplayPoint(
-      releasePoint,
-      detectionImageSize,
-    );
+    final releaseDisplayPoint =
+        _handReturnGraceReleasePoint ??
+        _handPointToDisplayPoint(releasePoint, detectionImageSize);
+    final frozenTarget = _handReturnGraceFrozenTarget;
     final releaseSelection = await _selectFollowTargetAtReleasePoint(
       releaseDisplayPoint,
       image: image,
       rotation: rotation,
       now: now,
       objectTrackingFrame: objectTrackingFrame,
+      preferredTarget: frozenTarget,
+      allowNearestFallback: frozenTarget == null,
     );
 
     if (releaseSelection == null) {
@@ -1733,6 +1892,17 @@ extension on _AdminHandGestureLiveScreenState {
     return fallbackText;
   }
 
+  String _handReturnGraceText(double progress) {
+    final remainingMilliseconds =
+        HandGestureThresholds
+            .followObjectHandReturnGraceDuration
+            .inMilliseconds *
+        (1 - progress.clamp(0.0, 1.0));
+    final remainingSeconds = remainingMilliseconds / 1000;
+    return 'Hand left — return closed fist '
+        '(${remainingSeconds.toStringAsFixed(1)}s)';
+  }
+
   FollowTarget _applyFollowTargetReleaseSelection(
     _FollowTargetReleaseSelection selection, {
     required DateTime now,
@@ -2031,9 +2201,19 @@ class _FollowTargetDetections {
 
 /// Result of releasing follow-object selection when the hand is gone.
 class _FollowObjectReleaseSelection {
-  const _FollowObjectReleaseSelection({required this.target});
+  const _FollowObjectReleaseSelection({required this.target})
+    : isWaitingForHandReturn = false,
+      handReturnProgress = 0;
+
+  const _FollowObjectReleaseSelection.waitingForHandReturn({
+    required double progress,
+  }) : target = null,
+       isWaitingForHandReturn = true,
+       handReturnProgress = progress;
 
   final FollowTarget? target;
+  final bool isWaitingForHandReturn;
+  final double handReturnProgress;
 }
 
 /// Exact remembered selection plus whether it still needs post-release proof.
