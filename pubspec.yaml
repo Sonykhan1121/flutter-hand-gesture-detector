@@ -14,7 +14,8 @@ dependencies:
   flutter:
     sdk: flutter
 
-  hand_detection: ^3.3.0
+  hand_detection:
+    path: third_party/hand_detection
   google_mlkit_face_detection: any
   ultralytics_yolo: ^0.6.9
   camera: any

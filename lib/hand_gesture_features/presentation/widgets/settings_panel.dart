@@ -10,11 +10,13 @@ class SettingsPanel extends StatelessWidget {
     required this.selectedMode,
     required this.disabledModes,
     required this.onSelectMode,
+    this.onMovingDownTrainingTap,
   });
 
   final StandControlMode selectedMode;
   final Set<StandControlMode> disabledModes;
   final ValueChanged<StandControlMode> onSelectMode;
+  final VoidCallback? onMovingDownTrainingTap;
 
   @override
   /// Builds the settings title and the control-mode card list.
@@ -81,6 +83,17 @@ class SettingsPanel extends StatelessWidget {
                       : 'GESTURE',
                   accentColor: const Color(0xFF2E90FA),
                   onTap: () => onSelectMode(StandControlMode.handGesture),
+                ),
+                const SizedBox(height: 14),
+                ControlModeCard(
+                  isSelected: false,
+                  isEnabled: true,
+                  icon: Icons.download_for_offline_rounded,
+                  title: 'Record Moving Down',
+                  subtitle: 'Capture two seconds of raw hand landmarks',
+                  badgeText: 'TRAIN',
+                  accentColor: const Color(0xFF12B76A),
+                  onTap: onMovingDownTrainingTap ?? () {},
                 ),
                 // const SizedBox(height: 14),
                 // ControlModeCard(

@@ -3,8 +3,58 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/models/app_object_detection.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/object_detection_service.dart';
+import 'package:object_detection/object_detection.dart';
 
 void main() {
+  group('ObjectDetectionService platform backend', () {
+    test('uses the configured YOLO backend on iOS', () {
+      expect(
+        ObjectDetectionService.usePackageBackendForPlatform(isIOS: true),
+        isFalse,
+      );
+    });
+
+    test('keeps Android on the configured YOLO backend', () {
+      expect(
+        ObjectDetectionService.usePackageBackendForPlatform(isIOS: false),
+        isFalse,
+      );
+    });
+
+    test('uses the lighter EfficientDet model only on iOS', () {
+      expect(
+        ObjectDetectionService.packageModelForPlatform(isIOS: true),
+        ObjectDetectionModel.efficientDetLite0,
+      );
+      expect(
+        ObjectDetectionService.packageModelForPlatform(isIOS: false),
+        ObjectDetectionModel.efficientDetLite2,
+      );
+    });
+
+    test('uses permissive, compact inference options only on iOS', () {
+      final iosOptions = ObjectDetectionService.packageOptionsForPlatform(
+        isIOS: true,
+      );
+      final otherOptions = ObjectDetectionService.packageOptionsForPlatform(
+        isIOS: false,
+      );
+
+      expect(iosOptions.scoreThreshold, 0.35);
+      expect(iosOptions.categoryDenylist, ['person']);
+      expect(
+        ObjectDetectionService.packageMaxDimensionForPlatform(isIOS: true),
+        320,
+      );
+      expect(otherOptions.scoreThreshold, 0.60);
+      expect(otherOptions.categoryDenylist, isEmpty);
+      expect(
+        ObjectDetectionService.packageMaxDimensionForPlatform(isIOS: false),
+        640,
+      );
+    });
+  });
+
   group('ObjectDetectionService YOLO mapping', () {
     test('maps normalized boxes and derives the real class index', () {
       final results = ObjectDetectionService.mapUltralyticsDetections(

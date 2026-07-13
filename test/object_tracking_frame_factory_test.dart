@@ -74,4 +74,39 @@ void main() {
     expect(frame.grayscaleBytes[1], closeTo(29, 1));
     expect(frame.mirrorHorizontally, isTrue);
   });
+
+  test('uses the inexpensive iOS BGRA luminance path when requested', () {
+    final image = CameraImage.fromPlatformInterface(
+      CameraImageData(
+        format: const CameraImageFormat(
+          ImageFormatGroup.bgra8888,
+          raw: 1111970369,
+        ),
+        height: 1,
+        width: 2,
+        planes: [
+          CameraImagePlane(
+            bytes: Uint8List.fromList([0, 17, 255, 255, 255, 43, 0, 255]),
+            bytesPerPixel: 4,
+            bytesPerRow: 8,
+            height: 1,
+            width: 2,
+          ),
+        ],
+      ),
+    );
+
+    final frame = factory.create(
+      image: image,
+      frameId: 3,
+      capturedAt: DateTime(2026),
+      rotation: null,
+      mirrorHorizontally: true,
+      isBgra: true,
+      maxDimension: 320,
+      useFastBgraLuma: true,
+    );
+
+    expect(frame.grayscaleBytes, [17, 43]);
+  });
 }

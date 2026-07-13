@@ -34,12 +34,49 @@ class ObjectDetectionService {
     scoreThreshold: HandGestureThresholds.objectDetectionScoreThreshold,
     maxResults: HandGestureThresholds.objectDetectionMaxResults,
   );
+  static const _iosPackageOptions = od.ObjectDetectorOptions(
+    scoreThreshold: HandGestureThresholds.iosObjectDetectionScoreThreshold,
+    maxResults: HandGestureThresholds.objectDetectionMaxResults,
+    categoryDenylist: ['person'],
+  );
+
+  /// Applies the same configured detector backend on iOS and Android.
+  ///
+  /// Ultralytics YOLO resolves official model IDs to Core ML on iOS, so iOS
+  /// does not need to be forced onto the package detector.
+  static bool usePackageBackendForPlatform({required bool isIOS}) {
+    return HandGestureThresholds.useObjectDetectionPackage;
+  }
+
+  /// iOS uses the lighter model because live inference shares camera frames
+  /// with hand and face detection. Other platforms retain their configured
+  /// package model when that backend is enabled.
+  static od.ObjectDetectionModel packageModelForPlatform({
+    required bool isIOS,
+  }) {
+    return isIOS
+        ? od.ObjectDetectionModel.efficientDetLite0
+        : od.ObjectDetectionModel.efficientDetLite2;
+  }
+
+  static od.ObjectDetectorOptions packageOptionsForPlatform({
+    required bool isIOS,
+  }) {
+    return isIOS ? _iosPackageOptions : _packageOptions;
+  }
+
+  static int packageMaxDimensionForPlatform({required bool isIOS}) {
+    return isIOS
+        ? HandGestureThresholds.iosObjectDetectionMaxDimension
+        : HandGestureThresholds.objectDetectionMaxDimension;
+  }
 
   /// Selects the backend through the one shared configuration flag.
   static Future<ObjectDetectionService> start() async {
-    if (HandGestureThresholds.useObjectDetectionPackage) {
+    final isIOS = Platform.isIOS;
+    if (usePackageBackendForPlatform(isIOS: isIOS)) {
       final detector = await od.ObjectDetector.create(
-        model: od.ObjectDetectionModel.efficientDetLite2,
+        model: packageModelForPlatform(isIOS: isIOS),
       );
       return ObjectDetectionService._package(detector);
     }
@@ -106,12 +143,13 @@ class ObjectDetectionService {
     CameraImage image,
     od.CameraFrameRotation? rotation,
   ) async {
+    final isIOS = Platform.isIOS;
     final objects = await detector.detectFromCameraImage(
       image,
       rotation: rotation,
       isBgra: Platform.isIOS || Platform.isMacOS,
-      maxDim: HandGestureThresholds.objectDetectionMaxDimension,
-      options: _packageOptions,
+      maxDim: packageMaxDimensionForPlatform(isIOS: isIOS),
+      options: packageOptionsForPlatform(isIOS: isIOS),
     );
 
     return [

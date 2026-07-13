@@ -44,9 +44,15 @@ extension on _AdminHandGestureLiveScreenState {
     return _shouldMirrorPreviewCoordinates(controller);
   }
 
-  /// True when open-palm orientation checks should use mirrored coordinates.
+  /// True when palm-facing chirality must be normalized for the detector.
+  ///
+  /// Do not reuse preview mirroring here. iOS mirrors its front preview
+  /// natively, so the overlay needs no flip, while the landmark/handedness
+  /// convention still requires the same front-camera palm-side flip as Android.
   bool _shouldMirrorPalmGestureCoordinates(CameraController? controller) {
-    return _shouldMirrorPreviewCoordinates(controller);
+    return shouldMirrorPalmOrientationCoordinates(
+      controller?.description.lensDirection,
+    );
   }
 
   /// Lets back-camera palm detection retry with the opposite side convention.

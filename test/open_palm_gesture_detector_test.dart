@@ -11,6 +11,35 @@ void main() {
       expect(_detectAfterSmoothing(detector, hand).isDetected, isTrue);
     });
 
+    test('detects a mirrored front-camera palm with chirality correction', () {
+      final detector = OpenPalmGestureDetector();
+      final mirroredPalm = _mirrorHandHorizontally(_openPalmHand());
+
+      expect(
+        _detectAfterSmoothing(
+          detector,
+          mirroredPalm,
+          mirrorHorizontally: true,
+        ).isDetected,
+        isTrue,
+      );
+    });
+
+    test('rejects the opposite hand side in mirrored coordinates', () {
+      final detector = OpenPalmGestureDetector();
+
+      // In a mirrored front-camera convention, this unmirrored chirality is
+      // the opposite-facing hand side and must not start the open-palm flow.
+      final result = _detectAfterSmoothing(
+        detector,
+        _openPalmHand(),
+        mirrorHorizontally: true,
+      );
+
+      expect(result.isDetected, isFalse);
+      expect(result.confidence, lessThan(0.45));
+    });
+
     test('detects open palm when adjacent fingertips are naturally close', () {
       final detector = OpenPalmGestureDetector();
       final hand = _openPalmHand(
@@ -206,15 +235,50 @@ void main() {
   });
 }
 
-dynamic _detectAfterSmoothing(OpenPalmGestureDetector detector, Hand hand) {
+dynamic _detectAfterSmoothing(
+  OpenPalmGestureDetector detector,
+  Hand hand, {
+  bool mirrorHorizontally = false,
+}) {
   final start = DateTime(2026);
 
-  detector.detect(hand: hand, now: start, mirrorHorizontally: false);
+  detector.detect(
+    hand: hand,
+    now: start,
+    mirrorHorizontally: mirrorHorizontally,
+  );
 
   return detector.detect(
     hand: hand,
     now: start.add(const Duration(milliseconds: 100)),
-    mirrorHorizontally: false,
+    mirrorHorizontally: mirrorHorizontally,
+  );
+}
+
+Hand _mirrorHandHorizontally(Hand hand) {
+  final imageWidth = hand.imageWidth.toDouble();
+  return Hand(
+    boundingBox: BoundingBox.ltrb(
+      imageWidth - hand.boundingBox.right,
+      hand.boundingBox.top,
+      imageWidth - hand.boundingBox.left,
+      hand.boundingBox.bottom,
+    ),
+    score: hand.score,
+    landmarks: hand.landmarks
+        .map(
+          (landmark) => HandLandmark(
+            type: landmark.type,
+            x: imageWidth - landmark.x,
+            y: landmark.y,
+            z: landmark.z,
+            visibility: landmark.visibility,
+          ),
+        )
+        .toList(growable: false),
+    imageWidth: hand.imageWidth,
+    imageHeight: hand.imageHeight,
+    handedness: hand.handedness,
   );
 }
 

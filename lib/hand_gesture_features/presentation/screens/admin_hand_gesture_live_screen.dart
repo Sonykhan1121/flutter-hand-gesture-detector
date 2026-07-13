@@ -50,6 +50,7 @@ import '../painters/object_optical_flow_debug_painter.dart';
 import '../painters/recording_hand_landmark_overlay_painter.dart';
 import '../utils/hand_gesture_label_mapper.dart';
 import '../utils/camera_orientation_preferences.dart';
+import '../utils/palm_orientation_coordinate_policy.dart';
 import '../widgets/gesture_status_panel.dart';
 import '../widgets/hand_camera_loading_view.dart';
 import '../widgets/round_icon_button.dart';
@@ -96,7 +97,9 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final _objectTrackingFrameFactory = const ObjectTrackingFrameFactory();
   final _objectOpticalFlowTracker = ObjectOpticalFlowTracker();
   final _objectDetectionRequests = ObjectDetectionRequestController(
-    minInterval: HandGestureThresholds.objectDetectionMinInterval,
+    minInterval: Platform.isIOS
+        ? HandGestureThresholds.iosObjectDetectionMinInterval
+        : HandGestureThresholds.objectDetectionMinInterval,
   );
 
   late final FollowObjectSequenceDetector _followObjectSequenceDetector;

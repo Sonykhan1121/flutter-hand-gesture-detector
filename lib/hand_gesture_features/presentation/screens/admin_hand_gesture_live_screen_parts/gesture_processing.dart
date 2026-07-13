@@ -44,6 +44,11 @@ extension on _AdminHandGestureLiveScreenState {
                 rotation: rotation,
                 mirrorHorizontally: _shouldMirrorPreviewCoordinates(controller),
                 isBgra: Platform.isIOS || Platform.isMacOS,
+                maxDimension:
+                    Platform.isIOS
+                        ? HandGestureThresholds.iosObjectTrackingMaxDimension
+                        : HandGestureThresholds.objectTrackingMaxDimension,
+                useFastBgraLuma: Platform.isIOS,
               )
               : null;
 
@@ -1461,7 +1466,12 @@ extension on _AdminHandGestureLiveScreenState {
                 batch.detections,
                 image: image,
                 frameRotation: frameRotation,
-                detectedAt: batch.sourceCapturedAt,
+                // iOS inference completes asynchronously in the package
+                // detector. Use completion time only for cache freshness so a
+                // valid result is not discarded immediately on slower devices;
+                // sourceFrameId still preserves optical-flow alignment.
+                detectedAt:
+                    Platform.isIOS ? batch.completedAt : batch.sourceCapturedAt,
                 sourceFrameId: batch.sourceFrameId,
               );
               _cachedObjectTargets = objects;

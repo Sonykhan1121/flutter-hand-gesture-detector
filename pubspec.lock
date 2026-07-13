@@ -243,10 +243,9 @@ packages:
   hand_detection:
     dependency: "direct main"
     description:
-      name: hand_detection
-      sha256: "509c31c6740b7eb65c8d0ad1edd76206b3923eb1cd1eb01d0e8516cf02c40076"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/hand_detection"
+      relative: true
+    source: path
     version: "3.3.0"
   hooks:
     dependency: transitive

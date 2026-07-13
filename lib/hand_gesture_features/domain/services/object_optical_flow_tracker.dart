@@ -22,11 +22,13 @@ class ObjectTrackingFrameFactory {
     required CameraFrameRotation? rotation,
     required bool mirrorHorizontally,
     required bool isBgra,
+    int maxDimension = HandGestureThresholds.objectTrackingMaxDimension,
+    bool useFastBgraLuma = false,
   }) {
+    final boundedMaxDimension = math.max(1, maxDimension);
     final scale = math.min(
       1.0,
-      HandGestureThresholds.objectTrackingMaxDimension /
-          math.max(image.width, image.height),
+      boundedMaxDimension / math.max(image.width, image.height),
     );
     final width = math.max(1, (image.width * scale).round());
     final height = math.max(1, (image.height * scale).round());
@@ -41,12 +43,21 @@ class ObjectTrackingFrameFactory {
           final pixelStride = plane.bytesPerPixel ?? 4;
           final index = sourceY * plane.bytesPerRow + sourceX * pixelStride;
           if (index + 2 < plane.bytes.length) {
-            final blue = plane.bytes[index];
-            final green = plane.bytes[index + 1];
-            final red = plane.bytes[index + 2];
-            output[y * width + x] = (0.114 * blue + 0.587 * green + 0.299 * red)
-                .round()
-                .clamp(0, 255);
+            if (useFastBgraLuma) {
+              // Green is a stable, inexpensive luminance proxy for optical
+              // flow. iOS uses this path to avoid three-channel floating-point
+              // conversion on the Flutter UI isolate for every camera frame.
+              output[y * width + x] = plane.bytes[index + 1];
+            } else {
+              final blue = plane.bytes[index];
+              final green = plane.bytes[index + 1];
+              final red = plane.bytes[index + 2];
+              output[y * width + x] = (0.114 * blue +
+                      0.587 * green +
+                      0.299 * red)
+                  .round()
+                  .clamp(0, 255);
+            }
           }
         } else {
           final pixelStride = plane.bytesPerPixel ?? 1;

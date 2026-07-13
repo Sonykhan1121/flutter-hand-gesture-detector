@@ -11,6 +11,7 @@ class StandControlHomePage extends StatefulWidget {
   final ValueChanged<StandControlMode>? onModeChanged;
   final VoidCallback? onAutomaticDetectTap;
   final VoidCallback? onHandGestureTap;
+  final VoidCallback? onMovingDownTrainingTap;
   final VoidCallback? onVoiceCommandTap;
   final VoidCallback? onDebugCameraTap;
 
@@ -21,6 +22,7 @@ class StandControlHomePage extends StatefulWidget {
     this.onModeChanged,
     this.onAutomaticDetectTap,
     this.onHandGestureTap,
+    this.onMovingDownTrainingTap,
     this.onVoiceCommandTap,
     this.onDebugCameraTap,
   });
@@ -98,6 +100,7 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
                 selectedMode: _selectedMode,
                 disabledModes: widget.disabledModes,
                 onSelectMode: _selectMode,
+                onMovingDownTrainingTap: widget.onMovingDownTrainingTap,
               ),
             ),
           ],

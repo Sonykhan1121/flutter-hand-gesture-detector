@@ -4,6 +4,7 @@ import 'package:gesture_detector/utils/app_snack_bar.dart';
 import 'hand_gesture_features/domain/enums/stand_control_mode.dart';
 import 'hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen.dart';
 import 'hand_gesture_features/presentation/screens/face_object_debug_camera_screen.dart';
+import 'hand_gesture_features/presentation/screens/moving_down_capture_screen.dart';
 import 'hand_gesture_features/stand_control_home_page.dart';
 
 /// Starts the Flutter application.
@@ -52,6 +53,14 @@ class MyApp extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (_) =>
                       const AdminHandGestureLiveScreen(fontorback: 1),
+                ),
+              );
+            },
+            onMovingDownTrainingTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const MovingDownCaptureScreen(),
                 ),
               );
             },

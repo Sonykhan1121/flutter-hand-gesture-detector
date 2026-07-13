@@ -1,0 +1,61 @@
+name: hand_detection_example
+description: Example app for hand_detection
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  opencv_dart: ^2.2.1+4
+  image_picker: ^1.2.1
+  file_selector: ^1.1.0
+  file_selector_macos: ^0.9.5
+  hand_detection:
+    path: ../
+  # Direct dependency so the example can import OneEuroFilter from flutter_litert.
+  flutter_litert: ^3.3.1
+  flutter_colorpicker: ^1.1.0
+  camera: ^0.12.0
+  camera_desktop: ^1.2.1
+  sensors_plus: ^6.1.1
+  video_player: ^2.9.2
+  path_provider: ^2.1.5
+
+# video_player_avfoundation 2.9.7's macOS Swift Package imports the iOS-only
+# <Flutter/Flutter.h> module, which fails to build on macOS ("module 'Flutter'
+# not found"). Pin to 2.9.4, the last version that builds on macOS, until the
+# upstream package is fixed.
+#
+# Vendored under ../third_party so a macOS-only deprecation warning
+# (AVKeyValueStatus, Swift-import-only) can be suppressed at its declaration. The
+# vendored pubspec keeps version 2.9.4, so this is still an exact 2.9.4 pin. See
+# third_party/video_player_avfoundation/LOCAL_PATCHES.md.
+dependency_overrides:
+  video_player_avfoundation:
+    path: ../third_party/video_player_avfoundation
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+# opencv_dart (dartcv4) only compiles the listed modules. The video demo needs
+# videoio (VideoCapture/VideoWriter) in addition to image decoding/processing.
+hooks:
+  user_defines:
+    dartcv4:
+      include_modules:
+        - imgcodecs
+        - imgproc
+        - videoio
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/samples/
