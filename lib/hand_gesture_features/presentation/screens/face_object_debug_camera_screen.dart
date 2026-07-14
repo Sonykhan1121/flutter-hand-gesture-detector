@@ -11,23 +11,31 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../domain/constants/hand_gesture_thresholds.dart';
 import '../../domain/enums/follow_target_type.dart';
+import '../../domain/enums/object_detection_backend.dart';
 import '../../domain/models/app_object_detection.dart';
 import '../../domain/models/follow_target.dart';
 import '../../domain/services/object_detection_request_controller.dart';
 import '../../domain/services/object_detection_service.dart';
+import '../../domain/services/object_detection_service_factory.dart';
 import '../../domain/utils/camera_frame_box_mapper.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
 import '../../domain/utils/detection_debug_log_formatter.dart';
 import '../painters/follow_target_debug_overlay_painter.dart';
+import '../painters/object_detection_debug_painter_factory.dart';
 import '../widgets/hand_camera_loading_view.dart';
 import '../widgets/round_icon_button.dart';
 
 /// Debug-only camera view that shows raw face/object detector output.
 class FaceObjectDebugCameraScreen extends StatefulWidget {
-  const FaceObjectDebugCameraScreen({super.key, this.autoStartCamera = true});
+  const FaceObjectDebugCameraScreen({
+    super.key,
+    this.autoStartCamera = true,
+    this.objectDetectionBackend = ObjectDetectionBackend.ultralyticsYolo,
+  });
 
   /// Disabled in widget tests so no real camera/plugin calls are made.
   final bool autoStartCamera;
+  final ObjectDetectionBackend objectDetectionBackend;
 
   @override
   State<FaceObjectDebugCameraScreen> createState() =>
@@ -41,9 +49,7 @@ class _FaceObjectDebugCameraScreenState
   ObjectDetectionService? _objectDetectionService;
   Future<ObjectDetectionService>? _objectDetectionServiceStartup;
 
-  final _objectDetectionRequests = ObjectDetectionRequestController(
-    minInterval: HandGestureThresholds.objectDetectionMinInterval,
-  );
+  late final ObjectDetectionRequestController _objectDetectionRequests;
 
   List<CameraDescription> _cameras = const [];
   List<FollowTarget> _faceTargets = const [];
@@ -62,6 +68,12 @@ class _FaceObjectDebugCameraScreenState
   @override
   void initState() {
     super.initState();
+    _objectDetectionRequests = ObjectDetectionRequestController(
+      minInterval: ObjectDetectionServiceFactory.requestMinIntervalFor(
+        backend: widget.objectDetectionBackend,
+        isIOS: Platform.isIOS,
+      ),
+    );
     _faceDetector = ml_face.FaceDetector(
       options: ml_face.FaceDetectorOptions(
         enableTracking: true,
@@ -428,7 +440,9 @@ class _FaceObjectDebugCameraScreenState
     }
 
     final generation = _objectDetectionGeneration;
-    final startup = ObjectDetectionService.start();
+    final startup = ObjectDetectionServiceFactory.start(
+      backend: widget.objectDetectionBackend,
+    );
     _objectDetectionServiceStartup = startup;
 
     unawaited(
@@ -691,18 +705,15 @@ class _FaceObjectDebugCameraScreenState
   Size _previewDisplaySize({required bool isLandscape}) {
     final controller = _controller;
     return orientedCameraPreviewSize(
-      rawPreviewSize:
-          controller != null && controller.value.isInitialized
-              ? controller.value.previewSize
-              : null,
+      rawPreviewSize: controller != null && controller.value.isInitialized
+          ? controller.value.previewSize
+          : null,
       isLandscape: isLandscape,
     );
   }
 
   double _previewAspectRatio({required bool isLandscape}) {
-    final previewDisplaySize = _previewDisplaySize(
-      isLandscape: isLandscape,
-    );
+    final previewDisplaySize = _previewDisplaySize(isLandscape: isLandscape);
     return previewDisplaySize.width / previewDisplaySize.height;
   }
 
@@ -745,7 +756,6 @@ class _FaceObjectDebugCameraScreenState
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
-    final targets = <FollowTarget>[..._faceTargets, ..._objectTargets];
     final isLandscape =
         MediaQuery.orientationOf(context) == Orientation.landscape;
 
@@ -774,11 +784,19 @@ class _FaceObjectDebugCameraScreenState
                           fit: StackFit.expand,
                           children: [
                             _buildCameraPreview(controller),
-                            if (targets.isNotEmpty)
+                            if (_faceTargets.isNotEmpty)
                               CustomPaint(
                                 painter: FollowTargetDebugOverlayPainter(
-                                  targets: targets,
+                                  targets: _faceTargets,
                                 ),
+                              ),
+                            if (_objectTargets.isNotEmpty)
+                              CustomPaint(
+                                painter:
+                                    ObjectDetectionDebugPainterFactory.create(
+                                      backend: widget.objectDetectionBackend,
+                                      targets: _objectTargets,
+                                    ),
                               ),
                           ],
                         ),
@@ -795,20 +813,20 @@ class _FaceObjectDebugCameraScreenState
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                        RoundIconButton(
-                          icon: Icons.arrow_back,
-                          tooltip: 'Back',
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                        const Text(
-                          'Detector Debug',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                          RoundIconButton(
+                            icon: Icons.arrow_back,
+                            tooltip: 'Back',
+                            onPressed: () => Navigator.pop(context),
                           ),
-                        ),
-                        const SizedBox(width: 56, height: 56),
+                          const Text(
+                            'Detector Debug',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 56, height: 56),
                         ],
                       ),
                     ),

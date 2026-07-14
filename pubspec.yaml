@@ -17,6 +17,7 @@ dependencies:
   hand_detection:
     path: third_party/hand_detection
   google_mlkit_face_detection: any
+  google_mlkit_object_detection: ^0.16.0
   ultralytics_yolo: ^0.6.9
   camera: any
   cupertino_icons: ^1.0.8
@@ -38,7 +39,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/images/
     - assets/models/
 
   # To add assets to your application, add an assets section, like this:

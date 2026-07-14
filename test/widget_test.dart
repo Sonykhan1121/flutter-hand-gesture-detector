@@ -92,4 +92,21 @@ void main() {
     expect(find.byType(FaceObjectDebugCameraScreen), findsOneWidget);
     expect(find.text('Face/Object Debug'), findsOneWidget);
   });
+
+  testWidgets('home feature handlers hide debug and training entries', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: StandControlHomePage(
+          showDebugCameraButton: false,
+          showMovingDownTraining: false,
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('faceObjectDebugCameraButton')), findsNothing);
+    expect(find.text('Record Moving Down'), findsNothing);
+    expect(find.text('Hand Gesture'), findsOneWidget);
+  });
 }

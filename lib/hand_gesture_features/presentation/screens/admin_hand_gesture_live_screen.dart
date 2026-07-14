@@ -18,6 +18,7 @@ import '../../domain/enums/follow_object_release_reason.dart';
 import '../../domain/enums/follow_target_type.dart';
 import '../../domain/enums/follow_target_tracking_phase.dart';
 import '../../domain/enums/hand_move_direction.dart';
+import '../../domain/enums/object_detection_backend.dart';
 import '../../domain/enums/zoom_direction.dart';
 import '../../domain/models/app_object_detection.dart';
 import '../../domain/models/appearance_signature.dart';
@@ -38,6 +39,7 @@ import '../../domain/services/hand_geometry_service.dart';
 import '../../domain/services/move_direction_display_hold.dart';
 import '../../domain/services/object_detection_request_controller.dart';
 import '../../domain/services/object_detection_service.dart';
+import '../../domain/services/object_detection_service_factory.dart';
 import '../../domain/services/object_optical_flow_tracker.dart';
 import '../../domain/services/zoom_gesture_detector.dart';
 import '../../domain/utils/camera_frame_box_mapper.dart';
@@ -46,6 +48,7 @@ import '../painters/follow_target_debug_overlay_painter.dart';
 import '../painters/follow_target_overlay_painter.dart';
 import '../painters/hand_focus_overlay_painter.dart';
 import '../painters/hand_landmark_overlay_painter.dart';
+import '../painters/object_detection_debug_painter_factory.dart';
 import '../painters/object_optical_flow_debug_painter.dart';
 import '../painters/recording_hand_landmark_overlay_painter.dart';
 import '../utils/hand_gesture_label_mapper.dart';
@@ -65,11 +68,16 @@ part 'admin_hand_gesture_live_screen_parts/live_screen_ui.dart';
 
 /// Live camera page that detects hand gestures and controls the stand/camera.
 class AdminHandGestureLiveScreen extends StatefulWidget {
-  const AdminHandGestureLiveScreen({super.key, required this.fontorback});
+  const AdminHandGestureLiveScreen({
+    super.key,
+    required this.fontorback,
+    this.objectDetectionBackend = ObjectDetectionBackend.ultralyticsYolo,
+  });
 
   /// Same flow as your previous camera page:
   /// 0 = back camera, anything else = front camera.
   final int fontorback;
+  final ObjectDetectionBackend objectDetectionBackend;
 
   /// Creates the state object that owns camera, detectors, and live UI state.
   @override
@@ -96,11 +104,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final _handGeometry = const HandGeometryService();
   final _objectTrackingFrameFactory = const ObjectTrackingFrameFactory();
   final _objectOpticalFlowTracker = ObjectOpticalFlowTracker();
-  final _objectDetectionRequests = ObjectDetectionRequestController(
-    minInterval: Platform.isIOS
-        ? HandGestureThresholds.iosObjectDetectionMinInterval
-        : HandGestureThresholds.objectDetectionMinInterval,
-  );
+  late final ObjectDetectionRequestController _objectDetectionRequests;
 
   late final FollowObjectSequenceDetector _followObjectSequenceDetector;
 
@@ -195,6 +199,12 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   @override
   void initState() {
     super.initState();
+    _objectDetectionRequests = ObjectDetectionRequestController(
+      minInterval: ObjectDetectionServiceFactory.requestMinIntervalFor(
+        backend: widget.objectDetectionBackend,
+        isIOS: Platform.isIOS,
+      ),
+    );
     WidgetsBinding.instance.addObserver(this);
     _cameraPreviewRotationController = AnimationController(
       vsync: this,
@@ -206,10 +216,9 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
       onDebug: debugPrint,
     );
 
-    _currentLensDirection =
-        widget.fontorback == 0
-            ? CameraLensDirection.back
-            : CameraLensDirection.front;
+    _currentLensDirection = widget.fontorback == 0
+        ? CameraLensDirection.back
+        : CameraLensDirection.front;
 
     _requestCameraPermission();
   }

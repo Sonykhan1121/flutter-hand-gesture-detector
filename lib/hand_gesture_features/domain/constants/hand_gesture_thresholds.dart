@@ -73,19 +73,21 @@ abstract final class HandGestureThresholds {
   static const Duration iosObjectDetectionMinInterval = Duration(
     milliseconds: 650,
   );
+  static const Duration googleMlKitObjectDetectionMinInterval = Duration(
+    milliseconds: 100,
+  );
 
-  /// `true` uses `object_detection`; `false` uses Ultralytics YOLO on both
-  /// Android (TFLite) and iOS (Core ML).
-  static const bool useObjectDetectionPackage = false;
   static const int objectDetectionMaxDimension = 640;
   static const int objectDetectionMaxResults = 5;
-  static const double objectDetectionScoreThreshold = 0.60;
+  static const double objectDetectionPackageScoreThreshold = 0.60;
   static const int iosObjectDetectionMaxDimension = 320;
-  static const double iosObjectDetectionScoreThreshold = 0.35;
+  static const double iosObjectDetectionPackageScoreThreshold = 0.35;
   static const String ultralyticsYoloModelId = 'yolo26n';
   static const bool ultralyticsYoloUseGpu = true;
+  static const double ultralyticsYoloConfidenceThreshold = 0.60;
   static const double ultralyticsYoloIouThreshold = 0.50;
   static const int ultralyticsYoloJpegQuality = 90;
+  static const double googleMlKitClassificationScoreThreshold = 0.50;
 
   /// Sparse optical-flow tracking used between object detector cycles.
   static const int objectTrackingMaxDimension = 480;

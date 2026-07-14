@@ -14,6 +14,8 @@ class StandControlHomePage extends StatefulWidget {
   final VoidCallback? onMovingDownTrainingTap;
   final VoidCallback? onVoiceCommandTap;
   final VoidCallback? onDebugCameraTap;
+  final bool showDebugCameraButton;
+  final bool showMovingDownTraining;
 
   const StandControlHomePage({
     super.key,
@@ -25,6 +27,8 @@ class StandControlHomePage extends StatefulWidget {
     this.onMovingDownTrainingTap,
     this.onVoiceCommandTap,
     this.onDebugCameraTap,
+    this.showDebugCameraButton = true,
+    this.showMovingDownTraining = true,
   });
 
   @override
@@ -80,13 +84,15 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FC),
-      floatingActionButton: FloatingActionButton(
-        key: const Key('faceObjectDebugCameraButton'),
-        heroTag: 'faceObjectDebugCameraButton',
-        tooltip: 'Face/Object Debug',
-        onPressed: widget.onDebugCameraTap,
-        child: const Icon(Icons.center_focus_strong),
-      ),
+      floatingActionButton: widget.showDebugCameraButton
+          ? FloatingActionButton(
+              key: const Key('faceObjectDebugCameraButton'),
+              heroTag: 'faceObjectDebugCameraButton',
+              tooltip: 'Face/Object Debug',
+              onPressed: widget.onDebugCameraTap,
+              child: const Icon(Icons.center_focus_strong),
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [
@@ -101,6 +107,7 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
                 disabledModes: widget.disabledModes,
                 onSelectMode: _selectMode,
                 onMovingDownTrainingTap: widget.onMovingDownTrainingTap,
+                showMovingDownTraining: widget.showMovingDownTraining,
               ),
             ),
           ],

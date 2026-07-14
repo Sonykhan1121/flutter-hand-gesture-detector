@@ -2,7 +2,11 @@ import 'dart:ui';
 
 import 'package:object_detection/object_detection.dart' as od;
 
-enum AppObjectDetectionSource { objectDetectionPackage, ultralyticsYolo }
+enum AppObjectDetectionSource {
+  objectDetectionPackage,
+  ultralyticsYolo,
+  googleMlKit,
+}
 
 /// One object candidate returned by the app's object detector.
 class AppObjectDetection {
@@ -20,7 +24,12 @@ class AppObjectDetection {
   final Rect boundingBox;
   final Size imageSize;
   final String label;
-  final double confidence;
+
+  /// Detection/classification confidence when the backend exposes one.
+  ///
+  /// ML Kit's base detector does not expose a box confidence. It is therefore
+  /// null when no classified label is returned instead of being fabricated.
+  final double? confidence;
   final int classIndex;
   final int? trackingId;
   final AppObjectDetectionSource source;
