@@ -144,10 +144,9 @@ Offset cameraFramePointToDisplayPoint({
     (point.dy / imageSize.height).clamp(0.0, 1.0),
   );
   final rotatedPoint = _rotateNormalizedPoint(normalizedPoint, rotation);
-  final displayPoint =
-      mirrorHorizontally
-          ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
-          : rotatedPoint;
+  final displayPoint = mirrorHorizontally
+      ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
+      : rotatedPoint;
 
   return Offset(
     displayPoint.dx.clamp(0.0, 1.0),

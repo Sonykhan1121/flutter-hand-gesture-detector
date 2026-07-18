@@ -146,8 +146,9 @@ class FollowObjectSequenceDetector {
         final currentReleasePoint = _handReleasePoint(hand);
         _lastVisibleReleasePoint = currentReleasePoint;
 
-        final relaxedExtendedFingerCount =
-            openPalm || closedFist ? 0 : _relaxedExtendedFingerCount(hand);
+        final relaxedExtendedFingerCount = openPalm || closedFist
+            ? 0
+            : _relaxedExtendedFingerCount(hand);
         if (relaxedExtendedFingerCount >=
             HandGestureThresholds
                 .followObjectRelaxedReleaseMinExtendedFingers) {
@@ -202,8 +203,9 @@ class FollowObjectSequenceDetector {
           break;
         }
 
-        final relaxedExtendedFingerCount =
-            openPalm ? 0 : _relaxedExtendedFingerCount(hand);
+        final relaxedExtendedFingerCount = openPalm
+            ? 0
+            : _relaxedExtendedFingerCount(hand);
         if (relaxedExtendedFingerCount >=
             HandGestureThresholds
                 .followObjectRelaxedReleaseMinExtendedFingers) {
@@ -349,23 +351,23 @@ class FollowObjectSequenceDetector {
     required bool mirrorHorizontally,
     required bool allowOppositePalmSide,
   }) {
-    final result = _openPalmGestureDetector.detect(
+    final palmDetection = _openPalmGestureDetector.detect(
       hand: hand,
       now: now,
       mirrorHorizontally: mirrorHorizontally,
       allowOppositePalmSide: allowOppositePalmSide,
     );
 
-    if (result.isDetected) {
+    if (palmDetection.isDetected) {
       _currentPackageGestureType = GestureType.openPalm;
-      _currentGestureConfidence = result.confidence;
+      _currentGestureConfidence = palmDetection.confidence;
       _debug(
         'custom openPalm detected | '
-        'confidence=${result.confidence.toStringAsFixed(2)}',
+        'confidence=${palmDetection.confidence.toStringAsFixed(2)}',
       );
     }
 
-    return result.isDetected;
+    return palmDetection.isDetected;
   }
 
   /// Checks a package gesture type against the shared confidence threshold.
@@ -433,10 +435,9 @@ class FollowObjectSequenceDetector {
   double _handReturnProgress(DateTime now) {
     final startedAt = _handMissingStartedAt;
     if (startedAt == null) return 0;
-    final duration =
-        HandGestureThresholds
-            .followObjectHandReturnGraceDuration
-            .inMilliseconds;
+    final duration = HandGestureThresholds
+        .followObjectHandReturnGraceDuration
+        .inMilliseconds;
     if (duration <= 0) return 1;
     return (now.difference(startedAt).inMilliseconds / duration)
         .clamp(0.0, 1.0)

@@ -155,7 +155,7 @@ extension on _AdminHandGestureLiveScreenState {
         ? _followObjectCandidateFaces
         : const <FollowTarget>[];
     final followTargetDebugObjectTargets = showFollowTargetDebugOverlay
-        ? _followObjectCandidateObjects
+        ? _visualObjectTargets
         : const <FollowTarget>[];
 
     return Scaffold(
@@ -268,7 +268,7 @@ extension on _AdminHandGestureLiveScreenState {
                                             if (closedFistFaceCandidates
                                                 .isNotEmpty)
                                               CustomPaint(
-                                                painter: FollowTargetDebugOverlayPainter(
+                                                painter: ObjectDetectionDebugPainter(
                                                   targets:
                                                       closedFistFaceCandidates,
                                                   showLabels: true,
@@ -301,7 +301,7 @@ extension on _AdminHandGestureLiveScreenState {
                                                 .isNotEmpty)
                                               CustomPaint(
                                                 painter:
-                                                    FollowTargetDebugOverlayPainter(
+                                                    ObjectDetectionDebugPainter(
                                                       targets:
                                                           followTargetDebugFaceTargets,
                                                       showLabels: false,
@@ -384,7 +384,7 @@ extension on _AdminHandGestureLiveScreenState {
                                 : null,
                           ),
                           const SizedBox(width: 8),
-                          cameras.length > 1
+                          _availableCameras.length > 1
                               ? RoundIconButton(
                                   icon: Icons.flip_camera_ios,
                                   tooltip: 'Switch camera',

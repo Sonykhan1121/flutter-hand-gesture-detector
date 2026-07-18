@@ -1,11 +1,12 @@
 import 'dart:ui';
-
 import 'package:object_detection/object_detection.dart' as od;
 
 enum AppObjectDetectionSource {
   objectDetectionPackage,
   ultralyticsYolo,
   googleMlKit,
+  nativeMethodChannel,
+  opencvSdk,
 }
 
 /// One object candidate returned by the app's object detector.

@@ -17,12 +17,11 @@ class MovingDownSafeAreaOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasHand = detectedHandLabel != null;
-    final safetyColor =
-        !hasHand
-            ? Colors.white54
-            : handInside
-            ? Colors.greenAccent
-            : const Color(0xFFFF453A);
+    final safetyColor = !hasHand
+        ? Colors.white54
+        : handInside
+        ? Colors.greenAccent
+        : const Color(0xFFFF453A);
     return IgnorePointer(
       child: Stack(
         fit: StackFit.expand,

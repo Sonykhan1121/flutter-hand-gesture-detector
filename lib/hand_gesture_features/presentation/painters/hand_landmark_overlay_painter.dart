@@ -22,32 +22,28 @@ class HandLandmarkOverlayPainter extends CustomPainter {
       return;
     }
 
-    final skeletonPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round
-          ..color = const Color(0xFF00FB46);
+    final skeletonPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFF00FB46);
 
-    final pointPaint =
-        Paint()
-          ..style = PaintingStyle.fill
-          ..color = const Color(0xFFFFD54F);
+    final pointPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = const Color(0xFFFFD54F);
 
-    final pointBorderPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..color = Colors.black;
+    final pointBorderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = Colors.black;
 
     // Local helper keeps all landmark drawing in the same coordinate mapping.
     Offset mapPoint(double x, double y) {
       final normalizedX = (x / imageSize.width).clamp(0.0, 1.0);
       final normalizedY = (y / imageSize.height).clamp(0.0, 1.0);
-      final mirroredPoint =
-          mirrorHorizontally
-              ? Offset(1.0 - normalizedX, normalizedY)
-              : Offset(normalizedX, normalizedY);
+      final mirroredPoint = mirrorHorizontally
+          ? Offset(1.0 - normalizedX, normalizedY)
+          : Offset(normalizedX, normalizedY);
       final displayPoint = _rotateNormalizedPoint(mirroredPoint);
 
       return Offset(

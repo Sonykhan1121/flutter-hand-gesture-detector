@@ -652,9 +652,10 @@ class HandGeometryService {
 
   /// Returns the arithmetic mean, or zero for an empty iterable.
   double average(Iterable<double> values) {
-    final list = values.toList(growable: false);
-    if (list.isEmpty) return 0;
-    return list.fold<double>(0, (sum, value) => sum + value) / list.length;
+    final samples = values.toList(growable: false);
+    if (samples.isEmpty) return 0;
+    return samples.fold<double>(0, (sum, value) => sum + value) /
+        samples.length;
   }
 
   /// Checks whether a point is inside the convex hull of other points.
@@ -669,11 +670,12 @@ class HandGeometryService {
 
   /// Builds the convex hull around points using a monotonic chain algorithm.
   List<Offset> convexHull(List<Offset> points) {
-    final sortedPoints = [...points]..sort((a, b) {
-      final xCompare = a.dx.compareTo(b.dx);
-      if (xCompare != 0) return xCompare;
-      return a.dy.compareTo(b.dy);
-    });
+    final sortedPoints = [...points]
+      ..sort((a, b) {
+        final xCompare = a.dx.compareTo(b.dx);
+        if (xCompare != 0) return xCompare;
+        return a.dy.compareTo(b.dy);
+      });
 
     final uniquePoints = <Offset>[];
 

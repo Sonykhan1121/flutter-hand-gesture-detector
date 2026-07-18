@@ -10,6 +10,7 @@ import '../enums/object_detection_backend.dart';
 import '../models/app_object_detection.dart';
 import 'appearance_signature_extractor.dart';
 import 'object_detection_service.dart';
+import 'ultralytics_yolo_model_preloader.dart';
 import 'yolo_camera_frame_encoder.dart';
 
 /// Object detector implemented only with the `ultralytics_yolo` package.
@@ -29,15 +30,18 @@ final class UltralyticsYoloObjectDetectionService
   ObjectDetectionBackend get backend => ObjectDetectionBackend.ultralyticsYolo;
 
   static Future<UltralyticsYoloObjectDetectionService> start() async {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      throw UnsupportedError(
+        'Ultralytics YOLO object detection supports Android and iOS only.',
+      );
+    }
     final yolo = YOLO(
       modelPath: HandGestureThresholds.ultralyticsYoloModelId,
       task: YOLOTask.detect,
       useGpu: HandGestureThresholds.ultralyticsYoloUseGpu,
     );
     try {
-      final metadata = await YOLO.inspectModel(
-        HandGestureThresholds.ultralyticsYoloModelId,
-      );
+      final metadata = await ultralyticsYoloModelPreloader.prepare();
       final loaded = await yolo.loadModel();
       if (!loaded) {
         throw StateError('Ultralytics YOLO model failed to load.');
@@ -45,8 +49,8 @@ final class UltralyticsYoloObjectDetectionService
       return UltralyticsYoloObjectDetectionService._(
         yolo,
         labelsFromMetadata(metadata),
-        const YoloCameraFrameEncoder(
-          maxDimension: HandGestureThresholds.objectDetectionMaxDimension,
+        YoloCameraFrameEncoder(
+          maxDimension: maxDimensionForPlatform(isIOS: Platform.isIOS),
           jpegQuality: HandGestureThresholds.ultralyticsYoloJpegQuality,
         ),
       );
@@ -56,12 +60,17 @@ final class UltralyticsYoloObjectDetectionService
     }
   }
 
+  static int maxDimensionForPlatform({required bool isIOS}) => isIOS
+      ? HandGestureThresholds.iosUltralyticsYoloMaxDimension
+      : HandGestureThresholds.ultralyticsYoloMaxDimension;
+
   @override
   Future<List<AppObjectDetection>> performDetection(
     CameraImage image, {
     od.CameraFrameRotation? rotation,
+    CameraLensDirection? lensDirection,
   }) async {
-    final encoded = _encoder.encode(
+    final encoded = await _encoder.encodeInBackground(
       frame: CameraPixelFrameData.fromCameraImage(
         image,
         isBgra: Platform.isIOS || Platform.isMacOS,
@@ -70,7 +79,7 @@ final class UltralyticsYoloObjectDetectionService
     );
     if (encoded == null || isClosed) return const [];
 
-    final result = await _yolo.predict(
+    final prediction = await _yolo.predict(
       encoded.jpegBytes,
       confidenceThreshold:
           HandGestureThresholds.ultralyticsYoloConfidenceThreshold,
@@ -78,7 +87,7 @@ final class UltralyticsYoloObjectDetectionService
     );
     if (isClosed) return const [];
     return mapDetections(
-      result['boxes'] as List<dynamic>? ?? const [],
+      prediction['boxes'] as List<dynamic>? ?? const [],
       imageSize: encoded.imageSize,
       modelLabels: _modelLabels,
     );
@@ -162,10 +171,10 @@ final class UltralyticsYoloObjectDetectionService
 
   static String _normalizedLabel(String label) => label.trim().toLowerCase();
 
-  static double? _finiteDouble(dynamic value) {
-    if (value is! num) return null;
-    final result = value.toDouble();
-    return result.isFinite ? result : null;
+  static double? _finiteDouble(dynamic rawValue) {
+    if (rawValue is! num) return null;
+    final number = rawValue.toDouble();
+    return number.isFinite ? number : null;
   }
 
   @override

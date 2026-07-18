@@ -21,13 +21,16 @@ class CustomGestureDetectionResult {
 
   /// True when at least one custom gesture is active.
   bool get hasAny => labels.isNotEmpty;
+
   /// True when exactly one custom gesture is active.
   bool get hasSingle => labels.length == 1;
+
   /// True when multiple custom gestures overlap in the same frame.
   bool get hasOverlap => labels.length > 1;
 
   /// True when return-to-main is the only custom gesture.
   bool get isOnlyCancelEverything => isCancelEverything && hasSingle;
+
   /// True when call-me is the only custom gesture.
   bool get isOnlyCallMe => isCallMe && hasSingle;
 

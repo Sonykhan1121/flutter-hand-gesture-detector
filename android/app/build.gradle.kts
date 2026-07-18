@@ -64,6 +64,12 @@ android {
         }
     }
 
+    packaging {
+        jniLibs {
+            pickFirsts += "**/libc++_shared.so"
+        }
+    }
+
     sourceSets.getByName("main").jniLibs.srcDir(
         layout.buildDirectory.dir("generated/classicLiteRtJni"),
     )

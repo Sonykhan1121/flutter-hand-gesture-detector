@@ -22,13 +22,12 @@ class FollowTargetOverlayPainter extends CustomPainter {
     final targetRect = _displayRect(size);
     if (targetRect.isEmpty) return;
 
-    final overlayPath =
-        Path()
-          ..fillType = PathFillType.evenOdd
-          ..addRect(Offset.zero & size)
-          ..addRRect(
-            RRect.fromRectAndRadius(targetRect, const Radius.circular(14)),
-          );
+    final overlayPath = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Offset.zero & size)
+      ..addRRect(
+        RRect.fromRectAndRadius(targetRect, const Radius.circular(14)),
+      );
 
     canvas.drawPath(
       overlayPath,
@@ -41,26 +40,23 @@ class FollowTargetOverlayPainter extends CustomPainter {
             ? const Color(0xFF46D8FF)
             : const Color(0xFF00FB46));
 
-    final glowPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5
-          ..strokeCap = StrokeCap.round
-          ..color = color.withValues(alpha: 0.20);
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round
+      ..color = color.withValues(alpha: 0.20);
 
-    final borderPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.2
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final borderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..color = color;
 
-    final cornerPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.6
-          ..strokeCap = StrokeCap.round
-          ..color = Colors.white;
+    final cornerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.6
+      ..strokeCap = StrokeCap.round
+      ..color = Colors.white;
 
     final rrect = RRect.fromRectAndRadius(
       targetRect,

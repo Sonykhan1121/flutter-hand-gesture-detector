@@ -113,4 +113,32 @@ void main() {
       }
     });
   });
+
+  group('displayPointToCameraFramePoint', () {
+    test('round-trips every rotation and front-camera mirroring', () {
+      const rawPoint = Offset(0.23, 0.71);
+
+      for (final rotation in <CameraFrameRotation?>[
+        null,
+        ...CameraFrameRotation.values,
+      ]) {
+        for (final mirrored in [false, true]) {
+          final display = cameraFramePointToDisplayPoint(
+            point: const Offset(230, 355),
+            imageSize: const Size(1000, 500),
+            rotation: rotation,
+            mirrorHorizontally: mirrored,
+          );
+          final restored = displayPointToCameraFramePoint(
+            point: display,
+            rotation: rotation,
+            mirrorHorizontally: mirrored,
+          );
+
+          expect(restored.dx, closeTo(rawPoint.dx, 0.0001));
+          expect(restored.dy, closeTo(rawPoint.dy, 0.0001));
+        }
+      }
+    });
+  });
 }

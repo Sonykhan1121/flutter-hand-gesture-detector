@@ -59,10 +59,10 @@ extension on _AdminHandGestureLiveScreenState {
   /// Loads device cameras before creating the selected camera controller.
   Future<void> _loadCameras() async {
     try {
-      cameras = await availableCameras();
+      _availableCameras = await availableCameras();
       await _initializeCamera();
-    } catch (e, st) {
-      debugPrint('Error loading cameras: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Error loading cameras: $error\n$stackTrace');
       _setCameraFailure(
         title: 'Camera unavailable',
         message: 'Could not load cameras on this device.',
@@ -85,7 +85,7 @@ extension on _AdminHandGestureLiveScreenState {
   /// Creates the active camera controller and starts the image stream.
   Future<void> _initializeCamera() async {
     try {
-      if (cameras.isEmpty) {
+      if (_availableCameras.isEmpty) {
         _setCameraFailure(
           title: 'No camera found',
           message: 'This device does not report an available camera.',
@@ -99,21 +99,20 @@ extension on _AdminHandGestureLiveScreenState {
 
       // Pick the requested lens direction when available, otherwise keep the
       // app usable by falling back to the first camera.
-      final selectedCamera = cameras.firstWhere(
+      final selectedCamera = _availableCameras.firstWhere(
         (camera) => camera.lensDirection == _currentLensDirection,
-        orElse: () => cameras.first,
+        orElse: () => _availableCameras.first,
       );
 
       final controller = CameraController(
         selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup:
-            Platform.isIOS
-                ? ImageFormatGroup.bgra8888
-                : Platform.isAndroid
-                ? ImageFormatGroup.yuv420
-                : ImageFormatGroup.bgra8888,
+        imageFormatGroup: Platform.isIOS
+            ? ImageFormatGroup.bgra8888
+            : Platform.isAndroid
+            ? ImageFormatGroup.yuv420
+            : ImageFormatGroup.bgra8888,
       );
 
       _controller = controller;
@@ -180,8 +179,8 @@ extension on _AdminHandGestureLiveScreenState {
       });
 
       debugPrint('Camera initialized successfully');
-    } catch (e, st) {
-      debugPrint('Error initializing camera: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Error initializing camera: $error\n$stackTrace');
       await _cleanupCamera();
       _setCameraFailure(
         title: 'Camera initialization failed',
@@ -212,14 +211,14 @@ extension on _AdminHandGestureLiveScreenState {
       } else if (_isStreaming && controller.value.isInitialized) {
         await controller.stopImageStream();
       }
-    } catch (e) {
-      debugPrint('Error stopping old camera activity: $e');
+    } catch (error) {
+      debugPrint('Error stopping old camera activity: $error');
     }
 
     try {
       await controller.dispose();
-    } catch (e) {
-      debugPrint('Error disposing old controller: $e');
+    } catch (error) {
+      debugPrint('Error disposing old controller: $error');
     }
 
     _controller = null;
@@ -243,14 +242,14 @@ extension on _AdminHandGestureLiveScreenState {
       } else if (_isStreaming && controller.value.isInitialized) {
         await controller.stopImageStream();
       }
-    } catch (e) {
-      debugPrint('Error stopping camera activity in dispose: $e');
+    } catch (error) {
+      debugPrint('Error stopping camera activity in dispose: $error');
     }
 
     try {
       await controller.dispose();
-    } catch (e) {
-      debugPrint('Error disposing controller in dispose: $e');
+    } catch (error) {
+      debugPrint('Error disposing controller in dispose: $error');
     }
   }
 
@@ -261,8 +260,8 @@ extension on _AdminHandGestureLiveScreenState {
 
     try {
       await controller.setFlashMode(FlashMode.off);
-    } catch (e) {
-      debugPrint('Error setting flash mode: $e');
+    } catch (error) {
+      debugPrint('Error setting flash mode: $error');
     }
   }
 
@@ -287,8 +286,8 @@ extension on _AdminHandGestureLiveScreenState {
       });
 
       debugPrint('Camera stream started');
-    } catch (e, st) {
-      debugPrint('Error starting camera stream: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Error starting camera stream: $error\n$stackTrace');
       if (!mounted) return;
 
       _setScreenState(() {
@@ -316,8 +315,8 @@ extension on _AdminHandGestureLiveScreenState {
     try {
       await controller.stopImageStream();
       debugPrint('Camera stream stopped');
-    } catch (e, st) {
-      debugPrint('Error stopping camera stream: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Error stopping camera stream: $error\n$stackTrace');
     } finally {
       _customGestureDetector.clearState();
       _directionGestureDetector.clearState();
@@ -334,7 +333,7 @@ extension on _AdminHandGestureLiveScreenState {
 
   /// True when it is safe for the UI to switch front/back cameras.
   bool get _canSwitchCamera {
-    return cameras.length > 1 &&
+    return _availableCameras.length > 1 &&
         !_isSwitchingCamera &&
         !_isRecordingActionInProgress &&
         !_isStartingVideoRecording &&
@@ -358,10 +357,9 @@ extension on _AdminHandGestureLiveScreenState {
   void _toggleCameraPreviewOrientation() {
     if (!_canRotateCameraPreview) return;
 
-    final nextMode =
-        _cameraPreviewMode.isLandscape
-            ? CameraPreviewMode.portrait
-            : CameraPreviewMode.landscape;
+    final nextMode = _cameraPreviewMode.isLandscape
+        ? CameraPreviewMode.portrait
+        : CameraPreviewMode.landscape;
 
     _setScreenState(() {
       _cameraPreviewMode = nextMode;
@@ -387,10 +385,9 @@ extension on _AdminHandGestureLiveScreenState {
 
     _setScreenState(() {
       _isChangingPreviewOrientation = false;
-      _gestureText =
-          _cameraPreviewMode.isLandscape
-              ? 'Landscape camera — show your hand'
-              : 'Portrait camera — show your hand';
+      _gestureText = _cameraPreviewMode.isLandscape
+          ? 'Landscape camera — show your hand'
+          : 'Portrait camera — show your hand';
       _gestureConfidence = 0;
     });
   }
@@ -467,7 +464,7 @@ extension on _AdminHandGestureLiveScreenState {
 
   /// Switches lens direction and optionally restarts an interrupted recording.
   Future<void> _switchCamera({bool restartRecordingAfterSwitch = false}) async {
-    if (cameras.length < 2 || _isSwitchingCamera) return;
+    if (_availableCameras.length < 2 || _isSwitchingCamera) return;
 
     final activeController = _controller;
     final shouldRestartRecording =
@@ -518,10 +515,9 @@ extension on _AdminHandGestureLiveScreenState {
       _pendingZoomLevel = null;
     });
 
-    _currentLensDirection =
-        _currentLensDirection == CameraLensDirection.front
-            ? CameraLensDirection.back
-            : CameraLensDirection.front;
+    _currentLensDirection = _currentLensDirection == CameraLensDirection.front
+        ? CameraLensDirection.back
+        : CameraLensDirection.front;
 
     await _initializeCamera();
 
@@ -543,14 +539,14 @@ extension on _AdminHandGestureLiveScreenState {
   Future<void> _cleanupCamera() async {
     try {
       await _stopCameraStream();
-    } catch (e) {
-      debugPrint('Error stopping stream during cleanup: $e');
+    } catch (error) {
+      debugPrint('Error stopping stream during cleanup: $error');
     }
 
     try {
       await _controller?.dispose();
-    } catch (e) {
-      debugPrint('Error disposing controller during cleanup: $e');
+    } catch (error) {
+      debugPrint('Error disposing controller during cleanup: $error');
     }
 
     _controller = null;

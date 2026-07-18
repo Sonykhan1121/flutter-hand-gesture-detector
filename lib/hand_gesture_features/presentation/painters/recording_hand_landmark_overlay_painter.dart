@@ -27,23 +27,20 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Offset.zero & size);
 
-    final skeletonPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round
-          ..color = const Color(0xFF00FB46);
+    final skeletonPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFF00FB46);
 
-    final pointPaint =
-        Paint()
-          ..style = PaintingStyle.fill
-          ..color = const Color(0xFFFFD54F);
+    final pointPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = const Color(0xFFFFD54F);
 
-    final pointBorderPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..color = Colors.black;
+    final pointBorderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = Colors.black;
 
     final effectiveQuarterTurns = _bestQuarterTurnsForCanvas(size);
     final sourceSize = _sourceSizeForTurns(effectiveQuarterTurns);
@@ -61,10 +58,9 @@ class RecordingHandLandmarkOverlayPainter extends CustomPainter {
         effectiveQuarterTurns,
       );
 
-      final displayPoint =
-          mirrorHorizontally
-              ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
-              : rotatedPoint;
+      final displayPoint = mirrorHorizontally
+          ? Offset(1.0 - rotatedPoint.dx, rotatedPoint.dy)
+          : rotatedPoint;
 
       return _mapCoverPoint(
         normalizedPoint: displayPoint,

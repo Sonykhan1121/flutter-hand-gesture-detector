@@ -258,8 +258,8 @@ extension on _AdminHandGestureLiveScreenState {
         _gestureText = 'Recording';
         _gestureConfidence = 1;
       });
-    } catch (e, st) {
-      debugPrint('Video recording start failed: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Video recording start failed: $error\n$stackTrace');
       _showSnackBar('Could not start recording.');
       unawaited(_unlockRecordingOrientation(controller));
       _resetRecordingTimer();
@@ -369,8 +369,8 @@ extension on _AdminHandGestureLiveScreenState {
       });
 
       _showSnackBar(wasPaused ? 'Recording resumed.' : 'Recording paused.');
-    } catch (e, st) {
-      debugPrint('Video recording pause toggle failed: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Video recording pause toggle failed: $error\n$stackTrace');
       _showSnackBar('Could not update recording.');
     }
   }
@@ -429,8 +429,8 @@ extension on _AdminHandGestureLiveScreenState {
           _gestureConfidence = 0;
         }
       });
-    } catch (e, st) {
-      debugPrint('Video recording stop failed: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Video recording stop failed: $error\n$stackTrace');
       _showSnackBar('Could not stop recording.');
 
       if (mounted && _controller == controller) {
@@ -459,8 +459,8 @@ extension on _AdminHandGestureLiveScreenState {
 
       await controller.lockCaptureOrientation(recordingOrientation);
       _debugCameraOrientation('after-lock-orientation', controller: controller);
-    } catch (e) {
-      debugPrint('Recording orientation lock ignored: $e');
+    } catch (error) {
+      debugPrint('Recording orientation lock ignored: $error');
     }
   }
 
@@ -478,8 +478,8 @@ extension on _AdminHandGestureLiveScreenState {
           controller: controller,
         );
       }
-    } catch (e) {
-      debugPrint('Recording orientation unlock ignored: $e');
+    } catch (error) {
+      debugPrint('Recording orientation unlock ignored: $error');
     }
   }
 
@@ -497,26 +497,27 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final value = activeController.value;
-    final previewSize = value.previewSize;
-    final previewText =
-        previewSize == null
-            ? ''
-            : ', preview=${previewSize.width.toStringAsFixed(0)}x'
-                '${previewSize.height.toStringAsFixed(0)}, '
-                'aspect=${(previewSize.width / previewSize.height).toStringAsFixed(4)}';
-    final imageText =
-        image == null ? '' : ', image=${image.width}x${image.height}';
-    final frameRotationText =
-        frameRotation == null ? '' : ', frameRotation=$frameRotation';
+    final cameraState = activeController.value;
+    final previewSize = cameraState.previewSize;
+    final previewText = previewSize == null
+        ? ''
+        : ', preview=${previewSize.width.toStringAsFixed(0)}x'
+              '${previewSize.height.toStringAsFixed(0)}, '
+              'aspect=${(previewSize.width / previewSize.height).toStringAsFixed(4)}';
+    final imageText = image == null
+        ? ''
+        : ', image=${image.width}x${image.height}';
+    final frameRotationText = frameRotation == null
+        ? ''
+        : ', frameRotation=$frameRotation';
 
     debugPrint(
       '[CameraOrientation][$label] '
-      'device=${value.deviceOrientation}, '
-      'locked=${value.lockedCaptureOrientation}, '
-      'recording=${value.recordingOrientation}, '
-      'isRecording=${value.isRecordingVideo}, '
-      'isStreaming=${value.isStreamingImages}, '
+      'device=${cameraState.deviceOrientation}, '
+      'locked=${cameraState.lockedCaptureOrientation}, '
+      'recording=${cameraState.recordingOrientation}, '
+      'isRecording=${cameraState.isRecordingVideo}, '
+      'isStreaming=${cameraState.isStreamingImages}, '
       'lens=${activeController.description.lensDirection}, '
       'sensor=${activeController.description.sensorOrientation}'
       '$previewText'
@@ -549,8 +550,8 @@ extension on _AdminHandGestureLiveScreenState {
       debugPrint('Recording copied to Downloads: ${copiedFile.path}');
 
       return XFile(copiedFile.path);
-    } catch (e, st) {
-      debugPrint('Recording copy to Downloads failed: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Recording copy to Downloads failed: $error\n$stackTrace');
       return file;
     }
   }
@@ -686,30 +687,28 @@ extension on _AdminHandGestureLiveScreenState {
             ),
           ),
           const Spacer(),
-          if (cameras.length > 1) ...[
+          if (_availableCameras.length > 1) ...[
             _recordingIconButton(
               icon: Icons.flip_camera_ios_rounded,
               tooltip: 'Switch camera',
-              onPressed:
-                  _canSwitchCamera
-                      ? () => unawaited(
-                        _switchCamera(restartRecordingAfterSwitch: true),
-                      )
-                      : null,
+              onPressed: _canSwitchCamera
+                  ? () => unawaited(
+                      _switchCamera(restartRecordingAfterSwitch: true),
+                    )
+                  : null,
             ),
             const SizedBox(width: 8),
           ],
           _recordingControlButton(
             icon: isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
             label: isPaused ? 'Resume' : 'Pause',
-            onPressed:
-                _isRecordingActionInProgress
-                    ? null
-                    : () => unawaited(
-                      _runRecordingGestureAction(
-                        _RecordingGestureAction.togglePause,
-                      ),
+            onPressed: _isRecordingActionInProgress
+                ? null
+                : () => unawaited(
+                    _runRecordingGestureAction(
+                      _RecordingGestureAction.togglePause,
                     ),
+                  ),
           ),
           const SizedBox(width: 8),
           _recordingControlButton(
@@ -717,12 +716,11 @@ extension on _AdminHandGestureLiveScreenState {
             label: 'Stop',
             foregroundColor: Colors.white,
             backgroundColor: Colors.redAccent,
-            onPressed:
-                _isRecordingActionInProgress
-                    ? null
-                    : () => unawaited(
-                      _runRecordingGestureAction(_RecordingGestureAction.stop),
-                    ),
+            onPressed: _isRecordingActionInProgress
+                ? null
+                : () => unawaited(
+                    _runRecordingGestureAction(_RecordingGestureAction.stop),
+                  ),
           ),
         ],
       ),

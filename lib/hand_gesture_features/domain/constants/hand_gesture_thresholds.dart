@@ -76,18 +76,103 @@ abstract final class HandGestureThresholds {
   static const Duration googleMlKitObjectDetectionMinInterval = Duration(
     milliseconds: 100,
   );
+  static const Duration iosGoogleMlKitObjectDetectionMinInterval = Duration(
+    milliseconds: 200,
+  );
+  static const Duration googleMlKitEmptyResultHoldDuration = Duration(
+    milliseconds: 600,
+  );
+  static const int googleMlKitEmptyResultMissLimit = 3;
+  static const double googleMlKitBoxSmoothingAlpha = 0.36;
+  static const double googleMlKitFastBoxSmoothingAlpha = 0.76;
+  static const double googleMlKitFastMotionThreshold = 0.06;
+  static const double googleMlKitTrackMaxCenterDistance = 0.28;
+  static const Duration googleMlKitPartialTrackHoldDuration = Duration(
+    milliseconds: 400,
+  );
+  static const int googleMlKitPartialTrackMissLimit = 3;
+  static const Duration nativeMethodChannelObjectDetectionMinInterval =
+      Duration(milliseconds: 250);
+  static const Duration opencvSdkObjectDetectionMinInterval = Duration(
+    milliseconds: 400,
+  );
 
   static const int objectDetectionMaxDimension = 640;
   static const int objectDetectionMaxResults = 5;
   static const double objectDetectionPackageScoreThreshold = 0.60;
+  static const Duration objectDetectionPackageEmptyResultHoldDuration =
+      Duration(milliseconds: 800);
+  static const int objectDetectionPackageEmptyResultMissLimit = 3;
+  static const double objectDetectionPackageBoxSmoothingAlpha = 0.45;
+  static const double objectDetectionPackageFastBoxSmoothingAlpha = 0.78;
+  static const double objectDetectionPackageFastMotionThreshold = 0.08;
+  static const double objectDetectionPackageTrackMaxCenterDistance = 0.24;
+  static const Duration objectDetectionPackagePartialTrackHoldDuration =
+      Duration(milliseconds: 650);
+  static const int objectDetectionPackagePartialTrackMissLimit = 2;
   static const int iosObjectDetectionMaxDimension = 320;
   static const double iosObjectDetectionPackageScoreThreshold = 0.35;
   static const String ultralyticsYoloModelId = 'yolo26n';
   static const bool ultralyticsYoloUseGpu = true;
-  static const double ultralyticsYoloConfidenceThreshold = 0.60;
+  static const int ultralyticsYoloMaxDimension = 640;
+  static const int iosUltralyticsYoloMaxDimension = 416;
+  static const double ultralyticsYoloConfidenceThreshold = 0.45;
   static const double ultralyticsYoloIouThreshold = 0.50;
   static const int ultralyticsYoloJpegQuality = 90;
+  static const Duration ultralyticsYoloEmptyResultHoldDuration = Duration(
+    milliseconds: 1200,
+  );
+  static const int ultralyticsYoloEmptyResultMissLimit = 3;
+  static const double ultralyticsYoloBoxSmoothingAlpha = 0.42;
+  static const double ultralyticsYoloFastBoxSmoothingAlpha = 0.78;
+  static const double ultralyticsYoloFastMotionThreshold = 0.08;
+  static const double ultralyticsYoloTrackMaxCenterDistance = 0.24;
+  static const Duration ultralyticsYoloPartialTrackHoldDuration = Duration(
+    milliseconds: 900,
+  );
+  static const int ultralyticsYoloPartialTrackMissLimit = 2;
+  static const Duration ultralyticsYoloStartupRetryDelay = Duration(seconds: 5);
   static const double googleMlKitClassificationScoreThreshold = 0.50;
+  static const String nativeMethodChannelModelAsset =
+      'assets/models/yolov8n_oiv7.tflite';
+  static const int nativeMethodChannelExpectedClassCount = 601;
+  static const bool nativeMethodChannelUseGpu = true;
+  static const double nativeMethodChannelConfidenceThreshold = 0.25;
+  static const double nativeMethodChannelIouThreshold = 0.50;
+  static const String opencvSdkModelAsset = 'assets/models/yolov8n_oiv7.onnx';
+  static const String opencvSdkMetadataAsset =
+      'assets/models/yolov8n_oiv7.tflite';
+  static const int opencvSdkExpectedClassCount = 601;
+  static const double opencvSdkConfidenceThreshold = 0.25;
+  static const double opencvSdkIouThreshold = 0.50;
+  static const Duration opencvSdkEmptyResultHoldDuration = Duration(
+    milliseconds: 1000,
+  );
+  static const int opencvSdkEmptyResultMissLimit = 3;
+  static const double opencvSdkBoxSmoothingAlpha = 0.42;
+  static const double opencvSdkFastBoxSmoothingAlpha = 0.78;
+  static const double opencvSdkFastMotionThreshold = 0.08;
+  static const double opencvSdkTrackMaxCenterDistance = 0.24;
+  static const Duration opencvSdkPartialTrackHoldDuration = Duration(
+    milliseconds: 800,
+  );
+  static const int opencvSdkPartialTrackMissLimit = 2;
+  static const Duration opencvSdkStartupRetryDelay = Duration(seconds: 5);
+  static const Duration nativeMethodChannelEmptyResultHoldDuration = Duration(
+    milliseconds: 800,
+  );
+  static const int nativeMethodChannelEmptyResultMissLimit = 3;
+  static const double nativeMethodChannelBoxSmoothingAlpha = 0.42;
+  static const double nativeMethodChannelFastBoxSmoothingAlpha = 0.78;
+  static const double nativeMethodChannelFastMotionThreshold = 0.08;
+  static const double nativeMethodChannelTrackMaxCenterDistance = 0.24;
+  static const Duration nativeMethodChannelPartialTrackHoldDuration = Duration(
+    milliseconds: 650,
+  );
+  static const int nativeMethodChannelPartialTrackMissLimit = 2;
+  static const Duration nativeMethodChannelStartupRetryDelay = Duration(
+    seconds: 5,
+  );
 
   /// Sparse optical-flow tracking used between object detector cycles.
   static const int objectTrackingMaxDimension = 480;

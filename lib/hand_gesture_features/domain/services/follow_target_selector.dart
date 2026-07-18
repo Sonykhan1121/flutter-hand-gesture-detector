@@ -183,8 +183,8 @@ class FollowTargetSelector {
     if (previous != null && previous.isValid(now: now, handPoint: handPoint)) {
       final previousDetectionCycleAt =
           previous.candidate.type == FollowTargetType.face
-              ? facesDetectionCycleAt
-              : objectsDetectionCycleAt;
+          ? facesDetectionCycleAt
+          : objectsDetectionCycleAt;
       final hasNewPreviousDetectionCycle =
           previousDetectionCycleAt != null &&
           previousDetectionCycleAt != previous.lastDetectionCycle;
@@ -227,18 +227,16 @@ class FollowTargetSelector {
     }
 
     return FollowTargetSelectionMemoryUpdate(
-      memory:
-          closest == null
-              ? null
-              : FollowTargetSelectionMemory.firstObservation(
-                candidate: closest,
-                observedAt: now,
-                handPoint: handPoint,
-                detectionCycleAt:
-                    closest.type == FollowTargetType.face
-                        ? facesDetectionCycleAt
-                        : objectsDetectionCycleAt,
-              ),
+      memory: closest == null
+          ? null
+          : FollowTargetSelectionMemory.firstObservation(
+              candidate: closest,
+              observedAt: now,
+              handPoint: handPoint,
+              detectionCycleAt: closest.type == FollowTargetType.face
+                  ? facesDetectionCycleAt
+                  : objectsDetectionCycleAt,
+            ),
       isCandidateHidden: false,
     );
   }

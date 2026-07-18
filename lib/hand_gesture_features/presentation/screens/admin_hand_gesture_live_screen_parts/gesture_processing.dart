@@ -72,8 +72,8 @@ extension on _AdminHandGestureLiveScreenState {
         rotation: rotation,
         objectTrackingFrame: objectTrackingFrame,
       );
-    } catch (e, st) {
-      debugPrint('Hand gesture detection error: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Hand gesture detection error: $error\n$stackTrace');
     } finally {
       _isProcessing = false;
     }
@@ -540,13 +540,6 @@ extension on _AdminHandGestureLiveScreenState {
       }
     } else if (followObjectSequence.isTargetSelectionActive) {
       _resetHandReturnGraceSnapshot();
-      final detections = await _refreshFollowObjectTargetCandidates(
-        image: image,
-        rotation: rotation,
-        now: now,
-        objectTrackingFrame: objectTrackingFrame,
-      );
-      if (!mounted) return;
       final handBox = bestHand.boundingBox;
       final predictedReleasePoint = _handPointToDisplayPoint(
         Offset(
@@ -555,6 +548,13 @@ extension on _AdminHandGestureLiveScreenState {
         ),
         detectionImageSize,
       );
+      final detections = await _refreshFollowObjectTargetCandidates(
+        image: image,
+        rotation: rotation,
+        now: now,
+        objectTrackingFrame: objectTrackingFrame,
+      );
+      if (!mounted) return;
       _updateFollowTargetSelectionMemory(
         handPoint: predictedReleasePoint,
         now: now,
@@ -1345,7 +1345,7 @@ extension on _AdminHandGestureLiveScreenState {
   }) async {
     if (!Platform.isAndroid && !Platform.isIOS) return null;
 
-    final inputRotation = _inputImageRotationFromCameraFrameRotation(rotation);
+    final inputRotation = mlKitInputRotation(rotation);
     final imageSize = Size(image.width.toDouble(), image.height.toDouble());
     var faces = const <FollowTarget>[];
     var objects = const <FollowTarget>[];
@@ -1355,7 +1355,12 @@ extension on _AdminHandGestureLiveScreenState {
       final faceDetector = _faceDetector;
       if (faceDetector != null) {
         try {
-          final inputImage = _inputImageFromCameraImage(image, rotation);
+          final inputImage = mlKitFaceInputImage(
+            image,
+            rotation: rotation,
+            isAndroid: Platform.isAndroid,
+            isIOS: Platform.isIOS,
+          );
           final detectedFaces = inputImage == null
               ? const <ml_face.Face>[]
               : await faceDetector.processImage(inputImage);
@@ -1371,8 +1376,8 @@ extension on _AdminHandGestureLiveScreenState {
               ),
           ];
           facesDetectedAt = now;
-        } catch (e, st) {
-          debugPrint('Face detection ignored: $e\n$st');
+        } catch (error, stackTrace) {
+          debugPrint('Face detection ignored: $error\n$stackTrace');
         }
       }
     }
@@ -1419,10 +1424,14 @@ extension on _AdminHandGestureLiveScreenState {
       request = _objectDetectionRequests.submit(
         now: now,
         detectorBusy: objectDetector.isBusy,
-        detect: () => objectDetector.detect(image, rotation: frameRotation),
+        detect: () => objectDetector.detect(
+          image,
+          rotation: frameRotation,
+          lensDirection: _currentLensDirection,
+        ),
       );
-    } catch (e, st) {
-      debugPrint('Object detection ignored: $e\n$st');
+    } catch (error, stackTrace) {
+      debugPrint('Object detection ignored: $error\n$stackTrace');
     }
 
     if (request != null) {
@@ -1432,6 +1441,12 @@ extension on _AdminHandGestureLiveScreenState {
               if (generation != _objectDetectionGeneration) return;
 
               final completedAt = DateTime.now();
+              if (!_objectDetectionResultStabilizer.shouldReplace(
+                hasDetections: detectedObjects.isNotEmpty,
+                completedAt: completedAt,
+              )) {
+                return;
+              }
               final batch = ObjectDetectionBatch(
                 detections: detectedObjects,
                 sourceFrameId: sourceFrameId,
@@ -1453,6 +1468,15 @@ extension on _AdminHandGestureLiveScreenState {
                 sourceFrameId: batch.sourceFrameId,
               );
               _cachedObjectTargets = objects;
+              if (objects.isEmpty) {
+                _objectDetectionTargetSmoother.clear();
+                _visualObjectTargets = const [];
+              } else {
+                _visualObjectTargets = _objectDetectionTargetSmoother.update(
+                  objects,
+                  completedAt: completedAt,
+                );
+              }
 
               if (_followObjectSequenceDetector.isTargetSelectionActive ||
                   _lockedFollowTarget?.type == FollowTargetType.object) {
@@ -1462,9 +1486,9 @@ extension on _AdminHandGestureLiveScreenState {
               if (!mounted) return;
               _setScreenState(() {});
             })
-            .catchError((Object e, StackTrace st) {
+            .catchError((Object error, StackTrace stackTrace) {
               if (generation != _objectDetectionGeneration) return;
-              debugPrint('Object detection ignored: $e\n$st');
+              debugPrint('Object detection ignored: $error\n$stackTrace');
             }),
       );
     }
@@ -1500,10 +1524,12 @@ extension on _AdminHandGestureLiveScreenState {
     required CameraFrameRotation? frameRotation,
     required DateTime detectedAt,
   }) {
-    final displayBox = _mlKitRectToDisplayBox(
+    final displayBox = mlKitDisplayRect(
       face.boundingBox,
       imageSize: imageSize,
       rotation: inputRotation,
+      isIOS: Platform.isIOS,
+      mirrorHorizontally: _shouldMirrorPreviewCoordinates(_controller),
     );
     return FollowTarget(
       type: FollowTargetType.face,
@@ -1572,6 +1598,21 @@ extension on _AdminHandGestureLiveScreenState {
 
   /// Starts the object detector without blocking the live camera frame.
   void _ensureObjectDetectionServiceStarted() {
+    final failedAt = _objectDetectionServiceStartupFailedAt;
+    if (_objectDetectionServiceStartupFailed && failedAt != null) {
+      final retryDelay = switch (widget.objectDetectionBackend) {
+        ObjectDetectionBackend.ultralyticsYolo =>
+          HandGestureThresholds.ultralyticsYoloStartupRetryDelay,
+        ObjectDetectionBackend.nativeMethodChannel =>
+          HandGestureThresholds.nativeMethodChannelStartupRetryDelay,
+        ObjectDetectionBackend.opencvSdk =>
+          HandGestureThresholds.opencvSdkStartupRetryDelay,
+        _ => Duration.zero,
+      };
+      if (DateTime.now().difference(failedAt) < retryDelay) return;
+      _objectDetectionServiceStartupFailed = false;
+      _objectDetectionServiceStartupFailedAt = null;
+    }
     if (_objectDetectionService != null ||
         _objectDetectionServiceStartup != null) {
       return;
@@ -1593,9 +1634,11 @@ extension on _AdminHandGestureLiveScreenState {
 
             _objectDetectionService = objectDetector;
           })
-          .catchError((Object e, StackTrace st) {
+          .catchError((Object error, StackTrace stackTrace) {
             if (generation != _objectDetectionGeneration) return;
-            debugPrint('Object detector startup ignored: $e\n$st');
+            _objectDetectionServiceStartupFailed = true;
+            _objectDetectionServiceStartupFailedAt = DateTime.now();
+            debugPrint('Object detector startup ignored: $error\n$stackTrace');
           })
           .whenComplete(() {
             if (identical(_objectDetectionServiceStartup, startup)) {
@@ -1609,7 +1652,10 @@ extension on _AdminHandGestureLiveScreenState {
   void _clearObjectDetectionCache() {
     _objectDetectionGeneration++;
     _objectDetectionRequests.clear();
+    _objectDetectionResultStabilizer.clear();
+    _objectDetectionTargetSmoother.clear();
     _cachedObjectTargets = const [];
+    _visualObjectTargets = const [];
     _cachedObjectDetectionBatch = null;
   }
 
@@ -1621,6 +1667,8 @@ extension on _AdminHandGestureLiveScreenState {
     final startup = _objectDetectionServiceStartup;
     _objectDetectionService = null;
     _objectDetectionServiceStartup = null;
+    _objectDetectionServiceStartupFailed = false;
+    _objectDetectionServiceStartupFailedAt = null;
 
     if (objectDetector != null) {
       unawaited(objectDetector.close());
@@ -1634,200 +1682,10 @@ extension on _AdminHandGestureLiveScreenState {
                 return startedDetector.close();
               }
             })
-            .catchError((Object e, StackTrace st) {
-              debugPrint('Object detector close ignored: $e\n$st');
+            .catchError((Object error, StackTrace stackTrace) {
+              debugPrint('Object detector close ignored: $error\n$stackTrace');
             }),
       );
-    }
-  }
-
-  /// Converts a camera frame into the ML Kit input format for the platform.
-  ml_face.InputImage? _inputImageFromCameraImage(
-    CameraImage image,
-    CameraFrameRotation? rotation,
-  ) {
-    if (Platform.isAndroid) {
-      final bytes = _androidNv21Bytes(image);
-      if (bytes == null) return null;
-
-      return ml_face.InputImage.fromBytes(
-        bytes: bytes,
-        metadata: ml_face.InputImageMetadata(
-          size: Size(image.width.toDouble(), image.height.toDouble()),
-          rotation: _inputImageRotationFromCameraFrameRotation(rotation),
-          format: ml_face.InputImageFormat.nv21,
-          bytesPerRow: image.planes.first.bytesPerRow,
-        ),
-      );
-    }
-
-    if (Platform.isIOS) {
-      final format = ml_face.InputImageFormatValue.fromRawValue(
-        image.format.raw,
-      );
-      if (format != ml_face.InputImageFormat.bgra8888 ||
-          image.planes.length != 1) {
-        return null;
-      }
-
-      final plane = image.planes.first;
-      return ml_face.InputImage.fromBytes(
-        bytes: plane.bytes,
-        metadata: ml_face.InputImageMetadata(
-          size: Size(image.width.toDouble(), image.height.toDouble()),
-          rotation: _inputImageRotationFromCameraFrameRotation(rotation),
-          format: format!,
-          bytesPerRow: plane.bytesPerRow,
-        ),
-      );
-    }
-
-    return null;
-  }
-
-  /// Converts Android YUV planes into NV21 bytes for ML Kit.
-  Uint8List? _androidNv21Bytes(CameraImage image) {
-    final format = ml_face.InputImageFormatValue.fromRawValue(image.format.raw);
-    if (format == ml_face.InputImageFormat.nv21 && image.planes.length == 1) {
-      return image.planes.first.bytes;
-    }
-
-    if (image.planes.length < 3 || image.width.isOdd || image.height.isOdd) {
-      return null;
-    }
-
-    final width = image.width;
-    final height = image.height;
-    final yPlane = image.planes[0];
-    final uPlane = image.planes[1];
-    final vPlane = image.planes[2];
-    final ySize = width * height;
-    final out = Uint8List(ySize + width * height ~/ 2);
-
-    // Copy the full-resolution luma plane first, then interleave V and U for
-    // the chroma plane expected by NV21.
-    for (var row = 0; row < height; row++) {
-      for (var col = 0; col < width; col++) {
-        out[row * width + col] = _planeValue(yPlane, row, col);
-      }
-    }
-
-    final chromaHeight = height ~/ 2;
-    final chromaWidth = width ~/ 2;
-    for (var row = 0; row < chromaHeight; row++) {
-      for (var col = 0; col < chromaWidth; col++) {
-        final outIndex = ySize + row * width + col * 2;
-        out[outIndex] = _planeValue(vPlane, row, col);
-        out[outIndex + 1] = _planeValue(uPlane, row, col);
-      }
-    }
-
-    return out;
-  }
-
-  /// Safely reads a pixel value from a camera image plane.
-  int _planeValue(Plane plane, int row, int col) {
-    final pixelStride = plane.bytesPerPixel ?? 1;
-    final index = row * plane.bytesPerRow + col * pixelStride;
-    if (index < 0 || index >= plane.bytes.length) return 128;
-    return plane.bytes[index];
-  }
-
-  /// Maps hand-detector frame rotation to ML Kit input-image rotation.
-  ml_face.InputImageRotation _inputImageRotationFromCameraFrameRotation(
-    CameraFrameRotation? rotation,
-  ) {
-    switch (rotation) {
-      case CameraFrameRotation.cw90:
-        return ml_face.InputImageRotation.rotation90deg;
-      case CameraFrameRotation.cw180:
-        return ml_face.InputImageRotation.rotation180deg;
-      case CameraFrameRotation.cw270:
-        return ml_face.InputImageRotation.rotation270deg;
-      case null:
-        return ml_face.InputImageRotation.rotation0deg;
-    }
-  }
-
-  /// Converts an ML Kit bounding box into normalized preview display space.
-  Rect _mlKitRectToDisplayBox(
-    Rect rect, {
-    required Size imageSize,
-    required ml_face.InputImageRotation rotation,
-  }) {
-    final topLeft = _mlKitPointToDisplayPoint(
-      Offset(rect.left, rect.top),
-      imageSize: imageSize,
-      rotation: rotation,
-    );
-    final bottomRight = _mlKitPointToDisplayPoint(
-      Offset(rect.right, rect.bottom),
-      imageSize: imageSize,
-      rotation: rotation,
-    );
-
-    return Rect.fromLTRB(
-      (topLeft.dx < bottomRight.dx ? topLeft.dx : bottomRight.dx).clamp(0, 1),
-      (topLeft.dy < bottomRight.dy ? topLeft.dy : bottomRight.dy).clamp(0, 1),
-      (topLeft.dx > bottomRight.dx ? topLeft.dx : bottomRight.dx).clamp(0, 1),
-      (topLeft.dy > bottomRight.dy ? topLeft.dy : bottomRight.dy).clamp(0, 1),
-    );
-  }
-
-  /// Converts one ML Kit point into normalized preview display space.
-  Offset _mlKitPointToDisplayPoint(
-    Offset point, {
-    required Size imageSize,
-    required ml_face.InputImageRotation rotation,
-  }) {
-    final mirrorHorizontally = _shouldMirrorPreviewCoordinates(_controller);
-    final x = _translateMlKitX(
-      point.dx,
-      imageSize: imageSize,
-      rotation: rotation,
-      mirrorHorizontally: mirrorHorizontally,
-    );
-    final y = _translateMlKitY(
-      point.dy,
-      imageSize: imageSize,
-      rotation: rotation,
-    );
-
-    return Offset(x.clamp(0, 1), y.clamp(0, 1));
-  }
-
-  /// Normalizes the x-coordinate for the active ML Kit rotation.
-  double _translateMlKitX(
-    double x, {
-    required Size imageSize,
-    required ml_face.InputImageRotation rotation,
-    required bool mirrorHorizontally,
-  }) {
-    switch (rotation) {
-      case ml_face.InputImageRotation.rotation90deg:
-        return x / (Platform.isIOS ? imageSize.width : imageSize.height);
-      case ml_face.InputImageRotation.rotation270deg:
-        return 1 - x / (Platform.isIOS ? imageSize.width : imageSize.height);
-      case ml_face.InputImageRotation.rotation0deg:
-      case ml_face.InputImageRotation.rotation180deg:
-        final normalizedX = x / imageSize.width;
-        return mirrorHorizontally ? 1 - normalizedX : normalizedX;
-    }
-  }
-
-  /// Normalizes the y-coordinate for the active ML Kit rotation.
-  double _translateMlKitY(
-    double y, {
-    required Size imageSize,
-    required ml_face.InputImageRotation rotation,
-  }) {
-    switch (rotation) {
-      case ml_face.InputImageRotation.rotation90deg:
-      case ml_face.InputImageRotation.rotation270deg:
-        return y / (Platform.isIOS ? imageSize.height : imageSize.width);
-      case ml_face.InputImageRotation.rotation0deg:
-      case ml_face.InputImageRotation.rotation180deg:
-        return y / imageSize.height;
     }
   }
 
@@ -2166,8 +2024,8 @@ extension on _AdminHandGestureLiveScreenState {
     try {
       await controller.setFocusPoint(boundedFocusPoint);
       await controller.setExposurePoint(boundedFocusPoint);
-    } catch (e) {
-      debugPrint('Camera focus point update ignored: $e');
+    } catch (error) {
+      debugPrint('Camera focus point update ignored: $error');
     }
   }
 }

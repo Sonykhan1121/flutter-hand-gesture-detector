@@ -175,4 +175,26 @@ void main() {
     expect(encoded!.imageSize, const Size(2, 4));
     expect(encoded.jpegBytes, isNotEmpty);
   });
+
+  test('encodes on a background isolate', () async {
+    final encoded = await encoder.encodeInBackground(
+      frame: CameraPixelFrameData(
+        width: 3,
+        height: 2,
+        format: CameraPixelFormat.bgra8888,
+        planes: [
+          CameraPixelPlaneData(
+            bytes: Uint8List.fromList(List<int>.filled(3 * 2 * 4, 128)),
+            bytesPerRow: 12,
+            bytesPerPixel: 4,
+          ),
+        ],
+      ),
+      rotation: CameraFrameRotation.cw90,
+    );
+
+    expect(encoded, isNotNull);
+    expect(encoded!.imageSize, const Size(2, 3));
+    expect(encoded.jpegBytes.take(2), [0xff, 0xd8]);
+  });
 }

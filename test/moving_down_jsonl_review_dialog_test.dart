@@ -41,23 +41,21 @@ Future<void> _pumpLauncher(
   await tester.pumpWidget(
     MaterialApp(
       home: Builder(
-        builder:
-            (context) => Scaffold(
-              body: Center(
-                child: FilledButton(
-                  key: const Key('openReview'),
-                  onPressed: () async {
-                    final result = await showDialog<bool>(
-                      context: context,
-                      builder:
-                          (_) => MovingDownJsonlReviewDialog(review: review),
-                    );
-                    onResult(result);
-                  },
-                  child: const Text('Open'),
-                ),
-              ),
+        builder: (context) => Scaffold(
+          body: Center(
+            child: FilledButton(
+              key: const Key('openReview'),
+              onPressed: () async {
+                final result = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => MovingDownJsonlReviewDialog(review: review),
+                );
+                onResult(result);
+              },
+              child: const Text('Open'),
             ),
+          ),
+        ),
       ),
     ),
   );

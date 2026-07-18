@@ -1,0 +1,19 @@
+name: opencv_object_detection
+description: App-owned Android OpenCV DNN object detection over a MethodChannel.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.11.5
+  flutter: '>=3.32.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.grozziie.opencv_object_detection
+        pluginClass: OpenCvObjectDetectionPlugin

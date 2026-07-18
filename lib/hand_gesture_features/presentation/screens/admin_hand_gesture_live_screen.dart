@@ -38,13 +38,15 @@ import '../../domain/services/follow_target_tracking_progress.dart';
 import '../../domain/services/hand_geometry_service.dart';
 import '../../domain/services/move_direction_display_hold.dart';
 import '../../domain/services/object_detection_request_controller.dart';
+import '../../domain/services/object_detection_result_stabilizer.dart';
+import '../../domain/services/object_detection_target_smoother.dart';
 import '../../domain/services/object_detection_service.dart';
 import '../../domain/services/object_detection_service_factory.dart';
 import '../../domain/services/object_optical_flow_tracker.dart';
 import '../../domain/services/zoom_gesture_detector.dart';
 import '../../domain/utils/camera_frame_box_mapper.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
-import '../painters/follow_target_debug_overlay_painter.dart';
+import '../painters/object_detection_debug_painter.dart';
 import '../painters/follow_target_overlay_painter.dart';
 import '../painters/hand_focus_overlay_painter.dart';
 import '../painters/hand_landmark_overlay_painter.dart';
@@ -54,6 +56,7 @@ import '../painters/recording_hand_landmark_overlay_painter.dart';
 import '../utils/hand_gesture_label_mapper.dart';
 import '../utils/camera_orientation_preferences.dart';
 import '../utils/palm_orientation_coordinate_policy.dart';
+import '../utils/ml_kit_preview_mapper.dart';
 import '../widgets/gesture_status_panel.dart';
 import '../widgets/hand_camera_loading_view.dart';
 import '../widgets/round_icon_button.dart';
@@ -70,13 +73,11 @@ part 'admin_hand_gesture_live_screen_parts/live_screen_ui.dart';
 class AdminHandGestureLiveScreen extends StatefulWidget {
   const AdminHandGestureLiveScreen({
     super.key,
-    required this.fontorback,
+    this.initialLensDirection = CameraLensDirection.front,
     this.objectDetectionBackend = ObjectDetectionBackend.ultralyticsYolo,
   });
 
-  /// Same flow as your previous camera page:
-  /// 0 = back camera, anything else = front camera.
-  final int fontorback;
+  final CameraLensDirection initialLensDirection;
   final ObjectDetectionBackend objectDetectionBackend;
 
   /// Creates the state object that owns camera, detectors, and live UI state.
@@ -93,6 +94,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   ml_face.FaceDetector? _faceDetector;
   ObjectDetectionService? _objectDetectionService;
   Future<ObjectDetectionService>? _objectDetectionServiceStartup;
+  bool _objectDetectionServiceStartupFailed = false;
+  DateTime? _objectDetectionServiceStartupFailedAt;
 
   final _customGestureDetector = CustomGestureDetector();
   final _directionGestureDetector = DirectionGestureDetector();
@@ -105,10 +108,12 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final _objectTrackingFrameFactory = const ObjectTrackingFrameFactory();
   final _objectOpticalFlowTracker = ObjectOpticalFlowTracker();
   late final ObjectDetectionRequestController _objectDetectionRequests;
+  late final ObjectDetectionResultStabilizer _objectDetectionResultStabilizer;
+  late final ObjectDetectionTargetSmoother _objectDetectionTargetSmoother;
 
   late final FollowObjectSequenceDetector _followObjectSequenceDetector;
 
-  List<CameraDescription> cameras = const [];
+  List<CameraDescription> _availableCameras = const [];
   CameraLensDirection _currentLensDirection = CameraLensDirection.front;
 
   bool _isCameraInitialized = false;
@@ -160,6 +165,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   Offset? _handReturnGraceReleasePoint;
   FollowTarget? _handReturnGraceFrozenTarget;
   List<FollowTarget> _cachedObjectTargets = const [];
+  List<FollowTarget> _visualObjectTargets = const [];
   Size? _detectionImageSize;
   Rect? _focusedHandBox;
   Size? _focusImageSize;
@@ -205,6 +211,13 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
         isIOS: Platform.isIOS,
       ),
     );
+    _objectDetectionResultStabilizer =
+        ObjectDetectionResultStabilizer.forBackend(
+          widget.objectDetectionBackend,
+        );
+    _objectDetectionTargetSmoother = ObjectDetectionTargetSmoother.forBackend(
+      widget.objectDetectionBackend,
+    );
     WidgetsBinding.instance.addObserver(this);
     _cameraPreviewRotationController = AnimationController(
       vsync: this,
@@ -216,9 +229,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
       onDebug: debugPrint,
     );
 
-    _currentLensDirection = widget.fontorback == 0
-        ? CameraLensDirection.back
-        : CameraLensDirection.front;
+    _currentLensDirection = widget.initialLensDirection;
 
     _requestCameraPermission();
   }

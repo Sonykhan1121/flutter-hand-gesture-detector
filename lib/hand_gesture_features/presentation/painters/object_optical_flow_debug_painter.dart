@@ -31,10 +31,9 @@ class ObjectOpticalFlowDebugPainter extends CustomPainter {
         ..strokeWidth = 2
         ..color = Colors.cyanAccent,
     );
-    final pointPaint =
-        Paint()
-          ..style = PaintingStyle.fill
-          ..color = Colors.yellowAccent;
+    final pointPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = Colors.yellowAccent;
     for (final point in result.featurePoints) {
       final displayPoint = rotateNormalizedDisplayPoint(
         point,

@@ -3,10 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/enums/follow_target_type.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/enums/object_detection_backend.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/models/follow_target.dart';
-import 'package:gesture_detector/hand_gesture_features/presentation/painters/google_mlkit_object_debug_painter.dart';
+import 'package:gesture_detector/hand_gesture_features/presentation/painters/object_detection_debug_painter.dart';
 import 'package:gesture_detector/hand_gesture_features/presentation/painters/object_detection_debug_painter_factory.dart';
-import 'package:gesture_detector/hand_gesture_features/presentation/painters/object_detection_package_debug_painter.dart';
-import 'package:gesture_detector/hand_gesture_features/presentation/painters/ultralytics_yolo_debug_painter.dart';
 
 void main() {
   final targets = [
@@ -19,28 +17,34 @@ void main() {
     ),
   ];
 
-  test('routes every backend to its own debug painter', () {
-    expect(
-      ObjectDetectionDebugPainterFactory.create(
-        backend: ObjectDetectionBackend.objectDetectionPackage,
+  test('uses one shared painter for every backend', () {
+    for (final backend in ObjectDetectionBackend.values) {
+      expect(
+        ObjectDetectionDebugPainterFactory.create(
+          backend: backend,
+          targets: targets,
+        ),
+        isA<ObjectDetectionDebugPainter>(),
+      );
+    }
+  });
+
+  test('preserves each backend default color', () {
+    const expectedColors = {
+      ObjectDetectionBackend.objectDetectionPackage: Color(0xFFFFA726),
+      ObjectDetectionBackend.ultralyticsYolo: Color(0xFF00FB46),
+      ObjectDetectionBackend.googleMlKit: Color(0xFF29B6F6),
+      ObjectDetectionBackend.nativeMethodChannel: Color(0xFFFFA726),
+      ObjectDetectionBackend.opencvSdk: Color(0xFF00A3A3),
+    };
+
+    for (final MapEntry(key: backend, value: color) in expectedColors.entries) {
+      final painter = ObjectDetectionDebugPainterFactory.create(
+        backend: backend,
         targets: targets,
-      ),
-      isA<ObjectDetectionPackageDebugPainter>(),
-    );
-    expect(
-      ObjectDetectionDebugPainterFactory.create(
-        backend: ObjectDetectionBackend.ultralyticsYolo,
-        targets: targets,
-      ),
-      isA<UltralyticsYoloDebugPainter>(),
-    );
-    expect(
-      ObjectDetectionDebugPainterFactory.create(
-        backend: ObjectDetectionBackend.googleMlKit,
-        targets: targets,
-      ),
-      isA<GoogleMlKitObjectDebugPainter>(),
-    );
+      );
+      expect(painter.color, color, reason: backend.name);
+    }
   });
 
   test('keeps the same painter inputs for every backend', () {

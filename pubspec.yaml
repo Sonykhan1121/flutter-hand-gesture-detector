@@ -16,6 +16,10 @@ dependencies:
 
   hand_detection:
     path: third_party/hand_detection
+  native_object_detection:
+    path: packages/native_object_detection
+  opencv_object_detection:
+    path: packages/opencv_object_detection
   google_mlkit_face_detection: any
   google_mlkit_object_detection: ^0.16.0
   ultralytics_yolo: ^0.6.9
@@ -24,6 +28,7 @@ dependencies:
   permission_handler: ^12.0.3
   object_detection: ^0.2.2
   opencv_dart: ^2.2.1+4
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

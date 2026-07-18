@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
@@ -17,6 +18,17 @@ class YoloCameraFrameEncoder {
 
   final int maxDimension;
   final int jpegQuality;
+
+  /// Performs pixel conversion and JPEG encoding outside Flutter's UI isolate.
+  Future<EncodedYoloFrame?> encodeInBackground({
+    required CameraPixelFrameData frame,
+    required CameraFrameRotation? rotation,
+  }) {
+    return Isolate.run(
+      () => encode(frame: frame, rotation: rotation),
+      debugName: 'yolo-frame-encoder',
+    );
+  }
 
   EncodedYoloFrame? encode({
     required CameraPixelFrameData frame,

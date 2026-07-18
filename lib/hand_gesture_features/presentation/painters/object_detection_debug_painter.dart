@@ -3,14 +3,11 @@ import 'package:flutter/material.dart';
 import '../../domain/models/follow_target.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
 
-/// Shared drawing geometry for the three package-specific object painters.
-///
-/// Concrete painters stay separate so package-specific paint calls can be
-/// inspected, logged, or changed without entering another backend's code.
-abstract class ObjectDetectionDebugPainter extends CustomPainter {
+/// Draws normalized object-detection targets for every detector backend.
+class ObjectDetectionDebugPainter extends CustomPainter {
   const ObjectDetectionDebugPainter({
     required this.targets,
-    required this.color,
+    this.color = Colors.red,
     this.showLabels = true,
     this.labelPrefix = '',
     this.previewQuarterTurns = 0,
@@ -22,8 +19,8 @@ abstract class ObjectDetectionDebugPainter extends CustomPainter {
   final String labelPrefix;
   final int previewQuarterTurns;
 
-  @protected
-  void paintObjectTargets(Canvas canvas, Size size) {
+  @override
+  void paint(Canvas canvas, Size size) {
     if (targets.isEmpty) return;
 
     final borderPaint = Paint()
@@ -100,8 +97,8 @@ abstract class ObjectDetectionDebugPainter extends CustomPainter {
     );
   }
 
-  @protected
-  bool hasVisualChanges(ObjectDetectionDebugPainter oldDelegate) {
+  @override
+  bool shouldRepaint(covariant ObjectDetectionDebugPainter oldDelegate) {
     return oldDelegate.targets != targets ||
         oldDelegate.showLabels != showLabels ||
         oldDelegate.color != color ||

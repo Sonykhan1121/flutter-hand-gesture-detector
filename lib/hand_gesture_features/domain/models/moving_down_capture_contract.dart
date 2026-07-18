@@ -192,11 +192,10 @@ bool isValidMovingDownCapture(
   final detectedFrames = frames
       .where((frame) => frame['hand_detected'] == true)
       .toList(growable: false);
-  final handednessValues =
-      detectedFrames
-          .map((frame) => frame['is_right'])
-          .whereType<bool>()
-          .toSet();
+  final handednessValues = detectedFrames
+      .map((frame) => frame['is_right'])
+      .whereType<bool>()
+      .toSet();
   return detectedFrames.length >= minimumFrames &&
       frames.every(isCompleteMovingDownJsonlFrame) &&
       detectedFrames.every(isMovingDownFrameInsideSafeArea) &&
@@ -242,8 +241,8 @@ class MovingDownJsonlReview {
   int get unsafeFrames => unsafeFrameIndexes.length;
   double get landmarkFps {
     if (records.isEmpty) return 0;
-    final value = records.first['landmark_fps'];
-    return value is num ? value.toDouble() : 0;
+    final fpsValue = records.first['landmark_fps'];
+    return fpsValue is num ? fpsValue.toDouble() : 0;
   }
 
   String get fileName => '$sampleId.jsonl';
@@ -286,8 +285,10 @@ MovingDownJsonlReview prepareMovingDownJsonlReview({
     for (var index = 0; index < records.length; index++)
       if (!isMovingDownFrameInsideSafeArea(records[index])) index,
   ];
-  final handednessValues =
-      records.map((record) => record['is_right']).whereType<bool>().toSet();
+  final handednessValues = records
+      .map((record) => record['is_right'])
+      .whereType<bool>()
+      .toSet();
   final handednessConsistent =
       records.isNotEmpty && handednessValues.length == 1;
   final detectedIsRight = handednessConsistent ? handednessValues.single : null;
@@ -296,20 +297,20 @@ MovingDownJsonlReview prepareMovingDownJsonlReview({
       enoughMovement &&
       unsafeFrameIndexes.isEmpty &&
       handednessConsistent;
-  final failureReason =
-      !enoughFrames
-          ? 'At least $minimumFrames valid hand frames are required.'
-          : unsafeFrameIndexes.isNotEmpty
-          ? 'The complete hand must stay inside the safety box. '
-              'Retake the sample without touching a camera edge.'
-          : !handednessConsistent
-          ? 'Handedness changed during capture. Use one consistent hand.'
-          : !enoughMovement
-          ? 'Downward palm movement must be at least '
-              '${(minimumTravel * 100).toStringAsFixed(1)}%.'
-          : null;
-  final contents =
-      records.isEmpty ? '' : '${records.map(jsonEncode).join('\n')}\n';
+  final failureReason = !enoughFrames
+      ? 'At least $minimumFrames valid hand frames are required.'
+      : unsafeFrameIndexes.isNotEmpty
+      ? 'The complete hand must stay inside the safety box. '
+            'Retake the sample without touching a camera edge.'
+      : !handednessConsistent
+      ? 'Handedness changed during capture. Use one consistent hand.'
+      : !enoughMovement
+      ? 'Downward palm movement must be at least '
+            '${(minimumTravel * 100).toStringAsFixed(1)}%.'
+      : null;
+  final contents = records.isEmpty
+      ? ''
+      : '${records.map(jsonEncode).join('\n')}\n';
   final frameImages = records
       .map((record) => capturedFrameImages[record['frame_seq']])
       .toList(growable: false);

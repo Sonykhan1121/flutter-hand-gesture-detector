@@ -79,20 +79,19 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
         return;
       }
 
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) throw StateError('No camera found');
-      final camera = cameras.firstWhere(
-        (item) => item.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first,
+      final deviceCameras = await availableCameras();
+      if (deviceCameras.isEmpty) throw StateError('No camera found');
+      final selectedCamera = deviceCameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => deviceCameras.first,
       );
       final controller = CameraController(
-        camera,
+        selectedCamera,
         ResolutionPreset.high,
         enableAudio: false,
-        imageFormatGroup:
-            Platform.isIOS
-                ? ImageFormatGroup.bgra8888
-                : ImageFormatGroup.yuv420,
+        imageFormatGroup: Platform.isIOS
+            ? ImageFormatGroup.bgra8888
+            : ImageFormatGroup.yuv420,
       );
       await controller.initialize();
       await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
@@ -186,14 +185,14 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
       final detectionCompletedAt = DateTime.now();
       final previousCompletion = _lastDetectionCompletedAt;
       if (previousCompletion != null) {
-        final elapsedMicros =
-            detectionCompletedAt.difference(previousCompletion).inMicroseconds;
+        final elapsedMicros = detectionCompletedAt
+            .difference(previousCompletion)
+            .inMicroseconds;
         if (elapsedMicros > 0) {
           final instantaneousFps = 1000000 / elapsedMicros;
-          _processingFps =
-              _processingFps == 0
-                  ? instantaneousFps
-                  : (_processingFps * 0.8) + (instantaneousFps * 0.2);
+          _processingFps = _processingFps == 0
+              ? instantaneousFps
+              : (_processingFps * 0.8) + (instantaneousFps * 0.2);
         }
       }
       _lastDetectionCompletedAt = detectionCompletedAt;
@@ -280,10 +279,9 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
           _reviewing = false;
           _frames.clear();
           _frameImages.clear();
-          _message =
-              review.canGenerate
-                  ? 'Capture discarded. Ready to record again.'
-                  : 'Capture rejected. Retake the moving-down sample.';
+          _message = review.canGenerate
+              ? 'Capture discarded. Ready to record again.'
+              : 'Capture rejected. Retake the moving-down sample.';
         });
         return;
       }
@@ -376,10 +374,9 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
           ],
         )
         .toList(growable: false);
-    final palmBoundingBox =
-        hand == null
-            ? const <double>[]
-            : _landmarkDerivedBoundingBox(pixels, width: width, height: height);
+    final palmBoundingBox = hand == null
+        ? const <double>[]
+        : _landmarkDerivedBoundingBox(pixels, width: width, height: height);
     final deviceRecordedTimestamp = now.millisecondsSinceEpoch;
     final cameraDirection =
         _controller?.description.lensDirection ?? CameraLensDirection.front;
@@ -570,8 +567,9 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
                     ),
                   MovingDownSafeAreaOverlay(
                     canvasSize: cardSize,
-                    detectedHandLabel:
-                        hand == null ? null : _detectedHandLabel(hand),
+                    detectedHandLabel: hand == null
+                        ? null
+                        : _detectedHandLabel(hand),
                     handInside: handInside,
                   ),
                 ],
@@ -647,10 +645,9 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
                       _message,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color:
-                            _savedPath == null
-                                ? Colors.white
-                                : Colors.greenAccent,
+                        color: _savedPath == null
+                            ? Colors.white
+                            : Colors.greenAccent,
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
                       ),
@@ -676,17 +673,15 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
               bottom: 28,
               child: FilledButton.icon(
                 key: const Key('startMovingDownCaptureButton'),
-                onPressed:
-                    _loading || _capturing || _reviewing || _saving
-                        ? null
-                        : _startCapture,
-                icon:
-                    _saving
-                        ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                        : const Icon(Icons.back_hand_rounded),
+                onPressed: _loading || _capturing || _reviewing || _saving
+                    ? null
+                    : _startCapture,
+                icon: _saving
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.back_hand_rounded),
                 label: Text(
                   _savedPath == null
                       ? 'Start 2-Second Raw Capture'

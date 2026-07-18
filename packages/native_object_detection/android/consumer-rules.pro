@@ -1,0 +1,3 @@
+-keep class com.google.ai.edge.litert.** { *; }
+-keep interface com.google.ai.edge.litert.** { *; }
+-dontwarn com.google.ai.edge.litert.**

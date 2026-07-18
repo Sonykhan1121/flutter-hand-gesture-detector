@@ -31,40 +31,33 @@ class HandFocusOverlayPainter extends CustomPainter {
 
     if (boundedFocusRect.isEmpty) return;
 
-    final overlayPath =
-        Path()
-          ..fillType = PathFillType.evenOdd
-          ..addRect(Offset.zero & size)
-          ..addRRect(
-            RRect.fromRectAndRadius(
-              boundedFocusRect,
-              const Radius.circular(14),
-            ),
-          );
+    final overlayPath = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Offset.zero & size)
+      ..addRRect(
+        RRect.fromRectAndRadius(boundedFocusRect, const Radius.circular(14)),
+      );
 
     final dimPaint = Paint()..color = Colors.black.withValues(alpha: 0.42);
     canvas.drawPath(overlayPath, dimPaint);
 
-    final glowPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5
-          ..strokeCap = StrokeCap.round
-          ..color = const Color(0xFF00FB46).withValues(alpha: 0.18);
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFF00FB46).withValues(alpha: 0.18);
 
-    final borderPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round
-          ..color = const Color(0xFF00FB46);
+    final borderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFF00FB46);
 
-    final cornerPaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.5
-          ..strokeCap = StrokeCap.round
-          ..color = Colors.white;
+    final cornerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.5
+      ..strokeCap = StrokeCap.round
+      ..color = Colors.white;
 
     final rrect = RRect.fromRectAndRadius(
       boundedFocusRect,
@@ -103,10 +96,9 @@ class HandFocusOverlayPainter extends CustomPainter {
   Offset _mapPoint(double x, double y, Size canvasSize) {
     final normalizedX = (x / imageSize.width).clamp(0.0, 1.0);
     final normalizedY = (y / imageSize.height).clamp(0.0, 1.0);
-    final mirroredPoint =
-        mirrorHorizontally
-            ? Offset(1.0 - normalizedX, normalizedY)
-            : Offset(normalizedX, normalizedY);
+    final mirroredPoint = mirrorHorizontally
+        ? Offset(1.0 - normalizedX, normalizedY)
+        : Offset(normalizedX, normalizedY);
     final displayPoint = _rotateNormalizedPoint(mirroredPoint);
 
     return Offset(

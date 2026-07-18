@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gesture_detector/hand_gesture_features/presentation/widgets/settings_panel.dart';
 import 'package:gesture_detector/hand_gesture_features/presentation/widgets/stand_hero_section.dart';
 
+import 'domain/enums/object_detection_backend.dart';
 import 'domain/enums/stand_control_mode.dart';
 
 /// Home page where the user chooses how the smart stand will be controlled.
@@ -16,6 +17,12 @@ class StandControlHomePage extends StatefulWidget {
   final VoidCallback? onDebugCameraTap;
   final bool showDebugCameraButton;
   final bool showMovingDownTraining;
+  final ObjectDetectionBackend selectedObjectDetectionBackend;
+  final ValueChanged<ObjectDetectionBackend>? onObjectDetectionBackendChanged;
+  final bool supportsNativeMethodChannel;
+  final bool supportsOpenCvSdk;
+  final bool supportsUltralyticsYolo;
+  final bool supportsGoogleMlKit;
 
   const StandControlHomePage({
     super.key,
@@ -29,6 +36,13 @@ class StandControlHomePage extends StatefulWidget {
     this.onDebugCameraTap,
     this.showDebugCameraButton = true,
     this.showMovingDownTraining = true,
+    this.selectedObjectDetectionBackend =
+        ObjectDetectionBackend.ultralyticsYolo,
+    this.onObjectDetectionBackendChanged,
+    this.supportsNativeMethodChannel = true,
+    this.supportsOpenCvSdk = true,
+    this.supportsUltralyticsYolo = true,
+    this.supportsGoogleMlKit = true,
   });
 
   @override
@@ -108,6 +122,14 @@ class _StandControlHomePageState extends State<StandControlHomePage> {
                 onSelectMode: _selectMode,
                 onMovingDownTrainingTap: widget.onMovingDownTrainingTap,
                 showMovingDownTraining: widget.showMovingDownTraining,
+                selectedObjectDetectionBackend:
+                    widget.selectedObjectDetectionBackend,
+                onObjectDetectionBackendChanged:
+                    widget.onObjectDetectionBackendChanged ?? (_) {},
+                supportsNativeMethodChannel: widget.supportsNativeMethodChannel,
+                supportsOpenCvSdk: widget.supportsOpenCvSdk,
+                supportsUltralyticsYolo: widget.supportsUltralyticsYolo,
+                supportsGoogleMlKit: widget.supportsGoogleMlKit,
               ),
             ),
           ],

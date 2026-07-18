@@ -30,9 +30,9 @@ Size fittedCameraPreviewSize({
 
   final scale =
       (viewportSize.width / previewSize.width) <
-              (viewportSize.height / previewSize.height)
-          ? viewportSize.width / previewSize.width
-          : viewportSize.height / previewSize.height;
+          (viewportSize.height / previewSize.height)
+      ? viewportSize.width / previewSize.width
+      : viewportSize.height / previewSize.height;
   return Size(previewSize.width * scale, previewSize.height * scale);
 }
 

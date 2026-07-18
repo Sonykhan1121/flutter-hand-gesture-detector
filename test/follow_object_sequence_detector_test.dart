@@ -375,10 +375,9 @@ void main() {
     });
 
     test('carries custom open-palm confidence while active', () {
-      final openPalm =
-          _FakeOpenPalmGestureDetector()
-            ..isDetected = true
-            ..confidence = 0.72;
+      final openPalm = _FakeOpenPalmGestureDetector()
+        ..isDetected = true
+        ..confidence = 0.72;
       final detector = FollowObjectSequenceDetector(
         openPalmGestureDetector: openPalm,
       );
@@ -595,10 +594,9 @@ Hand _hand({
     imageWidth: 400,
     imageHeight: 400,
     handedness: Handedness.right,
-    gesture:
-        gestureType == null
-            ? null
-            : GestureResult(type: gestureType, confidence: gestureConfidence),
+    gesture: gestureType == null
+        ? null
+        : GestureResult(type: gestureType, confidence: gestureConfidence),
   );
 }
 
@@ -664,10 +662,9 @@ Hand _relaxedReleaseHand({
     imageWidth: 400,
     imageHeight: 400,
     handedness: Handedness.right,
-    gesture:
-        gestureType == null
-            ? null
-            : GestureResult(type: gestureType, confidence: 1),
+    gesture: gestureType == null
+        ? null
+        : GestureResult(type: gestureType, confidence: 1),
   );
 }
 

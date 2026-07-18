@@ -60,8 +60,8 @@ extension on _AdminHandGestureLiveScreenState {
       if (_isCameraZoomSupported && controller.value.isInitialized) {
         await controller.setZoomLevel(_currentZoomLevel);
       }
-    } catch (e) {
-      debugPrint('Camera zoom initialization ignored: $e');
+    } catch (error) {
+      debugPrint('Camera zoom initialization ignored: $error');
       _resetCameraZoomState();
     }
   }
@@ -210,8 +210,8 @@ extension on _AdminHandGestureLiveScreenState {
           _updateTouchZoomGuideForZoomLevelState(nextZoomLevel);
         }
       }
-    } catch (e) {
-      debugPrint('Camera zoom update ignored: $e');
+    } catch (error) {
+      debugPrint('Camera zoom update ignored: $error');
     } finally {
       if (_controller == controller) {
         _isApplyingZoom = false;

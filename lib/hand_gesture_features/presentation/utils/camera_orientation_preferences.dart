@@ -12,5 +12,5 @@ const supportedCameraDeviceOrientations = <DeviceOrientation>[
 /// Capture orientation used for videos while the Flutter UI stays portrait.
 DeviceOrientation recordingCameraDeviceOrientation(CameraPreviewMode mode) =>
     mode.isLandscape
-        ? DeviceOrientation.landscapeLeft
-        : DeviceOrientation.portraitUp;
+    ? DeviceOrientation.landscapeLeft
+    : DeviceOrientation.portraitUp;

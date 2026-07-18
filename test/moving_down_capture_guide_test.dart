@@ -173,11 +173,10 @@ void main() {
         userId: 'user1000',
         sampleId: 'user1000_direction_down_test',
       );
-      final lines =
-          const LineSplitter()
-              .convert(review.contents)
-              .where((line) => line.isNotEmpty)
-              .toList();
+      final lines = const LineSplitter()
+          .convert(review.contents)
+          .where((line) => line.isNotEmpty)
+          .toList();
 
       expect(review.validHandFrames, 27);
       expect(review.excludedFrames, 0);

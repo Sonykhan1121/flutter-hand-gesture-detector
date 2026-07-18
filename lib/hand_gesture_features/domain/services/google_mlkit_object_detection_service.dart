@@ -10,6 +10,8 @@ import 'package:object_detection/object_detection.dart' as od;
 import '../constants/hand_gesture_thresholds.dart';
 import '../enums/object_detection_backend.dart';
 import '../models/app_object_detection.dart';
+import '../utils/android_nv21_encoder.dart';
+import 'appearance_signature_extractor.dart';
 import 'object_detection_service.dart';
 
 /// Object detector implemented only with Google's native ML Kit package.
@@ -27,11 +29,16 @@ final class GoogleMlKitObjectDetectionService
     return ml_object.ObjectDetectorOptions(
       mode: ml_object.DetectionMode.stream,
       classifyObjects: true,
-      multipleObjects: false,
+      multipleObjects: true,
     );
   }
 
   static Future<GoogleMlKitObjectDetectionService> start() async {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      throw UnsupportedError(
+        'Google ML Kit object detection supports Android and iOS only.',
+      );
+    }
     return GoogleMlKitObjectDetectionService._(
       ml_object.ObjectDetector(options: liveOptions()),
     );
@@ -41,8 +48,13 @@ final class GoogleMlKitObjectDetectionService
   Future<List<AppObjectDetection>> performDetection(
     CameraImage image, {
     od.CameraFrameRotation? rotation,
+    CameraLensDirection? lensDirection,
   }) async {
-    final inputImage = _inputImageFromCameraImage(image, rotation: rotation);
+    final inputImage = await _inputImageFromCameraImage(
+      image,
+      rotation: rotation,
+    );
+    if (isClosed) return const [];
     if (inputImage == null) {
       debugPrint(
         'Google ML Kit object detector skipped unsupported camera frame: '
@@ -56,26 +68,26 @@ final class GoogleMlKitObjectDetectionService
     if (isClosed) return const [];
 
     _processedFrames++;
-    if (objects.isEmpty) {
-      if (_processedFrames == 1 || _processedFrames % 10 == 0) {
+    if (kDebugMode && (_processedFrames == 1 || _processedFrames % 10 == 0)) {
+      if (objects.isEmpty) {
         debugPrint(
           'Google ML Kit object detector: 0 raw objects after '
           '$_processedFrames processed frames.',
         );
-      }
-    } else {
-      for (final object in objects) {
-        final labels = object.labels
-            .map(
-              (label) =>
-                  '${label.text}(${label.confidence.toStringAsFixed(3)})',
-            )
-            .join(', ');
-        debugPrint(
-          'Google ML Kit raw object: box=${object.boundingBox} '
-          'trackingId=${object.trackingId} '
-          'labels=${labels.isEmpty ? '<none>' : labels}',
-        );
+      } else {
+        for (final object in objects) {
+          final labels = object.labels
+              .map(
+                (label) =>
+                    '${label.text}(${label.confidence.toStringAsFixed(3)})',
+              )
+              .join(', ');
+          debugPrint(
+            'Google ML Kit raw object: box=${object.boundingBox} '
+            'trackingId=${object.trackingId} '
+            'labels=${labels.isEmpty ? '<none>' : labels}',
+          );
+        }
       }
     }
 
@@ -103,6 +115,11 @@ final class GoogleMlKitObjectDetectionService
 
     final results = <AppObjectDetection>[];
     for (final object in objects) {
+      if (object.labels.any(
+        (label) => AppObjectDetection.isPersonLabel(label.text),
+      )) {
+        continue;
+      }
       final bestLabel = object.labels.isEmpty
           ? null
           : object.labels.reduce(
@@ -118,8 +135,6 @@ final class GoogleMlKitObjectDetectionService
       final label = classifiedLabel != null
           ? classifiedLabel.text.trim()
           : 'Object';
-      if (AppObjectDetection.isPersonLabel(label)) continue;
-
       final boundingBox = _uprightBoundingBox(
         object.boundingBox,
         imageSize: imageSize,
@@ -195,13 +210,23 @@ final class GoogleMlKitObjectDetectionService
     return _clampedRect(uprightRect, imageSize);
   }
 
-  static ml_object.InputImage? _inputImageFromCameraImage(
+  static Future<ml_object.InputImage?> _inputImageFromCameraImage(
     CameraImage image, {
     required od.CameraFrameRotation? rotation,
-  }) {
+  }) async {
     final inputRotation = _inputRotation(rotation);
     if (Platform.isAndroid) {
-      final bytes = _androidNv21Bytes(image);
+      final inputFormat = ml_object.InputImageFormatValue.fromRawValue(
+        image.format.raw,
+      );
+      final directNv21 =
+          inputFormat == ml_object.InputImageFormat.nv21 &&
+          image.planes.length == 1;
+      final bytes = directNv21
+          ? image.planes.first.bytes
+          : await androidNv21BytesInBackground(
+              CameraPixelFrameData.fromCameraImage(image, isBgra: false),
+            );
       if (bytes == null) return null;
       return ml_object.InputImage.fromBytes(
         bytes: bytes,
@@ -237,45 +262,16 @@ final class GoogleMlKitObjectDetectionService
     return null;
   }
 
-  static Uint8List? _androidNv21Bytes(CameraImage image) {
-    final format = ml_object.InputImageFormatValue.fromRawValue(
-      image.format.raw,
-    );
-    if (format == ml_object.InputImageFormat.nv21 && image.planes.length == 1) {
-      return image.planes.first.bytes;
-    }
-    if (image.planes.length < 3 || image.width.isOdd || image.height.isOdd) {
-      return null;
-    }
-
-    final width = image.width;
-    final height = image.height;
-    final yPlane = image.planes[0];
-    final uPlane = image.planes[1];
-    final vPlane = image.planes[2];
-    final ySize = width * height;
-    final bytes = Uint8List(ySize + width * height ~/ 2);
-
-    for (var row = 0; row < height; row++) {
-      for (var column = 0; column < width; column++) {
-        bytes[row * width + column] = _planeValue(yPlane, row, column);
-      }
-    }
-    for (var row = 0; row < height ~/ 2; row++) {
-      for (var column = 0; column < width ~/ 2; column++) {
-        final outputIndex = ySize + row * width + column * 2;
-        bytes[outputIndex] = _planeValue(vPlane, row, column);
-        bytes[outputIndex + 1] = _planeValue(uPlane, row, column);
-      }
-    }
-    return bytes;
+  @visibleForTesting
+  static Future<Uint8List?> androidNv21BytesInBackground(
+    CameraPixelFrameData frame,
+  ) {
+    return encodeNv21InBackground(frame);
   }
 
-  static int _planeValue(Plane plane, int row, int column) {
-    final pixelStride = plane.bytesPerPixel ?? 1;
-    final index = row * plane.bytesPerRow + column * pixelStride;
-    if (index < 0 || index >= plane.bytes.length) return 128;
-    return plane.bytes[index];
+  @visibleForTesting
+  static Uint8List? androidNv21BytesFromFrame(CameraPixelFrameData frame) {
+    return encodeNv21(frame);
   }
 
   static ml_object.InputImageRotation _inputRotation(

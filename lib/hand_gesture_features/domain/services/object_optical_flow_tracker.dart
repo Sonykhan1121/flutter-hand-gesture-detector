@@ -52,9 +52,8 @@ class ObjectTrackingFrameFactory {
               final blue = plane.bytes[index];
               final green = plane.bytes[index + 1];
               final red = plane.bytes[index + 2];
-              output[y * width + x] = (0.114 * blue +
-                      0.587 * green +
-                      0.299 * red)
+              output[y * width +
+                  x] = (0.114 * blue + 0.587 * green + 0.299 * red)
                   .round()
                   .clamp(0, 255);
             }
@@ -144,7 +143,7 @@ class ObjectOpticalFlowTracker {
     _rawFrameBox = rawBox;
     _trackedFramesSinceSeed = 0;
     final smoothed = _smooth(displayBox, frame.capturedAt);
-    final result = ObjectOpticalFlowTrackResult(
+    final trackResult = ObjectOpticalFlowTrackResult(
       status: ObjectOpticalFlowTrackStatus.initialized,
       frameId: frame.frameId,
       displayBox: smoothed,
@@ -154,9 +153,9 @@ class ObjectOpticalFlowTracker {
       inlierRatio: 1,
       featurePoints: _displayPoints(points, frame),
     );
-    _lastResult = result;
+    _lastResult = trackResult;
     _remember(frame, smoothed);
-    return result;
+    return trackResult;
   }
 
   ObjectOpticalFlowTrackResult update(ObjectTrackingFrame frame) {
@@ -257,7 +256,7 @@ class ObjectOpticalFlowTracker {
     _previousPoints = nextStatePoints;
     _rawFrameBox = transformedRawBox;
 
-    final result = ObjectOpticalFlowTrackResult(
+    final trackResult = ObjectOpticalFlowTrackResult(
       status: ObjectOpticalFlowTrackStatus.tracked,
       frameId: frame.frameId,
       displayBox: smoothed,
@@ -267,9 +266,9 @@ class ObjectOpticalFlowTracker {
       inlierRatio: similarity,
       featurePoints: _displayPoints(nextStatePoints, frame),
     );
-    _lastResult = result;
+    _lastResult = trackResult;
     _remember(frame, smoothed);
-    return result;
+    return trackResult;
   }
 
   /// Applies a delayed detector correction to the latest tracked box.
@@ -406,10 +405,9 @@ class ObjectOpticalFlowTracker {
         final width = math.max(8, (template.cols * scale).round());
         final height = math.max(8, (template.rows * scale).round());
         if (width > search.cols || height > search.rows) continue;
-        final scaled =
-            scale == 1.0
-                ? cv.Mat.fromMat(template)
-                : cv.resize(template, (width, height));
+        final scaled = scale == 1.0
+            ? cv.Mat.fromMat(template)
+            : cv.resize(template, (width, height));
         final scores = cv.matchTemplate(search, scaled, cv.TM_CCOEFF_NORMED);
         try {
           final extrema = cv.minMaxLoc(scores);
@@ -469,11 +467,11 @@ class ObjectOpticalFlowTracker {
         );
       }
     }
-    final result = cv.VecPoint2f.fromList(transformed);
+    final transformedPoints = cv.VecPoint2f.fromList(transformed);
     for (final point in transformed) {
       point.dispose();
     }
-    return result;
+    return transformedPoints;
   }
 
   _PixelRect _pixelRect(Rect box, int width, int height) {
@@ -512,13 +510,12 @@ class ObjectOpticalFlowTracker {
 
   Rect _smooth(Rect box, DateTime timestamp) {
     final previousAt = _lastFilterAt;
-    final elapsed =
-        previousAt == null
-            ? 1 / 20
-            : math.max(
-              0.001,
-              timestamp.difference(previousAt).inMicroseconds / 1e6,
-            );
+    final elapsed = previousAt == null
+        ? 1 / 20
+        : math.max(
+            0.001,
+            timestamp.difference(previousAt).inMicroseconds / 1e6,
+          );
     _lastFilterAt = timestamp;
     return _clampDisplayRect(
       Rect.fromLTRB(
@@ -564,7 +561,7 @@ class ObjectOpticalFlowTracker {
     int validPoints = 0,
     double inlierRatio = 0,
   }) {
-    final result = ObjectOpticalFlowTrackResult(
+    final trackResult = ObjectOpticalFlowTrackResult(
       status: ObjectOpticalFlowTrackStatus.uncertain,
       frameId: frame.frameId,
       displayBox: displayBox,
@@ -575,8 +572,8 @@ class ObjectOpticalFlowTracker {
       featurePoints: const [],
       rejectionReason: reason,
     );
-    _lastResult = result;
-    return result;
+    _lastResult = trackResult;
+    return trackResult;
   }
 
   void _resetActive() {

@@ -1,0 +1,2 @@
+-keep class org.opencv.** { *; }
+-keep class com.grozziie.opencv_object_detection.** { *; }

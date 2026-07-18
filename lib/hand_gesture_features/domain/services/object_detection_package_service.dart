@@ -61,6 +61,7 @@ final class ObjectDetectionPackageService
   Future<List<AppObjectDetection>> performDetection(
     CameraImage image, {
     od.CameraFrameRotation? rotation,
+    CameraLensDirection? lensDirection,
   }) async {
     final isIOS = Platform.isIOS;
     final objects = await _detector.detectFromCameraImage(

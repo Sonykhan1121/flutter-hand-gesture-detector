@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -6,18 +7,23 @@ import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart
 import 'package:gesture_detector/hand_gesture_features/domain/enums/object_detection_backend.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/models/app_object_detection.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/google_mlkit_object_detection_service.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/services/appearance_signature_extractor.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/services/native_method_channel_object_detection_service.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/object_detection_package_service.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/services/opencv_sdk_object_detection_service.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/object_detection_service_factory.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/ultralytics_yolo_object_detection_service.dart';
 import 'package:object_detection/object_detection.dart';
 
 void main() {
   group('ObjectDetectionService platform backend', () {
-    test('exposes all three selectable backends', () {
+    test('exposes all five selectable backends', () {
       expect(ObjectDetectionBackend.values, [
         ObjectDetectionBackend.objectDetectionPackage,
         ObjectDetectionBackend.ultralyticsYolo,
         ObjectDetectionBackend.googleMlKit,
+        ObjectDetectionBackend.nativeMethodChannel,
+        ObjectDetectionBackend.opencvSdk,
       ]);
     });
 
@@ -56,30 +62,198 @@ void main() {
       );
     });
 
-    test(
-      'uses prominent-object live options and a faster cadence for ML Kit',
-      () {
-        final options = GoogleMlKitObjectDetectionService.liveOptions();
+    test('uses smaller YOLO preprocessing on iOS', () {
+      expect(
+        UltralyticsYoloObjectDetectionService.maxDimensionForPlatform(
+          isIOS: true,
+        ),
+        416,
+      );
+      expect(
+        UltralyticsYoloObjectDetectionService.maxDimensionForPlatform(
+          isIOS: false,
+        ),
+        640,
+      );
+    });
 
-        expect(options.mode, ml_object.DetectionMode.stream);
-        expect(options.classifyObjects, isTrue);
-        expect(options.multipleObjects, isFalse);
-        expect(
-          ObjectDetectionServiceFactory.requestMinIntervalFor(
-            backend: ObjectDetectionBackend.googleMlKit,
-            isIOS: false,
-          ),
-          const Duration(milliseconds: 100),
-        );
-        expect(
-          ObjectDetectionServiceFactory.requestMinIntervalFor(
-            backend: ObjectDetectionBackend.ultralyticsYolo,
-            isIOS: false,
-          ),
-          const Duration(milliseconds: 350),
-        );
-      },
-    );
+    test('uses multi-object live options and a faster cadence for ML Kit', () {
+      final options = GoogleMlKitObjectDetectionService.liveOptions();
+
+      expect(options.mode, ml_object.DetectionMode.stream);
+      expect(options.classifyObjects, isTrue);
+      expect(options.multipleObjects, isTrue);
+      expect(
+        ObjectDetectionServiceFactory.requestMinIntervalFor(
+          backend: ObjectDetectionBackend.googleMlKit,
+          isIOS: false,
+        ),
+        const Duration(milliseconds: 100),
+      );
+      expect(
+        ObjectDetectionServiceFactory.requestMinIntervalFor(
+          backend: ObjectDetectionBackend.googleMlKit,
+          isIOS: true,
+        ),
+        const Duration(milliseconds: 200),
+      );
+      expect(
+        ObjectDetectionServiceFactory.requestMinIntervalFor(
+          backend: ObjectDetectionBackend.ultralyticsYolo,
+          isIOS: false,
+        ),
+        const Duration(milliseconds: 350),
+      );
+      expect(
+        ObjectDetectionServiceFactory.requestMinIntervalFor(
+          backend: ObjectDetectionBackend.nativeMethodChannel,
+          isIOS: false,
+        ),
+        const Duration(milliseconds: 250),
+      );
+      expect(
+        ObjectDetectionServiceFactory.requestMinIntervalFor(
+          backend: ObjectDetectionBackend.opencvSdk,
+          isIOS: false,
+        ),
+        const Duration(milliseconds: 400),
+      );
+    });
+  });
+
+  group('ObjectDetectionService OpenCV SDK mapping', () {
+    test('maps normalized OpenCV boxes into upright image pixels', () {
+      final results = OpenCvSdkObjectDetectionService.mapResponse(const {
+        'coordinateSpace': 'upright_unmirrored',
+        'imageWidth': 480,
+        'imageHeight': 640,
+        'detections': [
+          {
+            'left': 0.10,
+            'top': 0.20,
+            'right': 0.40,
+            'bottom': 0.60,
+            'label': 'Bottle',
+            'classIndex': 57,
+            'confidence': 0.92,
+            'trackingId': null,
+          },
+        ],
+      });
+
+      expect(results, hasLength(1));
+      expect(
+        results.single.boundingBox,
+        const Rect.fromLTRB(48, 128, 192, 384),
+      );
+      expect(results.single.source, AppObjectDetectionSource.opencvSdk);
+    });
+
+    test('filters malformed OpenCV confidence and class metadata', () {
+      final results = OpenCvSdkObjectDetectionService.mapResponse(const {
+        'coordinateSpace': 'upright_unmirrored',
+        'imageWidth': 480,
+        'imageHeight': 640,
+        'detections': [
+          {
+            'left': 0.1,
+            'top': 0.1,
+            'right': 0.4,
+            'bottom': 0.4,
+            'label': 'Bottle',
+            'classIndex': -1,
+            'confidence': 0.9,
+          },
+          {
+            'left': 0.1,
+            'top': 0.1,
+            'right': 0.4,
+            'bottom': 0.4,
+            'label': 'Chair',
+            'classIndex': 4,
+            'confidence': 1.1,
+          },
+        ],
+      });
+
+      expect(results, isEmpty);
+    });
+  });
+
+  group('ObjectDetectionService native MethodChannel mapping', () {
+    test('maps normalized native boxes into upright image pixels', () {
+      final results = NativeMethodChannelObjectDetectionService.mapResponse(
+        const {
+          'coordinateSpace': 'upright_unmirrored',
+          'imageWidth': 480,
+          'imageHeight': 640,
+          'detections': [
+            {
+              'left': 0.10,
+              'top': 0.20,
+              'right': 0.40,
+              'bottom': 0.60,
+              'label': 'bottle',
+              'classIndex': 39,
+              'confidence': 0.92,
+              'trackingId': null,
+            },
+          ],
+        },
+      );
+
+      expect(results, hasLength(1));
+      expect(
+        results.single.boundingBox,
+        const Rect.fromLTRB(48, 128, 192, 384),
+      );
+      expect(results.single.imageSize, const Size(480, 640));
+      expect(results.single.classIndex, 39);
+      expect(
+        results.single.source,
+        AppObjectDetectionSource.nativeMethodChannel,
+      );
+    });
+
+    test('filters malformed, person, and low-confidence native results', () {
+      final results = NativeMethodChannelObjectDetectionService.mapResponse(
+        const {
+          'coordinateSpace': 'upright_unmirrored',
+          'imageWidth': 100,
+          'imageHeight': 50,
+          'detections': [
+            {
+              'left': 0.1,
+              'top': 0.1,
+              'right': 0.9,
+              'bottom': 0.9,
+              'label': 'person',
+              'classIndex': 0,
+              'confidence': 0.99,
+            },
+            {
+              'left': 0.1,
+              'top': 0.1,
+              'right': 0.9,
+              'bottom': 0.9,
+              'label': 'chair',
+              'classIndex': 56,
+              'confidence': 0.24,
+            },
+            {
+              'left': 0.1,
+              'top': 0.1,
+              'bottom': 0.9,
+              'label': 'broken',
+              'classIndex': 1,
+              'confidence': 0.99,
+            },
+          ],
+        },
+      );
+
+      expect(results, isEmpty);
+    });
   });
 
   group('ObjectDetectionService YOLO mapping', () {
@@ -169,6 +343,42 @@ void main() {
   });
 
   group('ObjectDetectionService Google ML Kit mapping', () {
+    test('converts strided YUV420 to NV21 off the UI isolate', () async {
+      final frame = CameraPixelFrameData(
+        width: 2,
+        height: 2,
+        format: CameraPixelFormat.yuv420,
+        planes: [
+          CameraPixelPlaneData(
+            bytes: Uint8List.fromList([10, 20, 99, 30, 40, 99]),
+            bytesPerRow: 3,
+            bytesPerPixel: 1,
+          ),
+          CameraPixelPlaneData(
+            bytes: Uint8List.fromList([50, 99]),
+            bytesPerRow: 2,
+            bytesPerPixel: 2,
+          ),
+          CameraPixelPlaneData(
+            bytes: Uint8List.fromList([60, 99]),
+            bytesPerRow: 2,
+            bytesPerPixel: 2,
+          ),
+        ],
+      );
+
+      expect(
+        GoogleMlKitObjectDetectionService.androidNv21BytesFromFrame(frame),
+        [10, 20, 30, 40, 60, 50],
+      );
+      expect(
+        await GoogleMlKitObjectDetectionService.androidNv21BytesInBackground(
+          frame,
+        ),
+        [10, 20, 30, 40, 60, 50],
+      );
+    });
+
     test('maps labels, tracking IDs, and Android quarter-turn coordinates', () {
       final results = GoogleMlKitObjectDetectionService.mapDetections(
         [
@@ -220,6 +430,7 @@ void main() {
           [
             _mlKitObject(label: 'Food', confidence: 0.40),
             _mlKitObject(label: 'Person', confidence: 0.99),
+            _mlKitObject(label: 'Person', confidence: 0.20),
             _mlKitObject(label: 'Plant', confidence: 0.85),
           ],
           rawImageSize: const Size(200, 100),

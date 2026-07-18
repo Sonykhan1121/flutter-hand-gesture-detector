@@ -15,6 +15,7 @@ abstract interface class ObjectDetectionService {
   Future<List<AppObjectDetection>> detect(
     CameraImage image, {
     od.CameraFrameRotation? rotation,
+    CameraLensDirection? lensDirection,
   });
 
   Future<void> close();
@@ -37,6 +38,7 @@ abstract class SingleFlightObjectDetectionService
   Future<List<AppObjectDetection>> detect(
     CameraImage image, {
     od.CameraFrameRotation? rotation,
+    CameraLensDirection? lensDirection,
   }) async {
     if (_isClosed) return const [];
     if (_isBusy) throw StateError('$runtimeType is busy.');
@@ -45,7 +47,11 @@ abstract class SingleFlightObjectDetectionService
     _activeDetectionFinished = finished;
     _isBusy = true;
     try {
-      return await performDetection(image, rotation: rotation);
+      return await performDetection(
+        image,
+        rotation: rotation,
+        lensDirection: lensDirection,
+      );
     } finally {
       _isBusy = false;
       if (!finished.isCompleted) finished.complete();
@@ -58,6 +64,7 @@ abstract class SingleFlightObjectDetectionService
   Future<List<AppObjectDetection>> performDetection(
     CameraImage image, {
     od.CameraFrameRotation? rotation,
+    CameraLensDirection? lensDirection,
   });
 
   Future<void> disposeBackend();

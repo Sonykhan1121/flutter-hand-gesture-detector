@@ -2,12 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../domain/enums/object_detection_backend.dart';
 import '../../domain/models/follow_target.dart';
-import 'google_mlkit_object_debug_painter.dart';
 import 'object_detection_debug_painter.dart';
-import 'object_detection_package_debug_painter.dart';
-import 'ultralytics_yolo_debug_painter.dart';
 
-/// Routes raw object results to the painter owned by the selected package.
+/// Creates the shared debug painter with the selected backend's color.
 abstract final class ObjectDetectionDebugPainterFactory {
   static ObjectDetectionDebugPainter create({
     required ObjectDetectionBackend backend,
@@ -17,29 +14,22 @@ abstract final class ObjectDetectionDebugPainterFactory {
     String labelPrefix = '',
     int previewQuarterTurns = 0,
   }) {
+    return ObjectDetectionDebugPainter(
+      targets: targets,
+      showLabels: showLabels,
+      color: color ?? _defaultColor(backend),
+      labelPrefix: labelPrefix,
+      previewQuarterTurns: previewQuarterTurns,
+    );
+  }
+
+  static Color _defaultColor(ObjectDetectionBackend backend) {
     return switch (backend) {
-      ObjectDetectionBackend.objectDetectionPackage =>
-        ObjectDetectionPackageDebugPainter(
-          targets: targets,
-          showLabels: showLabels,
-          color: color,
-          labelPrefix: labelPrefix,
-          previewQuarterTurns: previewQuarterTurns,
-        ),
-      ObjectDetectionBackend.ultralyticsYolo => UltralyticsYoloDebugPainter(
-        targets: targets,
-        showLabels: showLabels,
-        color: color,
-        labelPrefix: labelPrefix,
-        previewQuarterTurns: previewQuarterTurns,
-      ),
-      ObjectDetectionBackend.googleMlKit => GoogleMlKitObjectDebugPainter(
-        targets: targets,
-        showLabels: showLabels,
-        color: color,
-        labelPrefix: labelPrefix,
-        previewQuarterTurns: previewQuarterTurns,
-      ),
+      ObjectDetectionBackend.objectDetectionPackage ||
+      ObjectDetectionBackend.nativeMethodChannel => const Color(0xFFFFA726),
+      ObjectDetectionBackend.ultralyticsYolo => const Color(0xFF00FB46),
+      ObjectDetectionBackend.googleMlKit => const Color(0xFF29B6F6),
+      ObjectDetectionBackend.opencvSdk => const Color(0xFF00A3A3),
     };
   }
 }
