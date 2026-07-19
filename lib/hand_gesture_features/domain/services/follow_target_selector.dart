@@ -54,6 +54,37 @@ class FollowTargetSelector {
     return bestCandidate;
   }
 
+  /// Removes ML Kit's common "Home goods" false positive around the hand.
+  List<FollowTarget> withoutLikelyHandFalsePositives({
+    required List<FollowTarget> objects,
+    required Rect handDisplayBox,
+  }) {
+    if (handDisplayBox.isEmpty) return objects;
+
+    final paddedHandBox = handDisplayBox.inflate(
+      HandGestureThresholds.googleMlKitHandFalsePositivePadding,
+    );
+    return objects
+        .where((target) {
+          final label = FollowTargetIdentity.normalizeLabel(
+            target.label ?? target.displayLabel,
+          );
+          if (label != 'home goods') return true;
+
+          final intersection = paddedHandBox.intersect(target.displayBox);
+          if (intersection.isEmpty) return true;
+          final intersectionArea = intersection.width * intersection.height;
+          final handArea = paddedHandBox.width * paddedHandBox.height;
+          final targetArea = target.displayBox.width * target.displayBox.height;
+          final smallerArea = math.min(handArea, targetArea);
+          if (smallerArea <= 0) return true;
+
+          return intersectionArea / smallerArea <
+              HandGestureThresholds.googleMlKitHandFalsePositiveOverlapRatio;
+        })
+        .toList(growable: false);
+  }
+
   /// Matches a previous target to the best current candidate.
   FollowTarget? track({
     required FollowTarget previous,
@@ -64,13 +95,7 @@ class FollowTargetSelector {
         .where(
           (candidate) =>
               candidate.type == previous.type &&
-              (identity == null || _matchesIdentityClass(identity, candidate)),
-        )
-        .where(
-          (candidate) =>
-              identity == null ||
-              identity.type == FollowTargetType.object ||
-              _visibleAppearanceMatches(identity, candidate),
+              (identity == null || _matchesIdentity(identity, candidate)),
         )
         .toList(growable: false);
     if (sameTypeCandidates.isEmpty) return null;
@@ -125,6 +150,14 @@ class FollowTargetSelector {
   /// Checks whether two selection observations describe the same candidate.
   bool isSameSelectionCandidate(FollowTarget previous, FollowTarget candidate) {
     if (candidate.type != previous.type) return false;
+
+    final previousTrackingId = previous.trackingId;
+    final candidateTrackingId = candidate.trackingId;
+    if (previousTrackingId != null && candidateTrackingId != null) {
+      return previousTrackingId == candidateTrackingId &&
+          isSpatiallyContinuous(previous, candidate);
+    }
+
     final previousLabel = FollowTargetIdentity.normalizeLabel(
       previous.label ?? previous.type.displayLabel,
     );
@@ -139,8 +172,6 @@ class FollowTargetSelector {
       return false;
     }
 
-    final previousTrackingId = previous.trackingId;
-    final candidateTrackingId = candidate.trackingId;
     if (candidate.type == FollowTargetType.face &&
         previousTrackingId != null &&
         candidateTrackingId != null &&
@@ -258,6 +289,20 @@ class FollowTargetSelector {
     return true;
   }
 
+  bool _matchesIdentity(FollowTargetIdentity identity, FollowTarget candidate) {
+    if (candidate.type != identity.type) return false;
+
+    final identityTrackingId = identity.trackingId;
+    final candidateTrackingId = candidate.trackingId;
+    if (identityTrackingId != null && candidateTrackingId != null) {
+      return identityTrackingId == candidateTrackingId;
+    }
+
+    if (!_matchesIdentityClass(identity, candidate)) return false;
+    return identity.type == FollowTargetType.object ||
+        _visibleAppearanceMatches(identity, candidate);
+  }
+
   bool _visibleAppearanceMatches(
     FollowTargetIdentity identity,
     FollowTarget candidate,
@@ -266,8 +311,8 @@ class FollowTargetSelector {
     final current = candidate.appearanceSignature;
     if (reference == null || current == null) {
       return identity.type == FollowTargetType.face &&
-          identity.faceTrackingId != null &&
-          identity.faceTrackingId == candidate.trackingId;
+          identity.trackingId != null &&
+          identity.trackingId == candidate.trackingId;
     }
     return reference.compositeSimilarity(current) >=
         HandGestureThresholds.followTargetVisibleSimilarity;

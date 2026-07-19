@@ -115,8 +115,103 @@ void main() {
     });
   });
 
+  group('FollowTargetSelector ML Kit hand false positives', () {
+    const selector = FollowTargetSelector();
+    const handBox = Rect.fromLTWH(0.35, 0.35, 0.25, 0.30);
+
+    test('removes an overlapping Home goods hand detection', () {
+      final falseHand = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.37, 0.37, 0.20, 0.26),
+        label: 'Home goods',
+        trackingId: 7,
+      );
+
+      final filtered = selector.withoutLikelyHandFalsePositives(
+        objects: [falseHand],
+        handDisplayBox: handBox,
+      );
+
+      expect(filtered, isEmpty);
+    });
+
+    test('keeps Home goods away from the hand and real nearby objects', () {
+      final realHomeGoods = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.70, 0.30, 0.20, 0.20),
+        label: 'Home goods',
+      );
+      final bottleUnderHand = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.38, 0.38, 0.18, 0.24),
+        label: 'Bottle',
+      );
+
+      final filtered = selector.withoutLikelyHandFalsePositives(
+        objects: [realHomeGoods, bottleUnderHand],
+        handDisplayBox: handBox,
+      );
+
+      expect(filtered, [realHomeGoods, bottleUnderHand]);
+    });
+  });
+
   group('FollowTargetSelector immutable identity', () {
     const selector = FollowTargetSelector();
+
+    test('tracks an ML Kit object by ID across label and class changes', () {
+      final previous = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'Object',
+        classIndex: -1,
+        trackingId: 7,
+      );
+      final identity = FollowTargetIdentity.fromTarget(previous);
+      final classified = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.43, 0.41, 0.10, 0.10),
+        label: 'Bottle',
+        classIndex: 39,
+        trackingId: 7,
+      );
+
+      final selected = selector.track(
+        previous: previous,
+        identity: identity,
+        candidates: [classified],
+      );
+
+      expect(identity.trackingId, 7);
+      expect(selected, classified);
+    });
+
+    test('does not transfer an ML Kit identity to another tracking ID', () {
+      final previous = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'Object',
+        classIndex: -1,
+        trackingId: 7,
+      );
+      final identity = FollowTargetIdentity.fromTarget(previous);
+
+      final selected = selector.track(
+        previous: previous,
+        identity: identity,
+        candidates: [
+          _target(
+            type: FollowTargetType.object,
+            displayBox: const Rect.fromLTWH(0.42, 0.40, 0.10, 0.10),
+            label: 'Bottle',
+            classIndex: 39,
+            trackingId: 8,
+          ),
+        ],
+      );
+
+      expect(selected, isNull);
+    });
 
     test('visible tracking cannot transfer to a different label', () {
       final previous = _target(
@@ -228,6 +323,25 @@ void main() {
 
   group('FollowTargetSelector selection confirmation', () {
     const selector = FollowTargetSelector();
+
+    test('uses ML Kit tracking ID before changing label and class', () {
+      final generic = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'Object',
+        classIndex: -1,
+        trackingId: 7,
+      );
+      final classified = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.43, 0.41, 0.10, 0.10),
+        label: 'Bottle',
+        classIndex: 39,
+        trackingId: 7,
+      );
+
+      expect(selector.isSameSelectionCandidate(generic, classified), isTrue);
+    });
 
     test('accepts only the exact type, label, class, and nearby box', () {
       final remembered = _target(

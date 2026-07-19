@@ -599,6 +599,49 @@ class HandGeometryService {
     return math.sqrt(dx * dx + dy * dy);
   }
 
+  /// Unsigned screen-space angle between two directed landmark segments.
+  double? angleBetweenLandmarkSegments2D({
+    required HandLandmark firstStart,
+    required HandLandmark firstEnd,
+    required HandLandmark secondStart,
+    required HandLandmark secondEnd,
+  }) {
+    final firstX = firstEnd.x - firstStart.x;
+    final firstY = firstEnd.y - firstStart.y;
+    final secondX = secondEnd.x - secondStart.x;
+    final secondY = secondEnd.y - secondStart.y;
+    final firstLengthSquared = firstX * firstX + firstY * firstY;
+    final secondLengthSquared = secondX * secondX + secondY * secondY;
+    if (!firstLengthSquared.isFinite ||
+        !secondLengthSquared.isFinite ||
+        firstLengthSquared <= 1e-18 ||
+        secondLengthSquared <= 1e-18) {
+      return null;
+    }
+
+    final dot = firstX * secondX + firstY * secondY;
+    final cross = firstX * secondY - firstY * secondX;
+    final angle = math.atan2(cross.abs(), dot) * 180 / math.pi;
+    return angle.isFinite ? angle : null;
+  }
+
+  /// Whether the midpoint of one segment is visibly above another in 2D.
+  bool isLandmarkSegmentAbove2D({
+    required HandLandmark upperStart,
+    required HandLandmark upperEnd,
+    required HandLandmark lowerStart,
+    required HandLandmark lowerEnd,
+    required double minVerticalGap,
+  }) {
+    if (!minVerticalGap.isFinite || minVerticalGap < 0) return false;
+
+    final upperMidY = (upperStart.y + upperEnd.y) / 2;
+    final lowerMidY = (lowerStart.y + lowerEnd.y) / 2;
+    if (!upperMidY.isFinite || !lowerMidY.isFinite) return false;
+
+    return lowerMidY - upperMidY >= minVerticalGap - 1e-9;
+  }
+
   /// 3D distance between two landmarks using weighted depth.
   double distanceBetweenLandmarks3D(HandLandmark first, HandLandmark second) {
     final dx = first.x - second.x;

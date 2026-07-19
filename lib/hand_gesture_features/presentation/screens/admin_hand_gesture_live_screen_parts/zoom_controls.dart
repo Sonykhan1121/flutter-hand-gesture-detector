@@ -4,11 +4,6 @@ extension on _AdminHandGestureLiveScreenState {
   /// True when the active camera reports a real zoom range.
   bool get _isCameraZoomSupported => _maxZoomLevel > _minZoomLevel;
 
-  /// Allows partial zoom-out detection only when there is zoom to reduce.
-  bool get _shouldAllowPartialZoomOutRecovery {
-    return _isCameraZoomSupported && _currentZoomLevel > _minZoomLevel;
-  }
-
   /// Blocks gesture zoom while the user is manually controlling zoom.
   bool get _shouldIgnoreGestureZoomForManualControl {
     if (_isTouchZoomGuideEnabled && _isTouchZoomInteractionActive) return true;
@@ -288,6 +283,7 @@ extension on _AdminHandGestureLiveScreenState {
 
   /// Marks manual slider/button interaction as active.
   void _beginManualZoomInteraction() {
+    _zoomGestureDetector.clearState();
     _zoomControlAutoHideTimer?.cancel();
     _isManualZoomInteractionActive = true;
     _gestureZoomSuppressedUntil = null;
@@ -308,6 +304,7 @@ extension on _AdminHandGestureLiveScreenState {
 
   /// Applies a zoom level from the manual slider.
   void _handleManualZoomChanged(double zoomLevel) {
+    _zoomGestureDetector.clearState();
     _showZoomControlOverlay(autoHide: false);
     unawaited(_setCameraZoomLevel(zoomLevel, revealZoomControl: false));
   }
@@ -316,6 +313,7 @@ extension on _AdminHandGestureLiveScreenState {
   void _beginTouchZoomInteraction() {
     if (!_isTouchZoomGuideEnabled) return;
 
+    _zoomGestureDetector.clearState();
     _zoomControlAutoHideTimer?.cancel();
     _isTouchZoomInteractionActive = true;
     _gestureZoomSuppressedUntil = null;
@@ -352,6 +350,7 @@ extension on _AdminHandGestureLiveScreenState {
 
   /// Applies a fixed manual zoom delta and suppresses gesture zoom briefly.
   void _applyManualZoomDelta(double delta) {
+    _zoomGestureDetector.clearState();
     _gestureZoomSuppressedUntil = DateTime.now().add(
       const Duration(milliseconds: 700),
     );
@@ -368,6 +367,7 @@ extension on _AdminHandGestureLiveScreenState {
 
   /// Returns camera zoom to minimum and clears touch-guide state.
   void _resetManualZoom() {
+    _zoomGestureDetector.clearState();
     _gestureZoomSuppressedUntil = DateTime.now().add(
       const Duration(milliseconds: 700),
     );

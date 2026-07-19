@@ -38,12 +38,8 @@ extension on _AdminHandGestureLiveScreenState {
   bool _shouldMirrorDirectionalGestureCoordinates(
     CameraController? controller,
   ) {
-    // Rear-camera users face the camera, so horizontal commands are reversed
-    // compared with the raw image coordinate system.
-    if (controller?.description.lensDirection == CameraLensDirection.back) {
-      return true;
-    }
-
+    // Directions describe what the user sees on screen. Apply only the same
+    // horizontal correction used to align detector coordinates to the preview.
     return _shouldMirrorPreviewCoordinates(controller);
   }
 
@@ -123,9 +119,21 @@ extension on _AdminHandGestureLiveScreenState {
     final controller = _controller;
     final showClosedFistTargetCandidate =
         _followTargetProgress.phase == FollowTargetTrackingPhase.selecting;
-    final closedFistTargetCandidates =
-        showClosedFistTargetCandidate && _predictedFollowTarget != null
-        ? <FollowTarget>[_predictedFollowTarget!]
+    final nearestClosedFistTarget = showClosedFistTargetCandidate
+        ? _predictedFollowTarget
+        : null;
+    final otherClosedFistFaceTargets = showClosedFistTargetCandidate
+        ? _followObjectCandidateFaces
+              .where((target) => !identical(target, nearestClosedFistTarget))
+              .toList(growable: false)
+        : const <FollowTarget>[];
+    final otherClosedFistObjectTargets = showClosedFistTargetCandidate
+        ? _followObjectCandidateObjects
+              .where((target) => !identical(target, nearestClosedFistTarget))
+              .toList(growable: false)
+        : const <FollowTarget>[];
+    final closedFistTargetCandidates = nearestClosedFistTarget != null
+        ? <FollowTarget>[nearestClosedFistTarget]
         : const <FollowTarget>[];
     final closedFistFaceCandidates = closedFistTargetCandidates
         .where((target) => target.type == FollowTargetType.face)
@@ -133,19 +141,10 @@ extension on _AdminHandGestureLiveScreenState {
     final closedFistObjectCandidates = closedFistTargetCandidates
         .where((target) => target.type == FollowTargetType.object)
         .toList(growable: false);
-    final selectionMemory = _followTargetSelectionMemory;
-    final selectionCandidateReady = selectionMemory?.isReleasable ?? false;
-    final selectionCandidateColor = selectionCandidateReady
-        ? const Color(0xFF00FB46)
-        : const Color(0xFFFFB020);
-    final selectionCandidateLabelPrefix = !selectionCandidateReady
-        ? 'Hold over '
-        : _followTargetSelectionCandidateHidden
+    const selectionCandidateColor = followTargetSelectionGreen;
+    final selectionCandidateLabelPrefix = _followTargetSelectionCandidateHidden
         ? 'Last seen: '
         : 'Release → ';
-    final confirmingSelection =
-        _followTargetProgress.phase ==
-        FollowTargetTrackingPhase.confirmingSelection;
     final showFollowTargetDebugOverlay =
         _showFollowTargetDebugOverlay &&
         !showClosedFistTargetCandidate &&
@@ -239,19 +238,16 @@ extension on _AdminHandGestureLiveScreenState {
                                               ),
                                             if (_lockedFollowTarget != null)
                                               CustomPaint(
-                                                painter:
-                                                    FollowTargetOverlayPainter(
-                                                      target:
-                                                          _lockedFollowTarget!,
-                                                      previewQuarterTurns:
-                                                          overlayQuarterTurns,
-                                                      colorOverride:
-                                                          confirmingSelection
-                                                          ? const Color(
-                                                              0xFFFFB020,
-                                                            )
-                                                          : null,
-                                                    ),
+                                                painter: FollowTargetOverlayPainter(
+                                                  target: _lockedFollowTarget!,
+                                                  previewQuarterTurns:
+                                                      overlayQuarterTurns,
+                                                  colorOverride:
+                                                      _followTargetIdentity !=
+                                                          null
+                                                      ? followTargetSelectionGreen
+                                                      : null,
+                                                ),
                                               ),
                                             if (_showObjectOpticalFlowDebugOverlay &&
                                                 _objectOpticalFlowResult !=
@@ -264,6 +260,31 @@ extension on _AdminHandGestureLiveScreenState {
                                                       previewQuarterTurns:
                                                           overlayQuarterTurns,
                                                     ),
+                                              ),
+                                            if (otherClosedFistFaceTargets
+                                                .isNotEmpty)
+                                              CustomPaint(
+                                                painter:
+                                                    ObjectDetectionDebugPainter(
+                                                      targets:
+                                                          otherClosedFistFaceTargets,
+                                                      showLabels: true,
+                                                      previewQuarterTurns:
+                                                          overlayQuarterTurns,
+                                                    ),
+                                              ),
+                                            if (otherClosedFistObjectTargets
+                                                .isNotEmpty)
+                                              CustomPaint(
+                                                painter: ObjectDetectionDebugPainterFactory.create(
+                                                  backend: widget
+                                                      .objectDetectionBackend,
+                                                  targets:
+                                                      otherClosedFistObjectTargets,
+                                                  showLabels: true,
+                                                  previewQuarterTurns:
+                                                      overlayQuarterTurns,
+                                                ),
                                               ),
                                             if (closedFistFaceCandidates
                                                 .isNotEmpty)

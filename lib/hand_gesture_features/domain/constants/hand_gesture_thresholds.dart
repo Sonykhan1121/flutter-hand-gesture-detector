@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:hand_detection/hand_detection.dart';
 
 /// Tunable values used by gesture detectors and the live camera screen.
@@ -87,6 +85,8 @@ abstract final class HandGestureThresholds {
   static const double googleMlKitFastBoxSmoothingAlpha = 0.76;
   static const double googleMlKitFastMotionThreshold = 0.06;
   static const double googleMlKitTrackMaxCenterDistance = 0.28;
+  static const double googleMlKitHandFalsePositivePadding = 0.025;
+  static const double googleMlKitHandFalsePositiveOverlapRatio = 0.45;
   static const Duration googleMlKitPartialTrackHoldDuration = Duration(
     milliseconds: 400,
   );
@@ -203,14 +203,6 @@ abstract final class HandGestureThresholds {
   static const double minLandmarkVisibility = 0.35;
   static const double landmarkDepthWeight = 0.65;
 
-  /// Fingertips used for movement direction and fingertip-wiggle detection.
-  static const List<HandLandmarkType> directionFingerTipTypes = [
-    HandLandmarkType.indexFingerTip,
-    HandLandmarkType.middleFingerTip,
-    HandLandmarkType.ringFingerTip,
-    HandLandmarkType.pinkyTip,
-  ];
-
   /// Long-finger landmark chains ordered from MCP to tip.
   static const List<List<HandLandmarkType>> directionFingerChainTypes = [
     [
@@ -247,38 +239,70 @@ abstract final class HandGestureThresholds {
     HandLandmarkType.pinkyMCP,
   ];
 
-  /// Direction gesture shape thresholds.
-  static const int directionFingerChainMinAlignedCount = 3;
-  static const double directionFingerChainMinHorizontalImageRatio = 0.025;
-  static const double directionFingerChainMinHorizontalSpanRatio = 0.12;
-  static const double directionFingerChainHorizontalDominanceRatio = 1.25;
-  static const double directionFingerChainRightDominanceRatio = 1.10;
-  static const double directionFingerChainUpDiagonalHorizontalRatio = 0.25;
+  /// Static index-pointing direction thresholds.
+  static const double directionIndexMinJointAngleDegrees = 135.0;
+  static const double directionIndexMinProjectedHandSizeRatio = 0.20;
+  static const double directionSectorHysteresisDegrees = 10.0;
+
+  /// Inclusive 2D angle range between the visible thumb-tip segment 3->4 and
+  /// index-tip segment 7->8 for the simplified Zoom In pose.
+  static const double zoomInThumbIndexMinAngleDegrees = 45.0;
+  static const double zoomInThumbIndexMaxAngleDegrees = 90.0;
+  static const double zoomIndexAboveThumbMinGapRatio = 0.02;
+
+  /// Palm-extension requirement for the horizontal pointing directions.
+  /// A tip at or closer than the palm plane uses 10%. The requirement grows
+  /// linearly to 15% as the tip moves farther behind the palm.
+  static const double directionTipMinPalmWidthOffsetRatio = 0.10;
+  static const double directionTipMaxPalmWidthOffsetRatio = 0.15;
+  static const double directionTipMaxDepthDeltaPalmWidthRatio = 0.25;
+
+  /// Static Moving Left thresholds based only on points 0 and 5-20.
+  static const double movingLeftIndexMinJointAngleDegrees = 145.0;
+  static const double movingLeftIndexMinStraightnessRatio = 0.80;
+  static const double movingLeftMinDirectionAngleDegrees = 125.0;
+  static const double movingLeftMaxDirectionAngleDegrees = 235.0;
+  static const double movingLeftFoldedFingerMaxJointAngleDegrees = 145.0;
+  static const double movingLeftFoldedTipMaxPipDistanceRatio = 1.10;
+  static const int movingLeftRequiredConsecutiveFrames = 3;
+
+  /// Static Moving Right thresholds based only on points 0 and 5-20.
+  static const double movingRightIndexMinJointAngleDegrees = 145.0;
+  static const double movingRightIndexMinStraightnessRatio = 0.80;
+  static const double movingRightMinDirectionAngleDegrees = 305.0;
+  static const double movingRightMaxDirectionAngleDegrees = 70.0;
+  static const double movingRightFoldedFingerMaxJointAngleDegrees = 145.0;
+  static const double movingRightFoldedTipMaxPipDistanceRatio = 1.10;
+  static const int movingRightRequiredConsecutiveFrames = 3;
+
+  /// Easy Moving Up thresholds: index points 5-8 set direction.
+  static const double movingUpIndexMinJointAngleDegrees = 135.0;
+  static const double movingUpMinMcpToTipPalmWidthRatio = 0.15;
+  static const double movingUpMaxHorizontalToVerticalRatio = 0.75;
+  static const double movingUpInitialMinDirectionAngleDegrees = 75.0;
+  static const double movingUpInitialMaxDirectionAngleDegrees = 120.0;
+  static const double movingUpActiveMinDirectionAngleDegrees = 70.0;
+  static const double movingUpActiveMaxDirectionAngleDegrees = 125.0;
+  static const double movingUpFoldedFingerMaxJointAngleDegrees = 145.0;
+  static const double movingUpFoldedTipMaxPipDistanceRatio = 1.10;
+
+  /// Easy Moving Down thresholds: only index points 6-8 set direction.
+  static const double movingDownMinPipDipTipJointAngleDegrees = 135.0;
+  static const double movingDownMinPipToTipPalmWidthRatio = 0.15;
+  static const double movingDownMaxHorizontalToVerticalRatio = 0.75;
+  static const double movingDownInitialMinDirectionAngleDegrees = 245.0;
+  static const double movingDownInitialMaxDirectionAngleDegrees = 295.0;
+  static const double movingDownActiveMinDirectionAngleDegrees = 235.0;
+  static const double movingDownActiveMaxDirectionAngleDegrees = 305.0;
+  static const double movingDownFoldedFingerMaxJointAngleDegrees = 145.0;
+  static const double movingDownFoldedTipMaxPipDistanceRatio = 1.10;
+  static const int movingDownRequiredConsecutiveFrames = 3;
+
+  /// Shared projected-finger thresholds used by 3D geometry checks.
   static const double directionFingerChainMinVerticalImageRatio = 0.025;
   static const double directionFingerChainMinVerticalSpanRatio = 0.18;
   static const double directionFingerChainVerticalDominanceRatio = 1.25;
-  static const double directionMovingUpMinBackSideConfidence = 0.35;
   static const double directionFingerChainMaxDepthProjectionRatio = 1.35;
-  static const int directionDownRejectFoldedLongFingerCount = 3;
-  static const int directionFingerWiggleMinAlignedCount = 3;
-  static const int directionFingerWiggleHistoryMaxLength = 6;
-  static const int directionFingerWiggleMinDirectionChanges = 2;
-  static const int directionFingerWiggleCooldownFrames = 3;
-  static const double directionFingerWiggleSmoothingAlpha = 0.45;
-  static const double directionFingerWiggleMinStepRatio = 0.006;
-  static const double directionFingerWiggleVerticalMinStepRatio = 0.005;
-  static const double directionFingerWiggleMaxHorizontalStepRatio = 0.035;
-  static const double directionFingerWiggleDownVerticalDominanceRatio = 1.45;
-  static const double directionFingerWiggleDownMaxHorizontalStepRatio = 0.030;
-  static const Duration directionFingerWiggleMaxSampleGap = Duration(
-    milliseconds: 350,
-  );
-  static const Duration movingDownDisplayHoldDuration = Duration(
-    milliseconds: 900,
-  );
-  static const Duration movingUpDisplayHoldDuration = Duration(
-    milliseconds: 300,
-  );
 
   /// Palm/finger shape ratios used by custom gesture checks.
   static const double fingerTipVerticalMaxSpreadRatio = 0.22;
@@ -301,55 +325,40 @@ abstract final class HandGestureThresholds {
 
   static const double okTouchMaxDistanceRatio = 0.11;
 
-  /// Fist/punch shape thresholds.
-  static const double punchKnuckleMaxYSpreadRatio = 0.12;
-  static const double punchKnuckleMaxDepthSpreadRatio = 0.22;
-  static const double punchGestureMinPackageConfidence = 0.60;
-  static const int punchMaxDownExtendedFingerChainCount = 1;
+  /// Maximum thumb-tip distance from any index landmark for a punch.
+  static const double punchThumbMaxIndexDistanceRatio = 0.18;
+  static const double punchFingerMaxJointAngleDegrees = 120.0;
 
-  /// Index-circle thresholds for the return-to-main-position gesture.
-  static const int indexCircleHistoryMaxLength = 36;
-  static const int indexCircleMinSampleCount = 5;
-  static const Duration indexCircleWindow = Duration(milliseconds: 1400);
+  /// Static down-pointing hold used to return every task to its main state.
+  static const Duration returnToMainDownHoldDuration = Duration(seconds: 1);
+  static const double returnToMainFingerMinJointAngleDegrees = 135.0;
+  static const double returnToMainFingerMinProjectedHandSizeRatio = 0.20;
   static const Duration cancelEverythingHoldDuration = Duration(
     milliseconds: 900,
   );
-  static const double indexCircleMinAngleRadians = math.pi * 0.90;
-  static const double indexCircleMinImageRadiusRatio = 0.006;
-  static const double indexCircleMinRadiusRatio = 0.015;
-  static const double indexCircleMaxRadiusVariationRatio = 1.60;
-  static const double indexCircleMaxDepthVariationRatio = 0.32;
-
-  /// Index-only pose thresholds used before accepting an index circle.
-  static const double indexUpperFacingMinDistanceRatio = 0.08;
-  static const double indexUprightMaxSideOffsetRatio = 0.50;
 
   static const double closedThumbMaxPalmDistanceRatio = 0.30;
   static const double closedThumbTipIpPalmRatio = 1.00;
   static const double closedThumbMaxKnuckleDistanceRatio = 0.32;
   static const double closedThumbMaxTipMcpDistanceRatio = 0.36;
 
-  /// Pinch/open ratios and stability limits for zoom gestures.
-  static const double zoomClosedMaxDistanceRatio = 0.26;
-  static const double zoomOpenMinDistanceRatio = 0.27;
-  static const double zoomMinChangeRatio = 0.025;
+  /// Pinch and stability limits for zoom gestures.
+  /// Very small 2D gaps override noisy depth and count as fingertip contact.
+  static const double zoomTouchMax2dDistanceRatio = 0.08;
+
+  /// The normal closed-pinch limit uses weighted 3D fingertip distance.
+  static const double zoomClosedMaxDistanceRatio = 0.18;
+
+  /// Zoom In starts above this gap, leaving 18%-22% neutral.
+  static const double zoomInMinDistanceRatio = 0.22;
   static const double zoomMaxPalmMovementRatio = 0.08;
   static const int zoomStableFingerMinCount = 2;
   static const double zoomStableFingerMaxMovementRatio = 0.07;
-  static const double partialZoomOutOpenMinImageRatio = 0.045;
-  static const double partialZoomOutMinChangeImageRatio = 0.018;
-  static const double partialZoomOutClosedMaxStartDistanceFactor = 0.72;
 
-  /// Zoom gesture timing and repeat-rate thresholds.
-  static const Duration zoomStartPoseHoldDuration = Duration(milliseconds: 300);
-  static const double zoomActiveTipMinPalmDistanceRatio = 0.06;
+  /// Static zoom hold timing and repeat-rate thresholds.
+  static const Duration zoomStaticHoldDuration = Duration(seconds: 1);
   static const double zoomMinLandmarkVisibility = 0.30;
-
-  static const Duration zoomReleaseResetDuration = Duration(milliseconds: 650);
-  static const Duration zoomMaxGestureDuration = Duration(milliseconds: 2600);
-  static const Duration zoomMinGestureDuration = Duration(milliseconds: 90);
-  static const Duration zoomHoldDuration = Duration(milliseconds: 1200);
-  static const Duration gestureZoomRepeatInterval = Duration(milliseconds: 100);
+  static const Duration gestureZoomRepeatInterval = Duration(seconds: 1);
 
   /// Camera-frame cadence, manual zoom step, and recording hold timings.
   static const Duration minFrameProcessInterval = Duration(milliseconds: 50);

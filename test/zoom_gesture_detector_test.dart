@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/constants/hand_gesture_thresholds.dart';
@@ -8,152 +10,442 @@ import 'package:hand_detection/hand_detection.dart';
 const _imageSize = Size(400, 400);
 
 void main() {
-  group('ZoomGestureDetector palm stability', () {
-    test('does not arm zoom from non-finite hand confidence', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
+  group('ZoomGestureDetector static holds', () {
+    late DateTime now;
+    late ZoomGestureDetector detector;
 
-      expect(
-        _detect(detector, _zoomHand(tipDistance: 20, score: double.infinity)),
-        ZoomDirection.none,
-      );
-      expect(detector.isGestureActive, isFalse);
-
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
+    setUp(() {
+      now = DateTime(2026, 7, 18, 11);
+      detector = ZoomGestureDetector(now: () => now);
     });
 
-    test('returns zoom in when pinch opens and palm stays stable', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
+    test('angle-based pose zooms in at exactly one second', () {
+      final hand = _zoomHand(tipDistance: 80);
 
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+      expect(detector.isGestureActive, isTrue);
 
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 999));
+      expect(_detect(detector, hand), ZoomDirection.none);
 
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+      now = now.add(const Duration(milliseconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomIn);
+    });
+
+    test('closed pinch at the exact 2% gap zooms out after one second', () {
+      final hand = _zoomOutHand();
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomOut);
+    });
+
+    test('touching tips can zoom out when the index segment is above', () {
+      final hand = _touchingZoomOutHand();
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomOut);
+    });
+
+    test('screen-space touching still zooms out with noisy depth', () {
+      final hand = _touchingZoomOutHand(
+        landmarkZOverrides: const {
+          HandLandmarkType.thumbTip: 40,
+          HandLandmarkType.indexFingerTip: -40,
+        },
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomOut);
+    });
+
+    test('an angle below 45 degrees with a loose gap stays neutral', () {
+      final hand = _angleHand(30);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.isGestureActive, isFalse);
+    });
+
+    test('continues returning zoom in while the pose stays held', () {
+      final hand = _zoomHand(tipDistance: 80);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomIn);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomIn);
+      expect(
+        HandGestureThresholds.gestureZoomRepeatInterval,
+        const Duration(seconds: 1),
+      );
+    });
+
+    for (final rotation in const [90.0, 180.0]) {
+      test('rejects $rotation degree roll when index is no longer above', () {
+        final hand = _zoomHand(tipDistance: 80, rotationDegrees: rotation);
+
+        expect(_detect(detector, hand), ZoomDirection.none);
+        expect(detector.pendingDirection, ZoomDirection.none);
+      });
+    }
+
+    test('mirroring does not change the thumb/index angle', () {
+      final hand = _zoomHand(tipDistance: 80, mirrorPose: true);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomIn);
+    });
+
+    test('changing from zoom out to zoom in starts a fresh hold', () {
+      expect(_detect(detector, _zoomOutHand()), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 800));
+      expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+
+      now = now.add(const Duration(milliseconds: 999));
+      expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 1));
       expect(
         _detect(detector, _zoomHand(tipDistance: 80)),
         ZoomDirection.zoomIn,
       );
     });
+  });
 
-    test('returns zoom in with reduced pinch-open distance', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
+  group('ZoomGestureDetector simplified zoom-in geometry', () {
+    late DateTime now;
+    late ZoomGestureDetector detector;
 
-      expect(_detect(detector, _zoomHand(tipDistance: 50)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 50)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
-      expect(
-        _detect(detector, _zoomHand(tipDistance: 55)),
-        ZoomDirection.zoomIn,
-      );
+    setUp(() {
+      now = DateTime(2026, 7, 18, 11);
+      detector = ZoomGestureDetector(now: () => now);
     });
 
-    test('does not zoom in when the whole hand moves while pinch opens', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
+    for (final angle in const [45.0, 60.0, 75.0, 90.0]) {
+      test('accepts a $angle degree thumb/index angle', () {
+        final hand = _angleHand(angle);
 
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+        expect(_detect(detector, hand), ZoomDirection.none);
+        expect(detector.pendingDirection, ZoomDirection.zoomIn);
+        now = now.add(const Duration(seconds: 1));
+        expect(_detect(detector, hand), ZoomDirection.zoomIn);
+      });
+    }
 
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+    for (final angle in const [0.0, 20.0, 44.0, 91.0, 110.0, 160.0, 180.0]) {
+      test('rejects a $angle degree thumb/index angle', () {
+        final hand = _angleHand(angle);
 
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+        expect(_detect(detector, hand), ZoomDirection.none);
+        expect(detector.pendingDirection, ZoomDirection.none);
+      });
+    }
+
+    test('overlapping tips do not bypass reversed vertical ordering', () {
+      final hand = _zoomHand(
+        tipDistance: 80,
+        landmarkOverrides: const {
+          HandLandmarkType.thumbIP: Offset(90, 90),
+          HandLandmarkType.thumbTip: Offset(150, 90),
+          HandLandmarkType.indexFingerDIP: Offset(150, 150),
+          HandLandmarkType.indexFingerTip: Offset(150, 90),
+        },
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+
+    test('a close 45 degree pose is zoom out rather than zoom in', () {
+      final hand = _angleHand(
+        45,
+        axisLength: 30,
+        axisGap: 20,
+        landmarkOverrides: const {HandLandmarkType.thumbMCP: Offset(45, 94)},
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomOut);
+    });
+
+    test('a tucked close pinch stays neutral instead of becoming zoom in', () {
+      final hand = _angleHand(
+        45,
+        axisLength: 30,
+        axisGap: 20,
+        landmarkOverrides: const {
+          HandLandmarkType.thumbIP: Offset(108.8, 171.2),
+        },
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+
+    test('an indeterminate tucked pinch cannot fall through to zoom in', () {
+      final hand = _angleHand(
+        45,
+        axisLength: 30,
+        axisGap: 20,
+        missingTypes: const {HandLandmarkType.thumbMCP},
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+
+    test('an angled pinch at the exact closed boundary is zoom out', () {
+      final hand = _rightAngleHandWithTipDistance(
+        HandGestureThresholds.zoomClosedMaxDistanceRatio * 200,
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+    });
+
+    test('an angled pinch inside the distance dead band stays neutral', () {
+      final hand = _rightAngleHandWithTipDistance(40);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+
+    test('an angled pinch at the open boundary is zoom in', () {
+      final hand = _rightAngleHandWithTipDistance(
+        HandGestureThresholds.zoomInMinDistanceRatio * 200,
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+    });
+
+    test('accepts an exact 2% index-above-thumb gap', () {
+      final hand = _angleHand(60, indexSegmentOffset: const Offset(0, 11));
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+    });
+
+    test('rejects a vertical gap just below 2%', () {
+      final hand = _angleHand(60, indexSegmentOffset: const Offset(0, 11.1));
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+
+    test('rejects equal-height fingertip segments', () {
+      final hand = _angleHand(60, indexSegmentOffset: const Offset(0, 15));
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+
+    test('rejects a fingertip segment below the thumb segment', () {
+      final hand = _angleHand(60, indexSegmentOffset: const Offset(0, 20));
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+
+    test('proximal thumb and index landmarks do not change the tip angle', () {
+      final hand = _angleHand(
+        90,
+        landmarkOverrides: const {
+          HandLandmarkType.thumbCMC: Offset(150, 90),
+          HandLandmarkType.thumbMCP: Offset(150, 90),
+          HandLandmarkType.indexFingerMCP: Offset(150, 90),
+          HandLandmarkType.indexFingerPIP: Offset(150, 90),
+          HandLandmarkType.middleFingerDIP: Offset(150, 90),
+        },
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+    });
+
+    test('wrist and proximal active-finger joints are not required', () {
+      final hand = _angleHand(
+        90,
+        missingTypes: const {
+          HandLandmarkType.wrist,
+          HandLandmarkType.thumbCMC,
+          HandLandmarkType.thumbMCP,
+          HandLandmarkType.indexFingerMCP,
+          HandLandmarkType.indexFingerPIP,
+        },
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+    });
+
+    test('requires the four fingertip-segment points 3, 4, 7, and 8', () {
+      for (final type in const {
+        HandLandmarkType.thumbIP,
+        HandLandmarkType.thumbTip,
+        HandLandmarkType.indexFingerDIP,
+        HandLandmarkType.indexFingerTip,
+      }) {
+        detector.clearState();
+        final hand = _angleHand(90, missingTypes: {type});
+
+        expect(_detect(detector, hand), ZoomDirection.none);
+        expect(detector.pendingDirection, ZoomDirection.none);
+      }
+    });
+
+    test('rejects a zero-length visible fingertip segment', () {
+      final hand = _angleHand(
+        60,
+        landmarkOverrides: const {
+          HandLandmarkType.thumbIP: Offset(100, 100),
+          HandLandmarkType.thumbTip: Offset(100, 100),
+        },
+      );
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+
+    test('requires middle, ring, and pinky to stay folded', () {
+      final hand = _zoomHand(tipDistance: 80, otherFingersFolded: false);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+  });
+
+  group('ZoomGestureDetector hold resets', () {
+    late DateTime now;
+    late ZoomGestureDetector detector;
+
+    setUp(() {
+      now = DateTime(2026, 7, 18, 11);
+      detector = ZoomGestureDetector(now: () => now);
+    });
+
+    test('hand loss resets immediately', () {
+      final hand = _zoomHand(tipDistance: 80);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 800));
       expect(
-        _detect(
-          detector,
-          _zoomHand(tipDistance: 80, offset: const Offset(40, 0)),
-        ),
+        _detect(detector, _zoomHand(tipDistance: 80, score: 0.2)),
         ZoomDirection.none,
       );
       expect(detector.isGestureActive, isFalse);
+
+      now = now.add(const Duration(milliseconds: 200));
+      expect(_detect(detector, hand), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomIn);
     });
 
-    test('does not zoom in when the whole hand moves through depth', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
+    test('clearState requires a fresh hold', () {
+      final hand = _zoomOutHand();
 
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+      expect(_detect(detector, hand), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 800));
+      detector.clearState();
+      expect(detector.pendingDirection, ZoomDirection.none);
 
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
+      expect(_detect(detector, hand), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomOut);
+    });
 
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
-      expect(
-        _detect(detector, _zoomHand(tipDistance: 80, zOffset: 120)),
-        ZoomDirection.none,
+    test('clock rollback restarts the timer', () {
+      final hand = _zoomHand(tipDistance: 80);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 800));
+      expect(_detect(detector, hand), ZoomDirection.none);
+
+      now = now.subtract(const Duration(seconds: 2));
+      expect(_detect(detector, hand), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 999));
+      expect(_detect(detector, hand), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomIn);
+    });
+
+    test('losing the accepted angle resets the timer', () {
+      final validHand = _angleHand(90);
+      final invalidHand = _angleHand(30);
+
+      expect(_detect(detector, validHand), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 800));
+      expect(_detect(detector, invalidHand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+
+      expect(_detect(detector, validHand), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, validHand), ZoomDirection.zoomIn);
+    });
+
+    test('losing the vertical gap resets the timer', () {
+      final validHand = _angleHand(60);
+      final invalidHand = _angleHand(
+        60,
+        indexSegmentOffset: const Offset(0, 15),
       );
-      expect(detector.isGestureActive, isFalse);
+
+      expect(_detect(detector, validHand), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 800));
+      expect(_detect(detector, invalidHand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+
+      expect(_detect(detector, validHand), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, validHand), ZoomDirection.zoomIn);
     });
 
-    test('returns zoom out when pinch closes and palm stays stable', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
-
+    test('excessive palm movement restarts the timer', () {
       expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 800));
+      final moved = _zoomHand(tipDistance: 80, offset: const Offset(40, 0));
+      expect(_detect(detector, moved), ZoomDirection.none);
 
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
+      now = now.add(const Duration(milliseconds: 999));
+      expect(_detect(detector, moved), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 1));
+      expect(_detect(detector, moved), ZoomDirection.zoomIn);
+    });
+
+    test('two unstable folded fingers restart the timer', () {
       expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
-      expect(
-        _detect(detector, _zoomHand(tipDistance: 20)),
-        ZoomDirection.zoomOut,
+      now = now.add(const Duration(milliseconds: 800));
+      final movedHand = _zoomHand(
+        tipDistance: 80,
+        fingerTipOffsets: const {
+          HandLandmarkType.middleFingerTip: Offset(20, 0),
+          HandLandmarkType.ringFingerTip: Offset(20, 0),
+        },
       );
+      expect(_detect(detector, movedHand), ZoomDirection.none);
+
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, movedHand), ZoomDirection.zoomIn);
     });
 
-    test('returns zoom out with reduced pinch-close distance', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
-
-      expect(_detect(detector, _zoomHand(tipDistance: 57)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 57)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
-      expect(
-        _detect(detector, _zoomHand(tipDistance: 51)),
-        ZoomDirection.zoomOut,
-      );
-    });
-
-    test('does not zoom out when the whole hand moves while pinch closes', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
-
+    test('one unstable folded finger still allows the hold', () {
       expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
-      expect(
-        _detect(
-          detector,
-          _zoomHand(tipDistance: 20, offset: const Offset(40, 0)),
-        ),
-        ZoomDirection.none,
-      );
-      expect(detector.isGestureActive, isFalse);
-    });
-
-    test('does not zoom in when two folded fingers move too much', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
-
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+      now = now.add(const Duration(seconds: 1));
       expect(
         _detect(
           detector,
@@ -161,133 +453,47 @@ void main() {
             tipDistance: 80,
             fingerTipOffsets: const {
               HandLandmarkType.middleFingerTip: Offset(20, 0),
-              HandLandmarkType.ringFingerTip: Offset(20, 0),
             },
-          ),
-        ),
-        ZoomDirection.none,
-      );
-      expect(detector.isGestureActive, isFalse);
-    });
-
-    test('does not zoom out when two folded fingers move too much', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
-
-      expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
-      expect(
-        _detect(
-          detector,
-          _zoomHand(
-            tipDistance: 20,
-            fingerTipOffsets: const {
-              HandLandmarkType.middleFingerTip: Offset(20, 0),
-              HandLandmarkType.ringFingerTip: Offset(20, 0),
-            },
-          ),
-        ),
-        ZoomDirection.none,
-      );
-      expect(detector.isGestureActive, isFalse);
-    });
-
-    test('returns zoom in when only one folded finger moves too much', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
-
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(_detect(detector, _zoomHand(tipDistance: 20)), ZoomDirection.none);
-
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
-      expect(
-        _detect(
-          detector,
-          _zoomHand(
-            tipDistance: 80,
-            fingerTipOffsets: const {HandLandmarkType.pinkyTip: Offset(20, 0)},
           ),
         ),
         ZoomDirection.zoomIn,
       );
     });
+  });
 
-    test('returns partial zoom out when other fingers stay stable', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
+  group('ZoomGestureDetector validation', () {
+    test('rejects low-confidence and non-finite hands', () {
+      final detector = ZoomGestureDetector();
 
       expect(
-        _detect(
-          detector,
-          _zoomHand(tipDistance: 80, otherFingersFolded: false),
-          allowPartialZoomOut: true,
-        ),
+        _detect(detector, _zoomHand(tipDistance: 80, score: 0.2)),
         ZoomDirection.none,
       );
-
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
       expect(
-        _detect(
-          detector,
-          _zoomHand(tipDistance: 80, otherFingersFolded: false),
-          allowPartialZoomOut: true,
-        ),
+        _detect(detector, _zoomHand(tipDistance: 80, score: double.nan)),
         ZoomDirection.none,
       );
-
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
-      expect(
-        _detect(
-          detector,
-          _zoomHand(tipDistance: 20, otherFingersFolded: false),
-          allowPartialZoomOut: true,
-        ),
-        ZoomDirection.zoomOut,
-      );
+      expect(detector.isGestureActive, isFalse);
     });
 
-    test('does not partial zoom out when two folded fingers move too much', () {
-      var now = DateTime(2026);
-      final detector = ZoomGestureDetector(now: () => now);
-
-      expect(
-        _detect(
-          detector,
-          _zoomHand(tipDistance: 80, otherFingersFolded: false),
-          allowPartialZoomOut: true,
-        ),
-        ZoomDirection.none,
+    test('rejects low-visibility required landmarks', () {
+      final detector = ZoomGestureDetector();
+      final hand = _zoomHand(
+        tipDistance: 80,
+        lowVisibilityTypes: const {HandLandmarkType.ringFingerTip},
       );
 
-      now = now.add(HandGestureThresholds.zoomStartPoseHoldDuration);
-      expect(
-        _detect(
-          detector,
-          _zoomHand(tipDistance: 80, otherFingersFolded: false),
-          allowPartialZoomOut: true,
-        ),
-        ZoomDirection.none,
-      );
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.isGestureActive, isFalse);
+    });
 
-      now = now.add(HandGestureThresholds.zoomMinGestureDuration);
+    test('rejects invalid image dimensions', () {
+      final detector = ZoomGestureDetector();
+
       expect(
-        _detect(
-          detector,
-          _zoomHand(
-            tipDistance: 20,
-            otherFingersFolded: false,
-            fingerTipOffsets: const {
-              HandLandmarkType.middleFingerTip: Offset(20, 0),
-              HandLandmarkType.ringFingerTip: Offset(20, 0),
-            },
-          ),
-          allowPartialZoomOut: true,
+        detector.detect(
+          hand: _zoomHand(tipDistance: 80),
+          imageSize: const Size(double.nan, 400),
         ),
         ZoomDirection.none,
       );
@@ -296,15 +502,84 @@ void main() {
   });
 }
 
-ZoomDirection _detect(
-  ZoomGestureDetector detector,
-  Hand hand, {
-  bool allowPartialZoomOut = false,
+ZoomDirection _detect(ZoomGestureDetector detector, Hand hand) {
+  return detector.detect(hand: hand, imageSize: _imageSize);
+}
+
+Hand _angleHand(
+  double angleDegrees, {
+  double axisLength = 60,
+  double axisGap = 100,
+  Offset indexSegmentOffset = Offset.zero,
+  Map<HandLandmarkType, Offset> landmarkOverrides = const {},
+  Set<HandLandmarkType> missingTypes = const {},
 }) {
-  return detector.detect(
-    hand: hand,
-    imageSize: _imageSize,
-    allowPartialZoomOut: allowPartialZoomOut,
+  final indexDip = const Offset(150, 150) + indexSegmentOffset;
+  final indexTip = indexDip + const Offset(0, -1) * axisLength;
+  final thumbIp = Offset(150 - axisGap, 150);
+  final radians = (-90 + angleDegrees) * math.pi / 180;
+  final thumbTip =
+      thumbIp + Offset(math.cos(radians), math.sin(radians)) * axisLength;
+
+  return _zoomHand(
+    tipDistance: 80,
+    missingTypes: missingTypes,
+    landmarkOverrides: {
+      HandLandmarkType.thumbIP: thumbIp,
+      HandLandmarkType.thumbTip: thumbTip,
+      HandLandmarkType.indexFingerDIP: indexDip,
+      HandLandmarkType.indexFingerTip: indexTip,
+      ...landmarkOverrides,
+    },
+  );
+}
+
+Hand _rightAngleHandWithTipDistance(double tipDistance) {
+  const axisLength = 30.0;
+  final horizontalDistance = math.sqrt(
+    tipDistance * tipDistance - axisLength * axisLength,
+  );
+
+  return _angleHand(
+    90,
+    axisLength: axisLength,
+    axisGap: axisLength + horizontalDistance,
+    landmarkOverrides: const {HandLandmarkType.thumbMCP: Offset(45, 94)},
+  );
+}
+
+Hand _zoomOutHand({
+  Offset offset = Offset.zero,
+  double zOffset = 0,
+  Set<HandLandmarkType> missingTypes = const {},
+}) {
+  return _zoomHand(
+    tipDistance: 20,
+    offset: offset,
+    zOffset: zOffset,
+    missingTypes: missingTypes,
+    landmarkOverrides: const {
+      HandLandmarkType.thumbMCP: Offset(45, 94),
+      HandLandmarkType.thumbIP: Offset(72, 82),
+      HandLandmarkType.indexFingerDIP: Offset(125, 77),
+      HandLandmarkType.indexFingerTip: Offset(120, 67),
+    },
+  );
+}
+
+Hand _touchingZoomOutHand({
+  Map<HandLandmarkType, double> landmarkZOverrides = const {},
+}) {
+  return _zoomHand(
+    tipDistance: 0,
+    landmarkZOverrides: landmarkZOverrides,
+    landmarkOverrides: const {
+      HandLandmarkType.thumbMCP: Offset(45, 94),
+      HandLandmarkType.thumbIP: Offset(90, 80),
+      HandLandmarkType.thumbTip: Offset(110, 70),
+      HandLandmarkType.indexFingerDIP: Offset(110, 50),
+      HandLandmarkType.indexFingerTip: Offset(110, 70),
+    },
   );
 }
 
@@ -314,32 +589,65 @@ Hand _zoomHand({
   double zOffset = 0,
   bool otherFingersFolded = true,
   Map<HandLandmarkType, Offset> fingerTipOffsets = const {},
+  Map<HandLandmarkType, Offset> landmarkOverrides = const {},
+  Map<HandLandmarkType, double> landmarkZOverrides = const {},
+  double rotationDegrees = 0,
+  bool mirrorPose = false,
+  Set<HandLandmarkType> missingTypes = const {},
+  Set<HandLandmarkType> lowVisibilityTypes = const {},
   double score = 1,
 }) {
-  final halfDistance = tipDistance / 2;
+  final rotationRadians = rotationDegrees * math.pi / 180;
+  final halfVector = const Offset(1, 0) * (tipDistance / 2);
+  const tipCenter = Offset(110, 70);
+  const poseCenter = Offset(110, 120);
   final landmarks = <HandLandmark>[];
 
-  void add(HandLandmarkType type, double x, double y) {
+  Offset transform(Offset point) {
+    final sourceX = point.dx - poseCenter.dx;
+    final sourceY = point.dy - poseCenter.dy;
+    final rotatedX =
+        sourceX * math.cos(rotationRadians) -
+        sourceY * math.sin(rotationRadians);
+    final rotatedY =
+        sourceX * math.sin(rotationRadians) +
+        sourceY * math.cos(rotationRadians);
+
+    return Offset(
+      poseCenter.dx + (mirrorPose ? -rotatedX : rotatedX) + offset.dx,
+      poseCenter.dy + rotatedY + offset.dy,
+    );
+  }
+
+  void add(HandLandmarkType type, Offset point) {
+    if (missingTypes.contains(type)) return;
+
+    final transformedPoint = transform(landmarkOverrides[type] ?? point);
     landmarks.add(
       HandLandmark(
         type: type,
-        x: x + offset.dx,
-        y: y + offset.dy,
-        z: zOffset,
-        visibility: 1,
+        x: transformedPoint.dx,
+        y: transformedPoint.dy,
+        z: landmarkZOverrides[type] ?? zOffset,
+        visibility: lowVisibilityTypes.contains(type) ? 0.2 : 1,
       ),
     );
   }
 
-  add(HandLandmarkType.wrist, 100, 175);
-
-  add(HandLandmarkType.indexFingerMCP, 100, 120);
-  add(HandLandmarkType.indexFingerTip, 110 + halfDistance, 70);
+  add(HandLandmarkType.wrist, const Offset(100, 175));
+  add(HandLandmarkType.thumbCMC, const Offset(85, 145));
+  add(HandLandmarkType.thumbMCP, const Offset(120, 120));
+  add(HandLandmarkType.thumbIP, const Offset(75, 100));
+  add(HandLandmarkType.indexFingerMCP, const Offset(100, 120));
+  add(HandLandmarkType.indexFingerPIP, const Offset(105, 95));
+  add(HandLandmarkType.indexFingerDIP, const Offset(125, 80));
+  add(HandLandmarkType.indexFingerTip, tipCenter + halfVector);
 
   _addFoldedFinger(
     add,
     mcp: HandLandmarkType.middleFingerMCP,
     pip: HandLandmarkType.middleFingerPIP,
+    dip: HandLandmarkType.middleFingerDIP,
     tip: HandLandmarkType.middleFingerTip,
     x: 115,
     folded: otherFingersFolded,
@@ -350,6 +658,7 @@ Hand _zoomHand({
     add,
     mcp: HandLandmarkType.ringFingerMCP,
     pip: HandLandmarkType.ringFingerPIP,
+    dip: HandLandmarkType.ringFingerDIP,
     tip: HandLandmarkType.ringFingerTip,
     x: 130,
     folded: otherFingersFolded,
@@ -359,13 +668,14 @@ Hand _zoomHand({
     add,
     mcp: HandLandmarkType.pinkyMCP,
     pip: HandLandmarkType.pinkyPIP,
+    dip: HandLandmarkType.pinkyDIP,
     tip: HandLandmarkType.pinkyTip,
     x: 145,
     folded: otherFingersFolded,
     tipOffset: fingerTipOffsets[HandLandmarkType.pinkyTip] ?? Offset.zero,
   );
 
-  add(HandLandmarkType.thumbTip, 110 - halfDistance, 70);
+  add(HandLandmarkType.thumbTip, tipCenter - halfVector);
 
   return Hand(
     boundingBox: BoundingBox.ltrb(
@@ -383,15 +693,17 @@ Hand _zoomHand({
 }
 
 void _addFoldedFinger(
-  void Function(HandLandmarkType type, double x, double y) add, {
+  void Function(HandLandmarkType type, Offset point) add, {
   required HandLandmarkType mcp,
   required HandLandmarkType pip,
+  required HandLandmarkType dip,
   required HandLandmarkType tip,
   required double x,
   required bool folded,
   Offset tipOffset = Offset.zero,
 }) {
-  add(mcp, x, 120);
-  add(pip, x, 145);
-  add(tip, x + tipOffset.dx, (folded ? 125 : 190) + tipOffset.dy);
+  add(mcp, Offset(x, 120));
+  add(pip, Offset(x, 145));
+  add(dip, Offset(x + (folded ? 5 : 0), folded ? 135 : 168));
+  add(tip, Offset(x, folded ? 125 : 190) + tipOffset);
 }

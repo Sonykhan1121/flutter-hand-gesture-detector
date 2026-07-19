@@ -12,14 +12,16 @@ class FollowTargetIdentity {
     required this.initialBox,
     required this.selectedAt,
     this.classIndex,
-    this.faceTrackingId,
+    this.trackingId,
     this.appearanceSignature,
   });
 
   final FollowTargetType type;
   final String normalizedLabel;
   final int? classIndex;
-  final int? faceTrackingId;
+
+  /// Native detector tracking ID, used for both faces and ML Kit objects.
+  final int? trackingId;
   final Rect initialBox;
   final DateTime selectedAt;
   final AppearanceSignature? appearanceSignature;
@@ -29,7 +31,7 @@ class FollowTargetIdentity {
       type: target.type,
       normalizedLabel: normalizeLabel(target.label ?? target.type.displayLabel),
       classIndex: target.classIndex,
-      faceTrackingId: target.trackingId,
+      trackingId: target.trackingId,
       initialBox: target.displayBox,
       selectedAt: target.detectedAt,
       appearanceSignature: target.appearanceSignature,

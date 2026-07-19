@@ -121,7 +121,6 @@ extension on _AdminHandGestureLiveScreenState {
       await _initializeZoomLevels(controller);
       _customGestureDetector.clearState();
       _directionGestureDetector.clearState();
-      _moveDirectionDisplayHold.clear();
 
       if (Platform.isIOS) {
         await _turnFlashOff();
@@ -320,7 +319,6 @@ extension on _AdminHandGestureLiveScreenState {
     } finally {
       _customGestureDetector.clearState();
       _directionGestureDetector.clearState();
-      _moveDirectionDisplayHold.clear();
       if (mounted) {
         _setScreenState(() {
           _isStreaming = false;
@@ -397,7 +395,6 @@ extension on _AdminHandGestureLiveScreenState {
     _customGestureDetector.clearState();
     _zoomGestureDetector.clearState();
     _directionGestureDetector.clearState();
-    _moveDirectionDisplayHold.clear();
     _followObjectSequenceDetector.clear();
     _clearFollowObjectTargetCandidates();
     _clearLockedFollowTarget(clearIdentity: true);
@@ -477,7 +474,6 @@ extension on _AdminHandGestureLiveScreenState {
     _customGestureDetector.clearState();
     _zoomGestureDetector.clearState();
     _directionGestureDetector.clearState();
-    _moveDirectionDisplayHold.clear();
     _followObjectSequenceDetector.clear();
     _clearFollowObjectTargetCandidates();
     _clearLockedFollowTarget(clearIdentity: true);
@@ -566,7 +562,6 @@ extension on _AdminHandGestureLiveScreenState {
     _customGestureDetector.clearState();
     _zoomGestureDetector.clearState();
     _directionGestureDetector.clearState();
-    _moveDirectionDisplayHold.clear();
     _followObjectSequenceDetector.clear();
     _clearFollowObjectTargetCandidates();
     _clearLockedFollowTarget(clearIdentity: true);

@@ -36,7 +36,6 @@ import '../../domain/services/follow_object_sequence_detector.dart';
 import '../../domain/services/follow_target_selector.dart';
 import '../../domain/services/follow_target_tracking_progress.dart';
 import '../../domain/services/hand_geometry_service.dart';
-import '../../domain/services/move_direction_display_hold.dart';
 import '../../domain/services/object_detection_request_controller.dart';
 import '../../domain/services/object_detection_result_stabilizer.dart';
 import '../../domain/services/object_detection_target_smoother.dart';
@@ -99,7 +98,6 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
 
   final _customGestureDetector = CustomGestureDetector();
   final _directionGestureDetector = DirectionGestureDetector();
-  final _moveDirectionDisplayHold = MoveDirectionDisplayHold();
   final _zoomGestureDetector = ZoomGestureDetector();
   final _followTargetSelector = const FollowTargetSelector();
   final _followTargetProgress = FollowTargetTrackingProgress();
@@ -166,6 +164,7 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   FollowTarget? _handReturnGraceFrozenTarget;
   List<FollowTarget> _cachedObjectTargets = const [];
   List<FollowTarget> _visualObjectTargets = const [];
+  Rect? _followSelectionHandDisplayBox;
   Size? _detectionImageSize;
   Rect? _focusedHandBox;
   Size? _focusImageSize;

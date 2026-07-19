@@ -4,6 +4,9 @@ import '../../domain/enums/follow_target_type.dart';
 import '../../domain/models/follow_target.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
 
+/// Shared highlight color for the nearest and locked gesture-selected target.
+const followTargetSelectionGreen = Color(0xFF00FB46);
+
 /// Painter for the locked face/object follow target highlight.
 class FollowTargetOverlayPainter extends CustomPainter {
   const FollowTargetOverlayPainter({
@@ -38,7 +41,7 @@ class FollowTargetOverlayPainter extends CustomPainter {
         colorOverride ??
         (target.type == FollowTargetType.face
             ? const Color(0xFF46D8FF)
-            : const Color(0xFF00FB46));
+            : followTargetSelectionGreen);
 
     final glowPaint = Paint()
       ..style = PaintingStyle.stroke
