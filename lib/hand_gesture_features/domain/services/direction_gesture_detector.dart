@@ -15,11 +15,16 @@ class DirectionGestureDetector {
   final HandGeometryService geometry;
 
   static const double _angleComparisonEpsilon = 1e-9;
+  static const double _distanceComparisonEpsilon = 1e-9;
 
   HandMoveDirection _activeDirection = HandMoveDirection.none;
+  HandMoveDirection _debugCandidateDirection = HandMoveDirection.none;
   int _movingLeftPositiveFrames = 0;
   int _movingRightPositiveFrames = 0;
   int _movingDownPositiveFrames = 0;
+  Offset? _steadyHandCenter;
+  double? _steadyHandSize;
+  int _steadyFrameCount = 0;
   String _debugSummary = 'direction: idle';
   String? _lastPrintedDebugSummary;
 
@@ -83,13 +88,27 @@ class DirectionGestureDetector {
   /// Latest short debug explanation for why direction did or did not fire.
   String get debugSummary => _debugSummary;
 
+  /// Direction sector currently being evaluated, including rejected poses.
+  HandMoveDirection get debugCandidateDirection => _debugCandidateDirection;
+
+  /// Direction that has passed every pose, steadiness, and frame-count rule.
+  HandMoveDirection get debugAcceptedDirection => _activeDirection;
+
   /// Clears the held sector after a reset, blocked frame, or invalid pose.
   void clearState({String reason = 'reset'}) {
+    _resetDirectionDecisionState();
+    _debugCandidateDirection = HandMoveDirection.none;
+    _steadyHandCenter = null;
+    _steadyHandSize = null;
+    _steadyFrameCount = 0;
+    _setDebugSummary('direction: $reason');
+  }
+
+  void _resetDirectionDecisionState() {
     _activeDirection = HandMoveDirection.none;
     _movingLeftPositiveFrames = 0;
     _movingRightPositiveFrames = 0;
     _movingDownPositiveFrames = 0;
-    _setDebugSummary('direction: $reason');
   }
 
   /// Detects one direction from the current static index-pointing pose.
@@ -103,7 +122,18 @@ class DirectionGestureDetector {
       return HandMoveDirection.none;
     }
 
-    final zoomInConflictAngle = _zoomInConflictAngleDegrees(hand);
+    final stability = _updateHandStability(hand);
+    if (stability == _DirectionHandStability.moving) {
+      return HandMoveDirection.none;
+    }
+    final handIsSteady = stability == _DirectionHandStability.steady;
+    _debugCandidateDirection = HandMoveDirection.none;
+
+    final zoomInConflictAngle = _zoomInConflictAngleDegrees(
+      hand,
+      imageSize: imageSize,
+      mirrorHorizontally: mirrorHorizontally,
+    );
     if (zoomInConflictAngle != null) {
       clearState(
         reason:
@@ -117,6 +147,12 @@ class DirectionGestureDetector {
       hand.gesture,
       type: GestureType.pointingUp,
     )) {
+      _debugCandidateDirection = HandMoveDirection.up;
+      if (!handIsSteady) {
+        _resetDirectionDecisionState();
+        _setSettlingDebugSummary('package pointingUp');
+        return HandMoveDirection.none;
+      }
       _activeDirection = HandMoveDirection.up;
       _movingLeftPositiveFrames = 0;
       _movingRightPositiveFrames = 0;
@@ -128,6 +164,7 @@ class DirectionGestureDetector {
     if (_activeDirection == HandMoveDirection.up ||
         _activeDirection == HandMoveDirection.down) {
       final activeVerticalDirection = _activeDirection;
+      _debugCandidateDirection = activeVerticalDirection;
       final activeVertical = _evaluateVerticalDirection(
         hand: hand,
         mirrorHorizontally: mirrorHorizontally,
@@ -173,6 +210,7 @@ class DirectionGestureDetector {
       }
 
       _activeDirection = HandMoveDirection.none;
+      _debugCandidateDirection = HandMoveDirection.none;
     }
 
     final movingLeft = _evaluateHorizontalDirection(
@@ -181,6 +219,7 @@ class DirectionGestureDetector {
       direction: HandMoveDirection.left,
     );
     if (movingLeft.matches) {
+      _debugCandidateDirection = HandMoveDirection.left;
       _movingRightPositiveFrames = 0;
       _movingDownPositiveFrames = 0;
       _movingLeftPositiveFrames = math.min(
@@ -189,14 +228,19 @@ class DirectionGestureDetector {
       );
 
       if (_movingLeftPositiveFrames <
-          HandGestureThresholds.movingLeftRequiredConsecutiveFrames) {
+              HandGestureThresholds.movingLeftRequiredConsecutiveFrames ||
+          !handIsSteady) {
         _activeDirection = HandMoveDirection.none;
-        _setDebugSummary(
-          'direction: confirming left '
-          '$_movingLeftPositiveFrames/'
-          '${HandGestureThresholds.movingLeftRequiredConsecutiveFrames}; '
-          'angle=${movingLeft.directionAngleDegrees!.toStringAsFixed(1)}deg',
-        );
+        if (handIsSteady) {
+          _setDebugSummary(
+            'direction: confirming left '
+            '$_movingLeftPositiveFrames/'
+            '${HandGestureThresholds.movingLeftRequiredConsecutiveFrames}; '
+            'angle=${movingLeft.directionAngleDegrees!.toStringAsFixed(1)}deg',
+          );
+        } else {
+          _setSettlingDebugSummary('left pose');
+        }
         return HandMoveDirection.none;
       }
 
@@ -217,6 +261,7 @@ class DirectionGestureDetector {
         );
     if (movingLeftCandidateAngle case final angle?
         when _isHorizontalDirectionAngle(angle, HandMoveDirection.left)) {
+      _debugCandidateDirection = HandMoveDirection.left;
       _activeDirection = HandMoveDirection.none;
       _movingRightPositiveFrames = 0;
       _movingDownPositiveFrames = 0;
@@ -230,6 +275,7 @@ class DirectionGestureDetector {
       direction: HandMoveDirection.right,
     );
     if (movingRight.matches) {
+      _debugCandidateDirection = HandMoveDirection.right;
       _movingDownPositiveFrames = 0;
       _movingRightPositiveFrames = math.min(
         _movingRightPositiveFrames + 1,
@@ -237,14 +283,19 @@ class DirectionGestureDetector {
       );
 
       if (_movingRightPositiveFrames <
-          HandGestureThresholds.movingRightRequiredConsecutiveFrames) {
+              HandGestureThresholds.movingRightRequiredConsecutiveFrames ||
+          !handIsSteady) {
         _activeDirection = HandMoveDirection.none;
-        _setDebugSummary(
-          'direction: confirming right '
-          '$_movingRightPositiveFrames/'
-          '${HandGestureThresholds.movingRightRequiredConsecutiveFrames}; '
-          'angle=${movingRight.directionAngleDegrees!.toStringAsFixed(1)}deg',
-        );
+        if (handIsSteady) {
+          _setDebugSummary(
+            'direction: confirming right '
+            '$_movingRightPositiveFrames/'
+            '${HandGestureThresholds.movingRightRequiredConsecutiveFrames}; '
+            'angle=${movingRight.directionAngleDegrees!.toStringAsFixed(1)}deg',
+          );
+        } else {
+          _setSettlingDebugSummary('right pose');
+        }
         return HandMoveDirection.none;
       }
 
@@ -265,6 +316,7 @@ class DirectionGestureDetector {
         );
     if (movingRightCandidateAngle case final angle?
         when _isHorizontalDirectionAngle(angle, HandMoveDirection.right)) {
+      _debugCandidateDirection = HandMoveDirection.right;
       _activeDirection = HandMoveDirection.none;
       _movingDownPositiveFrames = 0;
       _setDebugSummary('direction: right rejected; ${movingRight.reason}');
@@ -278,9 +330,15 @@ class DirectionGestureDetector {
       useActiveDirectionRange: false,
     );
     if (movingUp.matches) {
+      _debugCandidateDirection = HandMoveDirection.up;
       _movingLeftPositiveFrames = 0;
       _movingRightPositiveFrames = 0;
       _movingDownPositiveFrames = 0;
+      if (!handIsSteady) {
+        _activeDirection = HandMoveDirection.none;
+        _setSettlingDebugSummary('up pose');
+        return HandMoveDirection.none;
+      }
       _activeDirection = HandMoveDirection.up;
       _setDebugSummary(
         'direction: static up; '
@@ -301,6 +359,7 @@ class DirectionGestureDetector {
           direction: HandMoveDirection.up,
           active: false,
         )) {
+      _debugCandidateDirection = HandMoveDirection.up;
       _activeDirection = HandMoveDirection.none;
       _movingDownPositiveFrames = 0;
       _setDebugSummary('direction: up rejected; ${movingUp.reason}');
@@ -314,6 +373,7 @@ class DirectionGestureDetector {
       useActiveDirectionRange: false,
     );
     if (movingDown.matches) {
+      _debugCandidateDirection = HandMoveDirection.down;
       _movingLeftPositiveFrames = 0;
       _movingRightPositiveFrames = 0;
       _movingDownPositiveFrames = math.min(
@@ -322,14 +382,19 @@ class DirectionGestureDetector {
       );
 
       if (_movingDownPositiveFrames <
-          HandGestureThresholds.movingDownRequiredConsecutiveFrames) {
+              HandGestureThresholds.movingDownRequiredConsecutiveFrames ||
+          !handIsSteady) {
         _activeDirection = HandMoveDirection.none;
-        _setDebugSummary(
-          'direction: confirming down '
-          '$_movingDownPositiveFrames/'
-          '${HandGestureThresholds.movingDownRequiredConsecutiveFrames}; '
-          'angle=${movingDown.directionAngleDegrees!.toStringAsFixed(1)}deg',
-        );
+        if (handIsSteady) {
+          _setDebugSummary(
+            'direction: confirming down '
+            '$_movingDownPositiveFrames/'
+            '${HandGestureThresholds.movingDownRequiredConsecutiveFrames}; '
+            'angle=${movingDown.directionAngleDegrees!.toStringAsFixed(1)}deg',
+          );
+        } else {
+          _setSettlingDebugSummary('down pose');
+        }
         return HandMoveDirection.none;
       }
 
@@ -355,12 +420,14 @@ class DirectionGestureDetector {
           direction: HandMoveDirection.down,
           active: false,
         )) {
+      _debugCandidateDirection = HandMoveDirection.down;
       _activeDirection = HandMoveDirection.none;
       _setDebugSummary('direction: down rejected; ${movingDown.reason}');
       return HandMoveDirection.none;
     }
 
     _activeDirection = HandMoveDirection.none;
+    _debugCandidateDirection = HandMoveDirection.none;
     _movingDownPositiveFrames = 0;
     _setDebugSummary('direction: no matching static direction');
     return HandMoveDirection.none;
@@ -373,10 +440,72 @@ class DirectionGestureDetector {
         imageSize.height > 0;
   }
 
+  _DirectionHandStability _updateHandStability(Hand hand) {
+    final box = hand.boundingBox;
+    final currentCenter = Offset(
+      (box.left + box.right) / 2,
+      (box.top + box.bottom) / 2,
+    );
+    final currentHandSize = geometry.handSizeFromBoundingBox(box);
+    final anchorCenter = _steadyHandCenter;
+    final anchorHandSize = _steadyHandSize;
+
+    if (anchorCenter == null || anchorHandSize == null) {
+      _steadyHandCenter = currentCenter;
+      _steadyHandSize = currentHandSize;
+      _steadyFrameCount = 1;
+      return _DirectionHandStability.settling;
+    }
+
+    final referenceHandSize = math.max(anchorHandSize, currentHandSize);
+    final movementRatio =
+        geometry.distanceBetweenOffsets(anchorCenter, currentCenter) /
+        referenceHandSize;
+    if (!movementRatio.isFinite ||
+        movementRatio >
+            HandGestureThresholds.directionMaxHandCenterMovementRatio +
+                _distanceComparisonEpsilon) {
+      _resetDirectionDecisionState();
+      _debugCandidateDirection = HandMoveDirection.none;
+      _steadyHandCenter = currentCenter;
+      _steadyHandSize = currentHandSize;
+      // The frame that proved movement is deliberately not a steady frame.
+      _steadyFrameCount = 0;
+      _setDebugSummary(
+        'direction: hand moving; '
+        'center movement=${(movementRatio * 100).toStringAsFixed(1)}% '
+        'of hand size',
+      );
+      return _DirectionHandStability.moving;
+    }
+
+    _steadyFrameCount = math.min(
+      _steadyFrameCount + 1,
+      HandGestureThresholds.directionRequiredSteadyFrames,
+    );
+    return _steadyFrameCount >=
+            HandGestureThresholds.directionRequiredSteadyFrames
+        ? _DirectionHandStability.steady
+        : _DirectionHandStability.settling;
+  }
+
+  void _setSettlingDebugSummary(String candidate) {
+    _setDebugSummary(
+      'direction: hand settling '
+      '$_steadyFrameCount/'
+      '${HandGestureThresholds.directionRequiredSteadyFrames}; '
+      '$candidate',
+    );
+  }
+
   /// Returns the 2D angle between thumb points 3->4 and index points 7->8 when
   /// the hand has a likely open zoom-in shape. This intentionally runs before
   /// package `pointingUp` so zoom-in gets the frame first.
-  double? _zoomInConflictAngleDegrees(Hand hand) {
+  double? _zoomInConflictAngleDegrees(
+    Hand hand, {
+    required Size imageSize,
+    required bool mirrorHorizontally,
+  }) {
     final thumbIp = _zoomConflictLandmark(hand, HandLandmarkType.thumbIP);
     final thumbTip = _zoomConflictLandmark(hand, HandLandmarkType.thumbTip);
     final indexDip = _zoomConflictLandmark(
@@ -395,7 +524,9 @@ class DirectionGestureDetector {
     }
 
     final handSize = geometry.handSizeFromBoundingBox(hand.boundingBox);
+    final palmCenter = geometry.palmCenter3D(hand);
     if (handSize <= 0 ||
+        palmCenter == null ||
         !geometry.isLandmarkSegmentAbove2D(
           upperStart: indexDip,
           upperEnd: indexTip,
@@ -404,6 +535,17 @@ class DirectionGestureDetector {
           minVerticalGap:
               handSize * HandGestureThresholds.zoomIndexAboveThumbMinGapRatio,
         )) {
+      return null;
+    }
+
+    final distance2dRatio =
+        geometry.distanceBetweenLandmarks(thumbTip, indexTip) / handSize;
+    final distance3dRatio =
+        geometry.distanceBetweenLandmarks3D(thumbTip, indexTip) / handSize;
+    if (distance2dRatio + _distanceComparisonEpsilon <
+            HandGestureThresholds.zoomInMinDistanceRatio ||
+        distance3dRatio + _distanceComparisonEpsilon <
+            HandGestureThresholds.zoomInMinDistanceRatio) {
       return null;
     }
 
@@ -427,14 +569,33 @@ class DirectionGestureDetector {
       secondStart: indexDip,
       secondEnd: indexTip,
     );
-    if (angle == null) return null;
+    final forwardRayIntersection = geometry.forwardRayIntersection2D(
+      firstStart: thumbTip,
+      firstThrough: thumbIp,
+      secondStart: indexTip,
+      secondThrough: indexDip,
+      minForwardScale: HandGestureThresholds.zoomInMinForwardRayScale,
+      parallelToleranceDegrees:
+          HandGestureThresholds.zoomInParallelRayToleranceDegrees,
+      minParallelLineSeparation:
+          handSize * HandGestureThresholds.zoomInParallelMinLineSeparationRatio,
+    );
+    if (angle == null ||
+        forwardRayIntersection == null ||
+        !geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: forwardRayIntersection,
+          firstStart: thumbTip,
+          firstThrough: thumbIp,
+          secondStart: indexTip,
+          secondThrough: indexDip,
+          imageSize: imageSize,
+          handedness: hand.handedness,
+          mirrorHorizontally: mirrorHorizontally,
+        )) {
+      return null;
+    }
 
-    return angle + _angleComparisonEpsilon >=
-                HandGestureThresholds.zoomInThumbIndexMinAngleDegrees &&
-            angle - _angleComparisonEpsilon <=
-                HandGestureThresholds.zoomInThumbIndexMaxAngleDegrees
-        ? angle
-        : null;
+    return angle;
   }
 
   HandLandmark? _zoomConflictLandmark(Hand hand, HandLandmarkType type) {
@@ -443,6 +604,75 @@ class DirectionGestureDetector {
       type,
       minVisibility: HandGestureThresholds.zoomMinLandmarkVisibility,
     );
+  }
+
+  /// Identifies a touching thumb/index pose that a relaxed Moving-right check
+  /// must leave for Zoom Out. Directions run before zoom in the live pipeline.
+  bool _isZoomOutConflict(Hand hand) {
+    final thumbIp = _zoomConflictLandmark(hand, HandLandmarkType.thumbIP);
+    final thumbTip = _zoomConflictLandmark(hand, HandLandmarkType.thumbTip);
+    final indexDip = _zoomConflictLandmark(
+      hand,
+      HandLandmarkType.indexFingerDIP,
+    );
+    final indexTip = _zoomConflictLandmark(
+      hand,
+      HandLandmarkType.indexFingerTip,
+    );
+    if (thumbIp == null ||
+        thumbTip == null ||
+        indexDip == null ||
+        indexTip == null) {
+      return false;
+    }
+
+    final handSize = geometry.handSizeFromBoundingBox(hand.boundingBox);
+    if (handSize <= 0 ||
+        !geometry.isLandmarkSegmentAbove2D(
+          upperStart: indexDip,
+          upperEnd: indexTip,
+          lowerStart: thumbIp,
+          lowerEnd: thumbTip,
+          minVerticalGap:
+              handSize * HandGestureThresholds.zoomIndexAboveThumbMinGapRatio,
+        )) {
+      return false;
+    }
+
+    for (final chainTypes
+        in HandGestureThresholds.directionFingerChainTypes.skip(1)) {
+      final mcp = _zoomConflictLandmark(hand, chainTypes[0]);
+      final pip = _zoomConflictLandmark(hand, chainTypes[1]);
+      final tip = _zoomConflictLandmark(hand, chainTypes[3]);
+      if (mcp == null ||
+          pip == null ||
+          tip == null ||
+          !geometry.isFingerFoldedByAngle3D(mcp: mcp, pip: pip, tip: tip)) {
+        return false;
+      }
+    }
+
+    final distance2dRatio =
+        geometry.distanceBetweenLandmarks(thumbTip, indexTip) / handSize;
+    final distance3dRatio =
+        geometry.distanceBetweenLandmarks3D(thumbTip, indexTip) / handSize;
+    final isClosedPinch =
+        distance2dRatio <=
+            HandGestureThresholds.zoomTouchMax2dDistanceRatio +
+                _distanceComparisonEpsilon ||
+        distance3dRatio <=
+            HandGestureThresholds.zoomClosedMaxDistanceRatio +
+                _distanceComparisonEpsilon;
+    if (!isClosedPinch) return false;
+
+    final palmCenter = geometry.palmCenter3D(hand);
+    if (palmCenter == null) return false;
+    return geometry.isThumbTuckedForFist3D(
+          hand: hand,
+          palmCenter: palmCenter,
+          handSize: handSize,
+        ) ==
+        false;
   }
 
   _VerticalDirectionEvaluation _evaluateVerticalDirection({
@@ -473,22 +703,8 @@ class DirectionGestureDetector {
     final indexDip = point(HandLandmarkType.indexFingerDIP);
     final indexTip = point(HandLandmarkType.indexFingerTip);
     final middleMcp = point(HandLandmarkType.middleFingerMCP);
-    final ringMcp = point(HandLandmarkType.ringFingerMCP);
     final pinkyMcp = point(HandLandmarkType.pinkyMCP);
 
-    final palmAnchors = isUp
-        ? [indexMcp!, middleMcp, ringMcp, pinkyMcp]
-        : [middleMcp, ringMcp, pinkyMcp];
-    final palmCenter = Offset(
-      palmAnchors
-              .map((landmark) => _screenX(landmark, mirrorHorizontally))
-              .reduce((first, second) => first + second) /
-          palmAnchors.length,
-      palmAnchors
-              .map((landmark) => landmark.y)
-              .reduce((first, second) => first + second) /
-          palmAnchors.length,
-    );
     final palmWidth = geometry.distanceBetweenLandmarks(
       isUp ? indexMcp! : middleMcp,
       pinkyMcp,
@@ -557,15 +773,18 @@ class DirectionGestureDetector {
         );
       }
 
-      if (angle567 < HandGestureThresholds.movingUpIndexMinJointAngleDegrees ||
-          angle678 < HandGestureThresholds.movingUpIndexMinJointAngleDegrees) {
+      if (angle567 <
+              HandGestureThresholds.movingUpMinMcpPipDipJointAngleDegrees ||
+          angle678 + _angleComparisonEpsilon <
+              HandGestureThresholds.verticalDirectionIndexMinAngleDegrees) {
         return _VerticalDirectionEvaluation(
           matches: false,
           directionAngleDegrees: directionAngle,
           reason:
               'index joints ${angle567.toStringAsFixed(1)}/'
-              '${angle678.toStringAsFixed(1)} below '
-              '${HandGestureThresholds.movingUpIndexMinJointAngleDegrees.toStringAsFixed(0)}',
+              '${angle678.toStringAsFixed(1)} below required '
+              '${HandGestureThresholds.movingUpMinMcpPipDipJointAngleDegrees.toStringAsFixed(0)}/'
+              '${HandGestureThresholds.verticalDirectionIndexMinAngleDegrees.toStringAsFixed(0)}',
         );
       }
     } else {
@@ -605,14 +824,14 @@ class DirectionGestureDetector {
         );
       }
 
-      if (angle678 <
-          HandGestureThresholds.movingDownMinPipDipTipJointAngleDegrees) {
+      if (angle678 + _angleComparisonEpsilon <
+          HandGestureThresholds.verticalDirectionIndexMinAngleDegrees) {
         return _VerticalDirectionEvaluation(
           matches: false,
           directionAngleDegrees: directionAngle,
           reason:
               'points 6-8 joint ${angle678.toStringAsFixed(1)} below '
-              '${HandGestureThresholds.movingDownMinPipDipTipJointAngleDegrees.toStringAsFixed(0)}',
+              '${HandGestureThresholds.verticalDirectionIndexMinAngleDegrees.toStringAsFixed(0)}',
         );
       }
     }
@@ -637,30 +856,24 @@ class DirectionGestureDetector {
         HandLandmarkType.middleFingerMCP,
         HandLandmarkType.middleFingerPIP,
         HandLandmarkType.middleFingerDIP,
-        HandLandmarkType.middleFingerTip,
       ),
       (
         'ring',
         HandLandmarkType.ringFingerMCP,
         HandLandmarkType.ringFingerPIP,
         HandLandmarkType.ringFingerDIP,
-        HandLandmarkType.ringFingerTip,
       ),
       (
         'pinky',
         HandLandmarkType.pinkyMCP,
         HandLandmarkType.pinkyPIP,
         HandLandmarkType.pinkyDIP,
-        HandLandmarkType.pinkyTip,
       ),
     ]) {
       if (!_isVerticalFingerFolded(
         mcp: point(finger.$2),
         pip: point(finger.$3),
         dip: point(finger.$4),
-        tip: point(finger.$5),
-        palmCenter: palmCenter,
-        mirrorHorizontally: mirrorHorizontally,
         direction: direction,
       )) {
         return _VerticalDirectionEvaluation(
@@ -682,9 +895,6 @@ class DirectionGestureDetector {
     required HandLandmark mcp,
     required HandLandmark pip,
     required HandLandmark dip,
-    required HandLandmark tip,
-    required Offset palmCenter,
-    required bool mirrorHorizontally,
     required HandMoveDirection direction,
   }) {
     final jointAngle = geometry.fingerJointAngleDegrees(
@@ -695,18 +905,7 @@ class DirectionGestureDetector {
     final maxJointAngle = direction == HandMoveDirection.up
         ? HandGestureThresholds.movingUpFoldedFingerMaxJointAngleDegrees
         : HandGestureThresholds.movingDownFoldedFingerMaxJointAngleDegrees;
-    final maxTipPipDistanceRatio = direction == HandMoveDirection.up
-        ? HandGestureThresholds.movingUpFoldedTipMaxPipDistanceRatio
-        : HandGestureThresholds.movingDownFoldedTipMaxPipDistanceRatio;
-    if (jointAngle >= maxJointAngle) {
-      return false;
-    }
-
-    final tipDistance =
-        (_screenPoint(tip, mirrorHorizontally) - palmCenter).distance;
-    final pipDistance =
-        (_screenPoint(pip, mirrorHorizontally) - palmCenter).distance;
-    return tipDistance < pipDistance * maxTipPipDistanceRatio;
+    return jointAngle < maxJointAngle;
   }
 
   _HorizontalDirectionEvaluation _evaluateHorizontalDirection({
@@ -761,9 +960,13 @@ class DirectionGestureDetector {
       mirrorHorizontally: mirrorHorizontally,
     );
     final isLeft = direction == HandMoveDirection.left;
-    final minIndexJointAngle = isLeft
-        ? HandGestureThresholds.movingLeftIndexMinJointAngleDegrees
-        : HandGestureThresholds.movingRightIndexMinJointAngleDegrees;
+    if (!isLeft && _isZoomOutConflict(hand)) {
+      return _HorizontalDirectionEvaluation(
+        matches: false,
+        directionAngleDegrees: directionAngle,
+        reason: 'zoom-out closed pinch',
+      );
+    }
     final minIndexStraightness = isLeft
         ? HandGestureThresholds.movingLeftIndexMinStraightnessRatio
         : HandGestureThresholds.movingRightIndexMinStraightnessRatio;
@@ -783,14 +986,17 @@ class DirectionGestureDetector {
       pip: indexDip,
       tip: indexTip,
     );
-    if (angle567 < minIndexJointAngle || angle678 < minIndexJointAngle) {
+    if (isLeft &&
+        (angle567 < HandGestureThresholds.movingLeftIndexMinJointAngleDegrees ||
+            angle678 <
+                HandGestureThresholds.movingLeftIndexMinJointAngleDegrees)) {
       return _HorizontalDirectionEvaluation(
         matches: false,
         directionAngleDegrees: directionAngle,
         reason:
             'index joints ${angle567.toStringAsFixed(1)}/'
             '${angle678.toStringAsFixed(1)} below '
-            '${minIndexJointAngle.toStringAsFixed(0)}',
+            '${HandGestureThresholds.movingLeftIndexMinJointAngleDegrees.toStringAsFixed(0)}',
       );
     }
 
@@ -844,30 +1050,24 @@ class DirectionGestureDetector {
         HandLandmarkType.middleFingerMCP,
         HandLandmarkType.middleFingerPIP,
         HandLandmarkType.middleFingerDIP,
-        HandLandmarkType.middleFingerTip,
       ),
       (
         'ring',
         HandLandmarkType.ringFingerMCP,
         HandLandmarkType.ringFingerPIP,
         HandLandmarkType.ringFingerDIP,
-        HandLandmarkType.ringFingerTip,
       ),
       (
         'pinky',
         HandLandmarkType.pinkyMCP,
         HandLandmarkType.pinkyPIP,
         HandLandmarkType.pinkyDIP,
-        HandLandmarkType.pinkyTip,
       ),
     ]) {
       if (!_isHorizontalFingerFolded(
         mcp: point(finger.$2),
         pip: point(finger.$3),
         dip: point(finger.$4),
-        tip: point(finger.$5),
-        palmCenter: palmCenter,
-        mirrorHorizontally: mirrorHorizontally,
         direction: direction,
       )) {
         return _HorizontalDirectionEvaluation(
@@ -889,9 +1089,6 @@ class DirectionGestureDetector {
     required HandLandmark mcp,
     required HandLandmark pip,
     required HandLandmark dip,
-    required HandLandmark tip,
-    required Offset palmCenter,
-    required bool mirrorHorizontally,
     required HandMoveDirection direction,
   }) {
     final jointAngle = geometry.fingerJointAngleDegrees(
@@ -902,18 +1099,7 @@ class DirectionGestureDetector {
     final maxJointAngle = direction == HandMoveDirection.left
         ? HandGestureThresholds.movingLeftFoldedFingerMaxJointAngleDegrees
         : HandGestureThresholds.movingRightFoldedFingerMaxJointAngleDegrees;
-    final maxTipPipDistanceRatio = direction == HandMoveDirection.left
-        ? HandGestureThresholds.movingLeftFoldedTipMaxPipDistanceRatio
-        : HandGestureThresholds.movingRightFoldedTipMaxPipDistanceRatio;
-    if (jointAngle >= maxJointAngle) {
-      return false;
-    }
-
-    final tipDistance =
-        (_screenPoint(tip, mirrorHorizontally) - palmCenter).distance;
-    final pipDistance =
-        (_screenPoint(pip, mirrorHorizontally) - palmCenter).distance;
-    return tipDistance < pipDistance * maxTipPipDistanceRatio;
+    return jointAngle < maxJointAngle;
   }
 
   double _depthAwareTipPalmWidthOffsetRatio({
@@ -1045,10 +1231,6 @@ class DirectionGestureDetector {
     return mirrorHorizontally ? -landmark.x : landmark.x;
   }
 
-  Offset _screenPoint(HandLandmark landmark, bool mirrorHorizontally) {
-    return Offset(_screenX(landmark, mirrorHorizontally), landmark.y);
-  }
-
   void _setDebugSummary(String value) {
     _debugSummary = value;
 
@@ -1058,6 +1240,8 @@ class DirectionGestureDetector {
     debugPrint('[DirectionGestureDetector] $value');
   }
 }
+
+enum _DirectionHandStability { settling, steady, moving }
 
 class _HorizontalDirectionEvaluation {
   const _HorizontalDirectionEvaluation({

@@ -244,11 +244,27 @@ abstract final class HandGestureThresholds {
   static const double directionIndexMinProjectedHandSizeRatio = 0.20;
   static const double directionSectorHysteresisDegrees = 10.0;
 
-  /// Inclusive 2D angle range between the visible thumb-tip segment 3->4 and
-  /// index-tip segment 7->8 for the simplified Zoom In pose.
-  static const double zoomInThumbIndexMinAngleDegrees = 45.0;
-  static const double zoomInThumbIndexMaxAngleDegrees = 90.0;
+  /// A direction pose is usable only after the detected hand center remains
+  /// inside this hand-size-normalized radius for consecutive frames.
+  static const double directionMaxHandCenterMovementRatio = 0.03;
+  static const int directionRequiredSteadyFrames = 3;
+
+  /// Minimum distal-index angle required by the vertical directions.
+  static const double verticalDirectionIndexMinAngleDegrees = 170.0;
+
+  static const double zoomInMinForwardRayScale = 1.0;
+
+  /// Same-direction Zoom In rays within this angle meet at infinity.
+  static const double zoomInParallelRayToleranceDegrees = 5.0;
+
+  /// Parallel thumb/index axes must remain visibly separate. This applies only
+  /// to the intersection-at-infinity case, not finite forward intersections.
+  static const double zoomInParallelMinLineSeparationRatio = 0.10;
   static const double zoomIndexAboveThumbMinGapRatio = 0.02;
+
+  /// Minimum normalized wrist/index/pinky orientation needed to prove that
+  /// the palm, rather than the back of the hand, faces the camera for Zoom In.
+  static const double zoomInMinPalmSideCross = 0.10;
 
   /// Palm-extension requirement for the horizontal pointing directions.
   /// A tip at or closer than the palm plane uses 10%. The requirement grows
@@ -263,20 +279,17 @@ abstract final class HandGestureThresholds {
   static const double movingLeftMinDirectionAngleDegrees = 125.0;
   static const double movingLeftMaxDirectionAngleDegrees = 235.0;
   static const double movingLeftFoldedFingerMaxJointAngleDegrees = 145.0;
-  static const double movingLeftFoldedTipMaxPipDistanceRatio = 1.10;
   static const int movingLeftRequiredConsecutiveFrames = 3;
 
   /// Static Moving Right thresholds based only on points 0 and 5-20.
-  static const double movingRightIndexMinJointAngleDegrees = 145.0;
   static const double movingRightIndexMinStraightnessRatio = 0.80;
   static const double movingRightMinDirectionAngleDegrees = 305.0;
   static const double movingRightMaxDirectionAngleDegrees = 70.0;
   static const double movingRightFoldedFingerMaxJointAngleDegrees = 145.0;
-  static const double movingRightFoldedTipMaxPipDistanceRatio = 1.10;
   static const int movingRightRequiredConsecutiveFrames = 3;
 
   /// Easy Moving Up thresholds: index points 5-8 set direction.
-  static const double movingUpIndexMinJointAngleDegrees = 135.0;
+  static const double movingUpMinMcpPipDipJointAngleDegrees = 135.0;
   static const double movingUpMinMcpToTipPalmWidthRatio = 0.15;
   static const double movingUpMaxHorizontalToVerticalRatio = 0.75;
   static const double movingUpInitialMinDirectionAngleDegrees = 75.0;
@@ -284,10 +297,8 @@ abstract final class HandGestureThresholds {
   static const double movingUpActiveMinDirectionAngleDegrees = 70.0;
   static const double movingUpActiveMaxDirectionAngleDegrees = 125.0;
   static const double movingUpFoldedFingerMaxJointAngleDegrees = 145.0;
-  static const double movingUpFoldedTipMaxPipDistanceRatio = 1.10;
 
   /// Easy Moving Down thresholds: only index points 6-8 set direction.
-  static const double movingDownMinPipDipTipJointAngleDegrees = 135.0;
   static const double movingDownMinPipToTipPalmWidthRatio = 0.15;
   static const double movingDownMaxHorizontalToVerticalRatio = 0.75;
   static const double movingDownInitialMinDirectionAngleDegrees = 245.0;
@@ -295,7 +306,6 @@ abstract final class HandGestureThresholds {
   static const double movingDownActiveMinDirectionAngleDegrees = 235.0;
   static const double movingDownActiveMaxDirectionAngleDegrees = 305.0;
   static const double movingDownFoldedFingerMaxJointAngleDegrees = 145.0;
-  static const double movingDownFoldedTipMaxPipDistanceRatio = 1.10;
   static const int movingDownRequiredConsecutiveFrames = 3;
 
   /// Shared projected-finger thresholds used by 3D geometry checks.
@@ -328,6 +338,9 @@ abstract final class HandGestureThresholds {
   /// Maximum thumb-tip distance from any index landmark for a punch.
   static const double punchThumbMaxIndexDistanceRatio = 0.18;
   static const double punchFingerMaxJointAngleDegrees = 120.0;
+
+  /// Requires the index PIP itself to bend, not only its fingertip to curl in.
+  static const double punchIndexPipMaxJointAngleDegrees = 120.0;
 
   /// Static down-pointing hold used to return every task to its main state.
   static const Duration returnToMainDownHoldDuration = Duration(seconds: 1);

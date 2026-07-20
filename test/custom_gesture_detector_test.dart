@@ -490,6 +490,21 @@ void main() {
       expect(result.isPunch, isFalse);
     });
 
+    test('rejects a curled index tip when the index PIP is straight', () {
+      final detector = CustomGestureDetector();
+
+      final result = detector.detect(
+        hand: _punchHand(
+          fingerDipOverrides: const {0: Offset(160, 270)},
+          fingerTipOverrides: const {0: Offset(205, 230)},
+        ),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
+    });
+
     test('missing an index-chain landmark rejects punch', () {
       final detector = CustomGestureDetector();
 
@@ -621,6 +636,7 @@ Hand _indexOnlyHand({required Offset indexTip, double score = 1}) {
 
 Hand _punchHand({
   Set<int> openFingerIndexes = const {},
+  Map<int, Offset> fingerDipOverrides = const {},
   Map<int, Offset> fingerTipOverrides = const {},
   Offset thumbTip = const Offset(205, 232),
   bool includeThumbTip = true,
@@ -732,6 +748,8 @@ Hand _punchHand({
             openTips[fingerIndex],
           ]
         : [...foldedChains[fingerIndex]];
+    final dipOverride = fingerDipOverrides[fingerIndex];
+    if (dipOverride != null) points[2] = dipOverride;
     final tipOverride = fingerTipOverrides[fingerIndex];
     if (tipOverride != null) points[3] = tipOverride;
 

@@ -222,6 +222,24 @@ extension on _AdminHandGestureLiveScreenState {
                                                       controller,
                                                     ),
                                               ),
+                                            if (_showDirectionDebugOverlay &&
+                                                _detectionImageSize != null)
+                                              CustomPaint(
+                                                painter:
+                                                    _directionDebugPainterForCurrentMode(
+                                                      controller,
+                                                    ),
+                                              ),
+                                            if (_showZoomInDebugOverlay &&
+                                                _zoomGestureDetector
+                                                    .hasZoomInDebugPose &&
+                                                _detectionImageSize != null)
+                                              CustomPaint(
+                                                painter:
+                                                    _zoomInDebugPainterForCurrentMode(
+                                                      controller,
+                                                    ),
+                                              ),
                                             if (_focusedHandBox != null &&
                                                 _focusImageSize != null)
                                               CustomPaint(
@@ -558,6 +576,41 @@ extension on _AdminHandGestureLiveScreenState {
       imageSize: _detectionImageSize!,
       mirrorHorizontally: _shouldMirrorPreviewCoordinates(controller),
       previewQuarterTurns: _previewQuarterTurnsForOverlays(controller),
+    );
+  }
+
+  /// Maps the direction guides and index axis onto the current preview mode.
+  CustomPainter _directionDebugPainterForCurrentMode(
+    CameraController controller,
+  ) {
+    final isRecordingPreview =
+        controller.value.isRecordingVideo ||
+        _isRecordingPreviewCorrectionActive;
+
+    return DirectionDebugOverlayPainter(
+      hand: _handGeometry.bestReliableHand(_hands),
+      imageSize: _detectionImageSize!,
+      mirrorHorizontally: _shouldMirrorPreviewCoordinates(controller),
+      candidateDirection: _directionGestureDetector.debugCandidateDirection,
+      acceptedDirection: _directionGestureDetector.debugAcceptedDirection,
+      debugSummary: _directionGestureDetector.debugSummary,
+      previewQuarterTurns: _previewQuarterTurnsForOverlays(controller),
+      useRecordingPreviewMapping: isRecordingPreview,
+    );
+  }
+
+  /// Maps the Zoom In-only debug rays onto the current preview mode.
+  CustomPainter _zoomInDebugPainterForCurrentMode(CameraController controller) {
+    final isRecordingPreview =
+        controller.value.isRecordingVideo ||
+        _isRecordingPreviewCorrectionActive;
+
+    return ZoomInDebugOverlayPainter(
+      hand: _handGeometry.bestReliableHand(_hands),
+      imageSize: _detectionImageSize!,
+      mirrorHorizontally: _shouldMirrorPreviewCoordinates(controller),
+      previewQuarterTurns: _previewQuarterTurnsForOverlays(controller),
+      useRecordingPreviewMapping: isRecordingPreview,
     );
   }
 }

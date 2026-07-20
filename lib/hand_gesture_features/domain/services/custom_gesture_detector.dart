@@ -364,7 +364,13 @@ class CustomGestureDetector {
     if (handSize <= 0) return false;
 
     List<HandLandmark>? indexChain;
-    for (final chainTypes in HandGestureThresholds.directionFingerChainTypes) {
+    for (
+      var fingerIndex = 0;
+      fingerIndex < HandGestureThresholds.directionFingerChainTypes.length;
+      fingerIndex += 1
+    ) {
+      final chainTypes =
+          HandGestureThresholds.directionFingerChainTypes[fingerIndex];
       final chain = geometry.visibleFingerChain(hand, chainTypes);
       if (chain == null ||
           geometry.fingerJointAngleDegrees3D(
@@ -373,6 +379,13 @@ class CustomGestureDetector {
                 tip: chain[3],
               ) >
               HandGestureThresholds.punchFingerMaxJointAngleDegrees ||
+          (fingerIndex == 0 &&
+              geometry.fingerJointAngleDegrees3D(
+                    mcp: chain[0],
+                    pip: chain[1],
+                    tip: chain[2],
+                  ) >
+                  HandGestureThresholds.punchIndexPipMaxJointAngleDegrees) ||
           !geometry.isFingerChainFolded3D(
             chain: chain,
             palmCenter: palmCenter,

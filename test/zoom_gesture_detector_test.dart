@@ -25,6 +25,7 @@ void main() {
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.zoomIn);
       expect(detector.isGestureActive, isTrue);
+      expect(detector.hasZoomInDebugPose, isTrue);
 
       now = now.add(const Duration(milliseconds: 999));
       expect(_detect(detector, hand), ZoomDirection.none);
@@ -33,8 +34,31 @@ void main() {
       expect(_detect(detector, hand), ZoomDirection.zoomIn);
     });
 
+    for (final angle in const [169.0, 170.0, 180.0]) {
+      test('zoom in ignores the 6-7-8 angle at $angle degrees', () {
+        final hand = _zoomHandWithDistalIndexAngle(angle);
+
+        expect(_detect(detector, hand), ZoomDirection.none);
+        expect(detector.pendingDirection, ZoomDirection.zoomIn);
+
+        now = now.add(const Duration(seconds: 1));
+        expect(_detect(detector, hand), ZoomDirection.zoomIn);
+      });
+    }
+
     test('closed pinch at the exact 2% gap zooms out after one second', () {
       final hand = _zoomOutHand();
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+      expect(detector.hasZoomInDebugPose, isFalse);
+
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomOut);
+    });
+
+    test('touching tips can zoom out when the index segment is above', () {
+      final hand = _touchingZoomOutHand();
 
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.zoomOut);
@@ -43,8 +67,10 @@ void main() {
       expect(_detect(detector, hand), ZoomDirection.zoomOut);
     });
 
-    test('touching tips can zoom out when the index segment is above', () {
-      final hand = _touchingZoomOutHand();
+    test('zoom out does not require the index PIP landmark', () {
+      final hand = _zoomOutHand(
+        missingTypes: const {HandLandmarkType.indexFingerPIP},
+      );
 
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.zoomOut);
@@ -68,12 +94,13 @@ void main() {
       expect(_detect(detector, hand), ZoomDirection.zoomOut);
     });
 
-    test('an angle below 45 degrees with a loose gap stays neutral', () {
+    test('an opening below the fingertip separation stays neutral', () {
       final hand = _angleHand(30);
 
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.none);
       expect(detector.isGestureActive, isFalse);
+      expect(detector.hasZoomInDebugPose, isTrue);
     });
 
     test('continues returning zoom in while the pose stays held', () {
@@ -99,8 +126,35 @@ void main() {
       });
     }
 
-    test('mirroring does not change the thumb/index angle', () {
+    test('mirrored palm zooms in with palm chirality correction', () {
       final hand = _zoomHand(tipDistance: 80, mirrorPose: true);
+
+      expect(
+        _detect(detector, hand, mirrorHorizontally: true),
+        ZoomDirection.none,
+      );
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+      now = now.add(const Duration(seconds: 1));
+      expect(
+        _detect(detector, hand, mirrorHorizontally: true),
+        ZoomDirection.zoomIn,
+      );
+    });
+
+    test('back of hand cannot start zoom in', () {
+      final hand = _zoomHand(tipDistance: 80, mirrorPose: true);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.isGestureActive, isFalse);
+    });
+
+    test('left palm can start zoom in with matching handedness', () {
+      final hand = _zoomHand(
+        tipDistance: 80,
+        mirrorPose: true,
+        handedness: Handedness.left,
+      );
 
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.zoomIn);
@@ -108,7 +162,24 @@ void main() {
       expect(_detect(detector, hand), ZoomDirection.zoomIn);
     });
 
-    test('changing from zoom out to zoom in starts a fresh hold', () {
+    test('unknown handedness cannot prove palm-side zoom in', () {
+      final hand = _zoomHand(tipDistance: 80, handedness: null);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.isGestureActive, isFalse);
+    });
+
+    test('back of hand does not block closed-pinch zoom out', () {
+      final hand = _zoomOutHand(mirrorPose: true);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomOut);
+    });
+
+    test('jumping from zoom out to an open pose starts a fresh hold', () {
       expect(_detect(detector, _zoomOutHand()), ZoomDirection.none);
       now = now.add(const Duration(milliseconds: 800));
       expect(_detect(detector, _zoomHand(tipDistance: 80)), ZoomDirection.none);
@@ -122,6 +193,94 @@ void main() {
         ZoomDirection.zoomIn,
       );
     });
+
+    test('transition waits for a forward intersection before zooming in', () {
+      final closed = _rightAngleHandWithTipDistance(
+        HandGestureThresholds.zoomClosedMaxDistanceRatio * 200,
+      );
+      final released = _rightAngleHandWithTipDistance(40);
+
+      expect(_detect(detector, closed), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, closed), ZoomDirection.zoomOut);
+      expect(detector.reservesZoomInOpeningTransition, isTrue);
+
+      expect(_detect(detector, released), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+      expect(detector.isOpeningZoomInCandidate, isTrue);
+
+      expect(_detect(detector, _legacyAngleHand(90)), ZoomDirection.none);
+      expect(detector.isOpeningZoomInCandidate, isTrue);
+
+      for (final angle in const [45.0, 60.0, 75.0, 90.0, 110.0]) {
+        expect(
+          _detect(detector, _angleHand(angle)),
+          ZoomDirection.zoomIn,
+          reason: '$angle degrees must remain active Zoom In',
+        );
+      }
+    });
+
+    test('transition completes when the rays meet at infinity', () {
+      final closed = _rightAngleHandWithTipDistance(
+        HandGestureThresholds.zoomClosedMaxDistanceRatio * 200,
+      );
+
+      expect(_detect(detector, closed), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, closed), ZoomDirection.zoomOut);
+      expect(_detect(detector, _angleHand(30)), ZoomDirection.none);
+      expect(detector.isOpeningZoomInCandidate, isTrue);
+      expect(_detect(detector, _parallelZoomInHand()), ZoomDirection.zoomIn);
+    });
+
+    test('transition cannot complete for too-close parallel lines', () {
+      final closed = _rightAngleHandWithTipDistance(
+        HandGestureThresholds.zoomClosedMaxDistanceRatio * 200,
+      );
+
+      expect(_detect(detector, closed), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, closed), ZoomDirection.zoomOut);
+      expect(_detect(detector, _angleHand(30)), ZoomDirection.none);
+      expect(detector.isOpeningZoomInCandidate, isTrue);
+
+      expect(
+        _detect(detector, _closeParallelZoomInHand(lineSeparation: 19.9)),
+        ZoomDirection.none,
+      );
+      expect(detector.isOpeningZoomInCandidate, isTrue);
+    });
+
+    test('transition completes for a distant forward intersection', () {
+      final closed = _rightAngleHandWithTipDistance(
+        HandGestureThresholds.zoomClosedMaxDistanceRatio * 200,
+      );
+
+      expect(_detect(detector, closed), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, closed), ZoomDirection.zoomOut);
+      expect(_detect(detector, _angleHand(30)), ZoomDirection.none);
+      expect(detector.isOpeningZoomInCandidate, isTrue);
+      expect(
+        _detect(detector, _angleHand(6, tipDistance: 80)),
+        ZoomDirection.zoomIn,
+      );
+    });
+
+    test('released pinch cannot start candidate before zoom out completes', () {
+      final closed = _rightAngleHandWithTipDistance(
+        HandGestureThresholds.zoomClosedMaxDistanceRatio * 200,
+      );
+
+      expect(_detect(detector, closed), ZoomDirection.none);
+      expect(
+        _detect(detector, _rightAngleHandWithTipDistance(40)),
+        ZoomDirection.none,
+      );
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.reservesZoomInOpeningTransition, isFalse);
+    });
   });
 
   group('ZoomGestureDetector simplified zoom-in geometry', () {
@@ -133,8 +292,8 @@ void main() {
       detector = ZoomGestureDetector(now: () => now);
     });
 
-    for (final angle in const [45.0, 60.0, 75.0, 90.0]) {
-      test('accepts a $angle degree thumb/index angle', () {
+    for (final angle in const [45.0, 60.0, 75.0, 90.0, 91.0, 110.0, 160.0]) {
+      test('accepts a $angle degree pose with a forward intersection', () {
         final hand = _angleHand(angle);
 
         expect(_detect(detector, hand), ZoomDirection.none);
@@ -144,14 +303,91 @@ void main() {
       });
     }
 
-    for (final angle in const [0.0, 20.0, 44.0, 91.0, 110.0, 160.0, 180.0]) {
-      test('rejects a $angle degree thumb/index angle', () {
-        final hand = _angleHand(angle);
+    for (final angle in const [20.0, 44.0]) {
+      test('accepts $angle degrees below the former angle boundary', () {
+        final hand = _angleHand(angle, tipDistance: 80);
 
         expect(_detect(detector, hand), ZoomDirection.none);
-        expect(detector.pendingDirection, ZoomDirection.none);
+        expect(detector.pendingDirection, ZoomDirection.zoomIn);
+        now = now.add(const Duration(seconds: 1));
+        expect(_detect(detector, hand), ZoomDirection.zoomIn);
       });
     }
+
+    for (final angle in const [0.0, 5.0]) {
+      test('accepts same-direction rays at $angle degrees as infinity', () {
+        final hand = _parallelZoomInHand(angleDegrees: angle);
+
+        expect(_detect(detector, hand), ZoomDirection.none);
+        expect(detector.pendingDirection, ZoomDirection.zoomIn);
+        now = now.add(const Duration(seconds: 1));
+        expect(_detect(detector, hand), ZoomDirection.zoomIn);
+      });
+    }
+
+    test('rejects parallel rays whose lines are too close', () {
+      final hand = _closeParallelZoomInHand(lineSeparation: 19.9);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.hasZoomInDebugPose, isTrue);
+    });
+
+    test('accepts the exact parallel line-separation boundary', () {
+      final hand = _closeParallelZoomInHand(lineSeparation: 20);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomIn);
+    });
+
+    test('accepts a forward intersection beyond two hand sizes', () {
+      final hand = _angleHand(6, tipDistance: 80);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomIn);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomIn);
+    });
+
+    test('rejects a right-hand intersection outside quadrant 4', () {
+      final hand = _angleHand(60, mirrorRayGeometry: true);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.hasZoomInDebugPose, isTrue);
+    });
+
+    test('rejects a right-hand intersection in quadrant 1', () {
+      final hand = _angleHand(60, rayOffset: const Offset(0, -200));
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.hasZoomInDebugPose, isTrue);
+    });
+
+    test('rejects right-hand parallel rays pointing outside quadrant 4', () {
+      final hand = _parallelZoomInHand(pointLeft: true);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.hasZoomInDebugPose, isTrue);
+    });
+
+    test('rejects opposite-facing parallel rays', () {
+      final hand = _parallelZoomInHand(reverseIndexRay: true);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
+
+    test('rejects an otherwise valid angle whose intersection is behind', () {
+      final hand = _legacyAngleHand(90);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+    });
 
     test('overlapping tips do not bypass reversed vertical ordering', () {
       final hand = _zoomHand(
@@ -169,7 +405,7 @@ void main() {
     });
 
     test('a close 45 degree pose is zoom out rather than zoom in', () {
-      final hand = _angleHand(
+      final hand = _legacyAngleHand(
         45,
         axisLength: 30,
         axisGap: 20,
@@ -184,7 +420,7 @@ void main() {
     });
 
     test('a tucked close pinch stays neutral instead of becoming zoom in', () {
-      final hand = _angleHand(
+      final hand = _legacyAngleHand(
         45,
         axisLength: 30,
         axisGap: 20,
@@ -198,7 +434,7 @@ void main() {
     });
 
     test('an indeterminate tucked pinch cannot fall through to zoom in', () {
-      final hand = _angleHand(
+      final hand = _legacyAngleHand(
         45,
         axisLength: 30,
         axisGap: 20,
@@ -226,8 +462,11 @@ void main() {
     });
 
     test('an angled pinch at the open boundary is zoom in', () {
-      final hand = _rightAngleHandWithTipDistance(
-        HandGestureThresholds.zoomInMinDistanceRatio * 200,
+      final hand = _angleHand(
+        90,
+        axisLength: 10,
+        indexAboveThumbGap: 4,
+        tipDistance: HandGestureThresholds.zoomInMinDistanceRatio * 200,
       );
 
       expect(_detect(detector, hand), ZoomDirection.none);
@@ -235,28 +474,28 @@ void main() {
     });
 
     test('accepts an exact 2% index-above-thumb gap', () {
-      final hand = _angleHand(60, indexSegmentOffset: const Offset(0, 11));
+      final hand = _angleHand(60, indexAboveThumbGap: 4);
 
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.zoomIn);
     });
 
     test('rejects a vertical gap just below 2%', () {
-      final hand = _angleHand(60, indexSegmentOffset: const Offset(0, 11.1));
+      final hand = _angleHand(60, indexAboveThumbGap: 3.9);
 
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.none);
     });
 
     test('rejects equal-height fingertip segments', () {
-      final hand = _angleHand(60, indexSegmentOffset: const Offset(0, 15));
+      final hand = _angleHand(60, indexAboveThumbGap: 0);
 
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.none);
     });
 
     test('rejects a fingertip segment below the thumb segment', () {
-      final hand = _angleHand(60, indexSegmentOffset: const Offset(0, 20));
+      final hand = _angleHand(60, indexAboveThumbGap: -5);
 
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.none);
@@ -278,20 +517,49 @@ void main() {
       expect(detector.pendingDirection, ZoomDirection.zoomIn);
     });
 
-    test('wrist and proximal active-finger joints are not required', () {
+    test('non-palm proximal thumb and index joints are not required', () {
       final hand = _angleHand(
         90,
         missingTypes: const {
-          HandLandmarkType.wrist,
           HandLandmarkType.thumbCMC,
           HandLandmarkType.thumbMCP,
-          HandLandmarkType.indexFingerMCP,
           HandLandmarkType.indexFingerPIP,
         },
       );
 
       expect(_detect(detector, hand), ZoomDirection.none);
       expect(detector.pendingDirection, ZoomDirection.zoomIn);
+    });
+
+    test('zoom in does not require a visible index PIP landmark', () {
+      for (final hand in [
+        _zoomHand(
+          tipDistance: 80,
+          missingTypes: const {HandLandmarkType.indexFingerPIP},
+        ),
+        _zoomHand(
+          tipDistance: 80,
+          lowVisibilityTypes: const {HandLandmarkType.indexFingerPIP},
+        ),
+      ]) {
+        detector.clearState();
+        expect(_detect(detector, hand), ZoomDirection.none);
+        expect(detector.pendingDirection, ZoomDirection.zoomIn);
+      }
+    });
+
+    test('zoom in requires visible wrist, index MCP, and pinky MCP', () {
+      for (final type in const {
+        HandLandmarkType.wrist,
+        HandLandmarkType.indexFingerMCP,
+        HandLandmarkType.pinkyMCP,
+      }) {
+        detector.clearState();
+        final hand = _angleHand(90, missingTypes: {type});
+
+        expect(_detect(detector, hand), ZoomDirection.none);
+        expect(detector.pendingDirection, ZoomDirection.none);
+      }
     });
 
     test('requires the four fingertip-segment points 3, 4, 7, and 8', () {
@@ -363,6 +631,7 @@ void main() {
       now = now.add(const Duration(milliseconds: 800));
       detector.clearState();
       expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.hasZoomInDebugPose, isFalse);
 
       expect(_detect(detector, hand), ZoomDirection.none);
       now = now.add(const Duration(seconds: 1));
@@ -384,7 +653,7 @@ void main() {
       expect(_detect(detector, hand), ZoomDirection.zoomIn);
     });
 
-    test('losing the accepted angle resets the timer', () {
+    test('losing the required fingertip separation resets the timer', () {
       final validHand = _angleHand(90);
       final invalidHand = _angleHand(30);
 
@@ -400,10 +669,7 @@ void main() {
 
     test('losing the vertical gap resets the timer', () {
       final validHand = _angleHand(60);
-      final invalidHand = _angleHand(
-        60,
-        indexSegmentOffset: const Offset(0, 15),
-      );
+      final invalidHand = _angleHand(60, indexAboveThumbGap: 0);
 
       expect(_detect(detector, validHand), ZoomDirection.none);
       now = now.add(const Duration(milliseconds: 800));
@@ -494,6 +760,7 @@ void main() {
         detector.detect(
           hand: _zoomHand(tipDistance: 80),
           imageSize: const Size(double.nan, 400),
+          mirrorHorizontally: false,
         ),
         ZoomDirection.none,
       );
@@ -502,19 +769,136 @@ void main() {
   });
 }
 
-ZoomDirection _detect(ZoomGestureDetector detector, Hand hand) {
-  return detector.detect(hand: hand, imageSize: _imageSize);
+ZoomDirection _detect(
+  ZoomGestureDetector detector,
+  Hand hand, {
+  bool mirrorHorizontally = false,
+}) {
+  return detector.detect(
+    hand: hand,
+    imageSize: _imageSize,
+    mirrorHorizontally: mirrorHorizontally,
+  );
 }
 
 Hand _angleHand(
   double angleDegrees, {
+  double axisLength = 30,
+  double indexAboveThumbGap = 12,
+  double? tipDistance,
+  Map<HandLandmarkType, Offset> landmarkOverrides = const {},
+  Set<HandLandmarkType> missingTypes = const {},
+  bool mirrorRayGeometry = false,
+  Offset rayOffset = Offset.zero,
+}) {
+  const intersection = Offset(300, 300);
+  final halfAngleRadians = angleDegrees * math.pi / 360;
+  final thumbRayAngle = math.pi / 2 - halfAngleRadians;
+  final indexRayAngle = math.pi / 2 + halfAngleRadians;
+  final thumbRay = Offset(math.cos(thumbRayAngle), math.sin(thumbRayAngle));
+  final indexRay = Offset(math.cos(indexRayAngle), math.sin(indexRayAngle));
+
+  final verticalFactor = math.cos(halfAngleRadians);
+  final horizontalFactor = math.sin(halfAngleRadians);
+  final distanceDifference = verticalFactor.abs() <= 1e-12
+      ? 0.0
+      : indexAboveThumbGap / verticalFactor;
+  final distanceSum = tipDistance == null
+      ? 140.0 + distanceDifference
+      : math.sqrt(
+              math.max(
+                0,
+                tipDistance * tipDistance -
+                    indexAboveThumbGap * indexAboveThumbGap,
+              ),
+            ) /
+            horizontalFactor;
+  final indexRayDistance = (distanceSum + distanceDifference) / 2;
+  final thumbRayDistance = (distanceSum - distanceDifference) / 2;
+
+  final thumbTip = intersection - thumbRay * thumbRayDistance;
+  final thumbIp = thumbTip + thumbRay * axisLength;
+  final indexTip = intersection - indexRay * indexRayDistance;
+  final indexDip = indexTip + indexRay * axisLength;
+
+  Offset orientRayPoint(Offset point) {
+    final oriented = mirrorRayGeometry
+        ? Offset(220 - point.dx, point.dy)
+        : point;
+    return oriented + rayOffset;
+  }
+
+  return _zoomHand(
+    tipDistance: 80,
+    missingTypes: missingTypes,
+    landmarkOverrides: {
+      HandLandmarkType.thumbIP: orientRayPoint(thumbIp),
+      HandLandmarkType.thumbTip: orientRayPoint(thumbTip),
+      HandLandmarkType.indexFingerDIP: orientRayPoint(indexDip),
+      HandLandmarkType.indexFingerTip: orientRayPoint(indexTip),
+      ...landmarkOverrides,
+    },
+  );
+}
+
+Hand _parallelZoomInHand({
+  double angleDegrees = 0,
+  bool reverseIndexRay = false,
+  bool pointLeft = false,
+}) {
+  const thumbTip = Offset(60, 90);
+  const thumbRay = Offset(20, 30);
+  const indexTip = Offset(150, 50);
+  final thumbRayAngle = math.atan2(thumbRay.dy, thumbRay.dx);
+  final indexRayAngle =
+      thumbRayAngle +
+      angleDegrees * math.pi / 180 +
+      (reverseIndexRay ? math.pi : 0);
+  final indexRay =
+      Offset(math.cos(indexRayAngle), math.sin(indexRayAngle)) *
+      thumbRay.distance;
+
+  Offset orientRayPoint(Offset point) {
+    return pointLeft ? Offset(220 - point.dx, point.dy) : point;
+  }
+
+  return _zoomHand(
+    tipDistance: 80,
+    landmarkOverrides: {
+      HandLandmarkType.thumbIP: orientRayPoint(thumbTip + thumbRay),
+      HandLandmarkType.thumbTip: orientRayPoint(thumbTip),
+      HandLandmarkType.indexFingerDIP: orientRayPoint(indexTip + indexRay),
+      HandLandmarkType.indexFingerTip: orientRayPoint(indexTip),
+    },
+  );
+}
+
+Hand _closeParallelZoomInHand({required double lineSeparation}) {
+  const thumbTip = Offset(60, 90);
+  const thumbRay = Offset(20, 30);
+  final unit = thumbRay / thumbRay.distance;
+  final normal = Offset(-unit.dy, unit.dx);
+  final indexTip = thumbTip - unit * 70 + normal * lineSeparation;
+
+  return _zoomHand(
+    tipDistance: 80,
+    landmarkOverrides: {
+      HandLandmarkType.thumbIP: thumbTip + thumbRay,
+      HandLandmarkType.thumbTip: thumbTip,
+      HandLandmarkType.indexFingerDIP: indexTip + thumbRay,
+      HandLandmarkType.indexFingerTip: indexTip,
+    },
+  );
+}
+
+Hand _legacyAngleHand(
+  double angleDegrees, {
   double axisLength = 60,
   double axisGap = 100,
-  Offset indexSegmentOffset = Offset.zero,
   Map<HandLandmarkType, Offset> landmarkOverrides = const {},
   Set<HandLandmarkType> missingTypes = const {},
 }) {
-  final indexDip = const Offset(150, 150) + indexSegmentOffset;
+  final indexDip = const Offset(150, 150);
   final indexTip = indexDip + const Offset(0, -1) * axisLength;
   final thumbIp = Offset(150 - axisGap, 150);
   final radians = (-90 + angleDegrees) * math.pi / 180;
@@ -540,7 +924,7 @@ Hand _rightAngleHandWithTipDistance(double tipDistance) {
     tipDistance * tipDistance - axisLength * axisLength,
   );
 
-  return _angleHand(
+  return _legacyAngleHand(
     90,
     axisLength: axisLength,
     axisGap: axisLength + horizontalDistance,
@@ -548,15 +932,36 @@ Hand _rightAngleHandWithTipDistance(double tipDistance) {
   );
 }
 
+Hand _zoomHandWithDistalIndexAngle(double angleDegrees) {
+  const indexDip = Offset(170, 85);
+  const indexTip = Offset(150, 70);
+  const pipRayLength = 25.0;
+  final tipRayAngle = math.atan2(
+    indexTip.dy - indexDip.dy,
+    indexTip.dx - indexDip.dx,
+  );
+  final pipRayAngle = tipRayAngle + angleDegrees * math.pi / 180;
+  final indexPip =
+      indexDip +
+      Offset(math.cos(pipRayAngle), math.sin(pipRayAngle)) * pipRayLength;
+
+  return _zoomHand(
+    tipDistance: 80,
+    landmarkOverrides: {HandLandmarkType.indexFingerPIP: indexPip},
+  );
+}
+
 Hand _zoomOutHand({
   Offset offset = Offset.zero,
   double zOffset = 0,
+  bool mirrorPose = false,
   Set<HandLandmarkType> missingTypes = const {},
 }) {
   return _zoomHand(
     tipDistance: 20,
     offset: offset,
     zOffset: zOffset,
+    mirrorPose: mirrorPose,
     missingTypes: missingTypes,
     landmarkOverrides: const {
       HandLandmarkType.thumbMCP: Offset(45, 94),
@@ -596,6 +1001,7 @@ Hand _zoomHand({
   Set<HandLandmarkType> missingTypes = const {},
   Set<HandLandmarkType> lowVisibilityTypes = const {},
   double score = 1,
+  Handedness? handedness = Handedness.right,
 }) {
   final rotationRadians = rotationDegrees * math.pi / 180;
   final halfVector = const Offset(1, 0) * (tipDistance / 2);
@@ -637,10 +1043,10 @@ Hand _zoomHand({
   add(HandLandmarkType.wrist, const Offset(100, 175));
   add(HandLandmarkType.thumbCMC, const Offset(85, 145));
   add(HandLandmarkType.thumbMCP, const Offset(120, 120));
-  add(HandLandmarkType.thumbIP, const Offset(75, 100));
+  add(HandLandmarkType.thumbIP, const Offset(130, 110));
   add(HandLandmarkType.indexFingerMCP, const Offset(100, 120));
   add(HandLandmarkType.indexFingerPIP, const Offset(105, 95));
-  add(HandLandmarkType.indexFingerDIP, const Offset(125, 80));
+  add(HandLandmarkType.indexFingerDIP, const Offset(170, 85));
   add(HandLandmarkType.indexFingerTip, tipCenter + halfVector);
 
   _addFoldedFinger(
@@ -688,7 +1094,7 @@ Hand _zoomHand({
     landmarks: landmarks,
     imageWidth: _imageSize.width.toInt(),
     imageHeight: _imageSize.height.toInt(),
-    handedness: Handedness.right,
+    handedness: handedness,
   );
 }
 

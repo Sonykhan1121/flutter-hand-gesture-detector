@@ -634,6 +634,8 @@ extension on _AdminHandGestureLiveScreenState {
     final packageGestureBlocksZoom =
         knownPackageGesture != null &&
         knownPackageGesture.type != GestureType.pointingUp;
+    final zoomOpeningTransitionReserved =
+        _zoomGestureDetector.reservesZoomInOpeningTransition;
 
     var moveDirection = HandMoveDirection.none;
     final directionBlockReason = followTrackingActive
@@ -644,6 +646,8 @@ extension on _AdminHandGestureLiveScreenState {
         ? 'blocked: overlapping custom'
         : recordingGestureActive
         ? 'blocked: recording gesture'
+        : zoomOpeningTransitionReserved
+        ? 'blocked: zoom opening transition'
         : null;
 
     if (directionBlockReason == null) {
@@ -672,6 +676,8 @@ extension on _AdminHandGestureLiveScreenState {
       zoomDirection = _zoomGestureDetector.detect(
         hand: bestHand,
         imageSize: detectionImageSize,
+        mirrorHorizontally: mirrorPalmGestureCoordinates,
+        mirrorScreenHorizontally: mirrorDirectionalGestureCoordinates,
       );
     } else {
       _zoomGestureDetector.clearState();
@@ -679,6 +685,8 @@ extension on _AdminHandGestureLiveScreenState {
 
     final zoomHoldDirection = _zoomGestureDetector.pendingDirection;
     final zoomHoldActive = _zoomGestureDetector.isGestureActive;
+    final openingZoomInCandidate =
+        _zoomGestureDetector.isOpeningZoomInCandidate;
 
     _handleZoomDirection(zoomDirection);
 
@@ -766,6 +774,9 @@ extension on _AdminHandGestureLiveScreenState {
       } else if (zoomDirection == ZoomDirection.zoomOut) {
         _gestureText = _isCameraZoomSupported ? 'Zoom out' : 'Zoom unavailable';
         _gestureConfidence = _isCameraZoomSupported ? 1 : 0;
+      } else if (openingZoomInCandidate) {
+        _gestureText = 'Open fingers to zoom in';
+        _gestureConfidence = 0;
       } else if (zoomHoldDirection == ZoomDirection.zoomIn) {
         _gestureText = 'Hold to zoom in';
         _gestureConfidence = 0;

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/hand_geometry_service.dart';
@@ -232,6 +234,349 @@ void main() {
     });
   });
 
+  group('HandGeometryService forwardRayIntersection2D', () {
+    const geometry = HandGeometryService();
+
+    ForwardRayIntersection2D? intersection(
+      Offset firstStart,
+      Offset firstThrough,
+      Offset secondStart,
+      Offset secondThrough, {
+      double minForwardScale = 1,
+      double parallelToleranceDegrees = 5,
+      double minParallelLineSeparation = 0,
+    }) {
+      return geometry.forwardRayIntersection2D(
+        firstStart: _landmark(firstStart),
+        firstThrough: _landmark(firstThrough),
+        secondStart: _landmark(secondStart),
+        secondThrough: _landmark(secondThrough),
+        minForwardScale: minForwardScale,
+        parallelToleranceDegrees: parallelToleranceDegrees,
+        minParallelLineSeparation: minParallelLineSeparation,
+      );
+    }
+
+    test('accepts intersections at and beyond both through-points', () {
+      final atThroughPoint = intersection(
+        const Offset(0, 0),
+        const Offset(1, 0),
+        const Offset(1, -1),
+        const Offset(1, 0),
+      );
+      expect(atThroughPoint?.kind, ForwardRayIntersectionKind.finite);
+      expect(atThroughPoint?.point, const Offset(1, 0));
+
+      final beyondBoth = intersection(
+        const Offset(0, 0),
+        const Offset(1, 1),
+        const Offset(4, 0),
+        const Offset(3, 1),
+      );
+      expect(beyondBoth?.kind, ForwardRayIntersectionKind.finite);
+      expect(beyondBoth?.point, const Offset(2, 2));
+    });
+
+    test('accepts a finite forward intersection at any distance', () {
+      final result = intersection(
+        const Offset(0, 0),
+        const Offset(1, 0),
+        const Offset(100, -1),
+        const Offset(100, 0),
+      );
+      expect(result?.kind, ForwardRayIntersectionKind.finite);
+      expect(result?.point, const Offset(100, 0));
+    });
+
+    test('is invariant when the geometry is horizontally mirrored', () {
+      final result = intersection(
+        const Offset(0, 0),
+        const Offset(-1, 1),
+        const Offset(-4, 0),
+        const Offset(-3, 1),
+      );
+      expect(result?.kind, ForwardRayIntersectionKind.finite);
+      expect(result?.point, const Offset(-2, 2));
+    });
+
+    test('requires a finite intersection in quadrant 4 or 3', () {
+      const rightIntersection = ForwardRayIntersection2D.finite(Offset(8, 8));
+      const leftIntersection = ForwardRayIntersection2D.finite(Offset(2, 8));
+      final firstStart = _landmark(const Offset(0, 0));
+      final firstThrough = _landmark(const Offset(1, 1));
+      final secondStart = _landmark(const Offset(0, 2));
+      final secondThrough = _landmark(const Offset(1, 1));
+
+      expect(
+        geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: rightIntersection,
+          firstStart: firstStart,
+          firstThrough: firstThrough,
+          secondStart: secondStart,
+          secondThrough: secondThrough,
+          imageSize: const Size(10, 10),
+          handedness: Handedness.right,
+          mirrorHorizontally: false,
+        ),
+        isTrue,
+      );
+      expect(
+        geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: leftIntersection,
+          firstStart: firstStart,
+          firstThrough: firstThrough,
+          secondStart: secondStart,
+          secondThrough: secondThrough,
+          imageSize: const Size(10, 10),
+          handedness: Handedness.left,
+          mirrorHorizontally: false,
+        ),
+        isTrue,
+      );
+      expect(
+        geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: leftIntersection,
+          firstStart: firstStart,
+          firstThrough: firstThrough,
+          secondStart: secondStart,
+          secondThrough: secondThrough,
+          imageSize: const Size(10, 10),
+          handedness: Handedness.right,
+          mirrorHorizontally: false,
+        ),
+        isFalse,
+      );
+      expect(
+        geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: const ForwardRayIntersection2D.finite(Offset(5, 8)),
+          firstStart: firstStart,
+          firstThrough: firstThrough,
+          secondStart: secondStart,
+          secondThrough: secondThrough,
+          imageSize: const Size(10, 10),
+          handedness: Handedness.right,
+          mirrorHorizontally: false,
+        ),
+        isFalse,
+        reason: 'an intersection on the vertical axis is not in quadrant 4',
+      );
+      expect(
+        geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: const ForwardRayIntersection2D.finite(Offset(8, 5)),
+          firstStart: firstStart,
+          firstThrough: firstThrough,
+          secondStart: secondStart,
+          secondThrough: secondThrough,
+          imageSize: const Size(10, 10),
+          handedness: Handedness.right,
+          mirrorHorizontally: false,
+        ),
+        isFalse,
+        reason: 'an intersection on the horizontal axis is not in quadrant 4',
+      );
+      expect(
+        geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: const ForwardRayIntersection2D.finite(Offset(8, 2)),
+          firstStart: firstStart,
+          firstThrough: firstThrough,
+          secondStart: secondStart,
+          secondThrough: secondThrough,
+          imageSize: const Size(10, 10),
+          handedness: Handedness.right,
+          mirrorHorizontally: false,
+        ),
+        isFalse,
+      );
+      expect(
+        geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: leftIntersection,
+          firstStart: firstStart,
+          firstThrough: firstThrough,
+          secondStart: secondStart,
+          secondThrough: secondThrough,
+          imageSize: const Size(10, 10),
+          handedness: Handedness.right,
+          mirrorHorizontally: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('requires parallel rays to point into quadrant 4 or 3', () {
+      const relation = ForwardRayIntersection2D.atInfinity();
+
+      bool pointsToQuadrant({
+        required bool pointRight,
+        double verticalDelta = 1,
+        required Handedness handedness,
+        bool mirrorHorizontally = false,
+      }) {
+        final horizontalDelta = pointRight ? 1.0 : -1.0;
+        return geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: relation,
+          firstStart: _landmark(const Offset(0, 0)),
+          firstThrough: _landmark(Offset(horizontalDelta, verticalDelta)),
+          secondStart: _landmark(const Offset(0, 2)),
+          secondThrough: _landmark(Offset(horizontalDelta, 2 + verticalDelta)),
+          imageSize: const Size(10, 10),
+          handedness: handedness,
+          mirrorHorizontally: mirrorHorizontally,
+        );
+      }
+
+      expect(
+        pointsToQuadrant(pointRight: true, handedness: Handedness.right),
+        isTrue,
+      );
+      expect(
+        pointsToQuadrant(pointRight: false, handedness: Handedness.left),
+        isTrue,
+      );
+      expect(
+        pointsToQuadrant(pointRight: false, handedness: Handedness.right),
+        isFalse,
+      );
+      expect(
+        pointsToQuadrant(
+          pointRight: false,
+          handedness: Handedness.right,
+          mirrorHorizontally: true,
+        ),
+        isTrue,
+      );
+      expect(
+        pointsToQuadrant(
+          pointRight: true,
+          verticalDelta: 0,
+          handedness: Handedness.right,
+        ),
+        isFalse,
+      );
+    });
+
+    test('treats same-direction rays within five degrees as infinity', () {
+      final exactParallel = intersection(
+        const Offset(0, 0),
+        const Offset(1, 0),
+        const Offset(0, 1),
+        const Offset(1, 1),
+      );
+      expect(exactParallel?.kind, ForwardRayIntersectionKind.atInfinity);
+      expect(exactParallel?.point, isNull);
+      expect(exactParallel?.isAtInfinity, isTrue);
+
+      final fiveDegrees = 5 * math.pi / 180;
+      final toleranceBoundary = intersection(
+        const Offset(0, 0),
+        const Offset(1, 0),
+        const Offset(0, 1),
+        Offset(math.cos(fiveDegrees), 1 + math.sin(fiveDegrees)),
+      );
+      expect(toleranceBoundary?.kind, ForwardRayIntersectionKind.atInfinity);
+    });
+
+    test('requires the configured gap between parallel lines', () {
+      final atBoundary = intersection(
+        const Offset(0, 0),
+        const Offset(1, 0),
+        const Offset(4, 1),
+        const Offset(5, 1),
+        minParallelLineSeparation: 1,
+      );
+      expect(atBoundary?.kind, ForwardRayIntersectionKind.atInfinity);
+
+      expect(
+        intersection(
+          const Offset(0, 0),
+          const Offset(1, 0),
+          const Offset(4, 0.99),
+          const Offset(5, 0.99),
+          minParallelLineSeparation: 1,
+        ),
+        isNull,
+      );
+    });
+
+    test('rejects intersections behind a ray outside the tolerance', () {
+      final justOutsideTolerance = 5.01 * math.pi / 180;
+      expect(
+        intersection(
+          const Offset(0, 0),
+          const Offset(1, 0),
+          const Offset(0, 1),
+          Offset(
+            math.cos(justOutsideTolerance),
+            1 + math.sin(justOutsideTolerance),
+          ),
+        ),
+        isNull,
+      );
+
+      expect(
+        intersection(
+          const Offset(0, 0),
+          const Offset(1, 0),
+          const Offset(2, 1),
+          const Offset(2, 2),
+        ),
+        isNull,
+      );
+    });
+
+    test('rejects degenerate and opposite-facing parallel rays', () {
+      expect(
+        intersection(
+          const Offset(0, 0),
+          const Offset(0, 0),
+          const Offset(1, 0),
+          const Offset(1, 1),
+        ),
+        isNull,
+      );
+      expect(
+        intersection(
+          const Offset(0, 0),
+          const Offset(1, 0),
+          const Offset(2, 0),
+          const Offset(1, 0),
+        ),
+        isNull,
+      );
+    });
+
+    test('rejects non-finite coordinates and thresholds', () {
+      expect(
+        intersection(
+          const Offset(double.nan, 0),
+          const Offset(1, 0),
+          const Offset(1, -1),
+          const Offset(1, 0),
+        ),
+        isNull,
+      );
+      expect(
+        intersection(
+          const Offset(0, 0),
+          const Offset(1, 0),
+          const Offset(1, -1),
+          const Offset(1, 0),
+          parallelToleranceDegrees: double.infinity,
+        ),
+        isNull,
+      );
+      expect(
+        intersection(
+          const Offset(0, 0),
+          const Offset(1, 0),
+          const Offset(1, -1),
+          const Offset(1, 0),
+          parallelToleranceDegrees: 90,
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('HandGeometryService downwardExtendedFingerChainCount', () {
     const geometry = HandGeometryService();
 
@@ -255,6 +600,16 @@ void main() {
       );
     });
   });
+}
+
+HandLandmark _landmark(Offset point) {
+  return HandLandmark(
+    type: HandLandmarkType.indexFingerTip,
+    x: point.dx,
+    y: point.dy,
+    z: 0,
+    visibility: 1,
+  );
 }
 
 Hand _handWithLandmark({

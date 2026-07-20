@@ -17,6 +17,24 @@ class HandPoint3D {
   Offset get offset => Offset(x, y);
 }
 
+/// How a valid pair of forward 2D rays meets.
+enum ForwardRayIntersectionKind { finite, atInfinity }
+
+/// A finite forward intersection or a same-direction point at infinity.
+class ForwardRayIntersection2D {
+  const ForwardRayIntersection2D.finite(this.point)
+    : kind = ForwardRayIntersectionKind.finite;
+
+  const ForwardRayIntersection2D.atInfinity()
+    : kind = ForwardRayIntersectionKind.atInfinity,
+      point = null;
+
+  final ForwardRayIntersectionKind kind;
+  final Offset? point;
+
+  bool get isAtInfinity => kind == ForwardRayIntersectionKind.atInfinity;
+}
+
 /// Shared landmark geometry utilities used by all gesture detectors.
 class HandGeometryService {
   const HandGeometryService();
@@ -623,6 +641,159 @@ class HandGeometryService {
     final cross = firstX * secondY - firstY * secondX;
     final angle = math.atan2(cross.abs(), dot) * 180 / math.pi;
     return angle.isFinite ? angle : null;
+  }
+
+  /// Classifies where two valid 2D rays meet in their forward direction.
+  ///
+  /// A scale of zero is the ray start and a scale of one is its through-point.
+  /// Same-direction rays inside [parallelToleranceDegrees] are treated as
+  /// meeting at infinity so small landmark jitter cannot flip their result.
+  ForwardRayIntersection2D? forwardRayIntersection2D({
+    required HandLandmark firstStart,
+    required HandLandmark firstThrough,
+    required HandLandmark secondStart,
+    required HandLandmark secondThrough,
+    required double minForwardScale,
+    required double parallelToleranceDegrees,
+    double minParallelLineSeparation = 0,
+  }) {
+    if (!minForwardScale.isFinite ||
+        !parallelToleranceDegrees.isFinite ||
+        !minParallelLineSeparation.isFinite ||
+        minForwardScale < 0 ||
+        minParallelLineSeparation < 0 ||
+        parallelToleranceDegrees < 0 ||
+        parallelToleranceDegrees >= 90) {
+      return null;
+    }
+
+    final firstX = firstThrough.x - firstStart.x;
+    final firstY = firstThrough.y - firstStart.y;
+    final secondX = secondThrough.x - secondStart.x;
+    final secondY = secondThrough.y - secondStart.y;
+    final firstLengthSquared = firstX * firstX + firstY * firstY;
+    final secondLengthSquared = secondX * secondX + secondY * secondY;
+    if (!firstLengthSquared.isFinite ||
+        !secondLengthSquared.isFinite ||
+        firstLengthSquared <= 1e-18 ||
+        secondLengthSquared <= 1e-18) {
+      return null;
+    }
+
+    final cross = firstX * secondY - firstY * secondX;
+    final lengthProduct = math.sqrt(firstLengthSquared * secondLengthSquared);
+    final normalizedCross = cross.abs() / lengthProduct;
+    final normalizedDot = (firstX * secondX + firstY * secondY) / lengthProduct;
+    if (!normalizedCross.isFinite || !normalizedDot.isFinite) return null;
+
+    final rayAngleDegrees =
+        math.atan2(normalizedCross, normalizedDot) * 180 / math.pi;
+    if (!rayAngleDegrees.isFinite) return null;
+    if (normalizedDot > 0 &&
+        rayAngleDegrees <= parallelToleranceDegrees + 1e-9) {
+      final startDeltaX = secondStart.x - firstStart.x;
+      final startDeltaY = secondStart.y - firstStart.y;
+      final firstLineSeparation =
+          (startDeltaX * firstY - startDeltaY * firstX).abs() /
+          math.sqrt(firstLengthSquared);
+      final secondLineSeparation =
+          (startDeltaX * secondY - startDeltaY * secondX).abs() /
+          math.sqrt(secondLengthSquared);
+      final minimumLineSeparation = math.min(
+        firstLineSeparation,
+        secondLineSeparation,
+      );
+      if (!minimumLineSeparation.isFinite ||
+          minimumLineSeparation + 1e-9 < minParallelLineSeparation) {
+        return null;
+      }
+      return const ForwardRayIntersection2D.atInfinity();
+    }
+
+    // Remaining parallel rays point in opposite directions and do not share a
+    // forward point. Non-parallel rays continue to the finite calculation.
+    if (normalizedCross <= 1e-12) return null;
+
+    final startDeltaX = secondStart.x - firstStart.x;
+    final startDeltaY = secondStart.y - firstStart.y;
+    final firstScale = (startDeltaX * secondY - startDeltaY * secondX) / cross;
+    final secondScale = (startDeltaX * firstY - startDeltaY * firstX) / cross;
+    if (!firstScale.isFinite ||
+        !secondScale.isFinite ||
+        firstScale < minForwardScale - 1e-9 ||
+        secondScale < minForwardScale - 1e-9) {
+      return null;
+    }
+
+    final intersectionX = firstStart.x + firstScale * firstX;
+    final intersectionY = firstStart.y + firstScale * firstY;
+    if (!intersectionX.isFinite || !intersectionY.isFinite) return null;
+
+    return ForwardRayIntersection2D.finite(
+      Offset(intersectionX, intersectionY),
+    );
+  }
+
+  /// Whether a valid Zoom In ray relation enters the hand's required screen
+  /// quadrant relative to the center of [imageSize].
+  ///
+  /// A right hand uses screen quadrant 4 (bottom-right); a left hand uses
+  /// quadrant 3 (bottom-left). A finite relation checks its intersection. At
+  /// infinity, both ray direction vectors must point into that quadrant.
+  bool isForwardRayRelationInHandQuadrant2D({
+    required ForwardRayIntersection2D relation,
+    required HandLandmark firstStart,
+    required HandLandmark firstThrough,
+    required HandLandmark secondStart,
+    required HandLandmark secondThrough,
+    required Size imageSize,
+    required Handedness? handedness,
+    required bool mirrorHorizontally,
+  }) {
+    if (handedness == null ||
+        !imageSize.width.isFinite ||
+        !imageSize.height.isFinite ||
+        imageSize.width <= 0 ||
+        imageSize.height <= 0) {
+      return false;
+    }
+
+    final expectedHorizontalSign = handedness == Handedness.right ? 1.0 : -1.0;
+    final centerX = imageSize.width / 2;
+    final centerY = imageSize.height / 2;
+
+    double visibleX(double rawX) {
+      return mirrorHorizontally ? imageSize.width - rawX : rawX;
+    }
+
+    bool directionEntersExpectedQuadrant({
+      required HandLandmark start,
+      required HandLandmark through,
+    }) {
+      final horizontalDelta = visibleX(through.x) - visibleX(start.x);
+      final verticalDelta = through.y - start.y;
+      return horizontalDelta.isFinite &&
+          verticalDelta.isFinite &&
+          horizontalDelta * expectedHorizontalSign > 1e-9 &&
+          verticalDelta > 1e-9;
+    }
+
+    return switch (relation.kind) {
+      ForwardRayIntersectionKind.finite =>
+        relation.point != null &&
+            (visibleX(relation.point!.dx) - centerX) * expectedHorizontalSign >
+                1e-9 &&
+            relation.point!.dy - centerY > 1e-9,
+      ForwardRayIntersectionKind.atInfinity =>
+        directionEntersExpectedQuadrant(
+              start: firstStart,
+              through: firstThrough,
+            ) &&
+            directionEntersExpectedQuadrant(
+              start: secondStart,
+              through: secondThrough,
+            ),
+    };
   }
 
   /// Whether the midpoint of one segment is visibly above another in 2D.

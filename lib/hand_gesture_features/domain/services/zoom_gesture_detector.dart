@@ -7,7 +7,7 @@ import '../constants/hand_gesture_thresholds.dart';
 import '../enums/zoom_direction.dart';
 import 'hand_geometry_service.dart';
 
-/// Detects static angle-based zoom-in and closed-pinch zoom-out holds.
+/// Detects static zoom holds and the Zoom Out-to-Zoom In opening transition.
 class ZoomGestureDetector {
   ZoomGestureDetector({
     this.geometry = const HandGeometryService(),
@@ -25,6 +25,8 @@ class ZoomGestureDetector {
   HandPoint3D? _startPalmCenter;
   double? _startHandSize;
   Map<HandLandmarkType, HandPoint3D>? _startStableFingerOffsets;
+  _ZoomInOpeningPhase _zoomInOpeningPhase = _ZoomInOpeningPhase.idle;
+  bool _hasZoomInDebugPose = false;
 
   static const List<HandLandmarkType> _stableFingerTypes = [
     HandLandmarkType.middleFingerTip,
@@ -32,31 +34,105 @@ class ZoomGestureDetector {
     HandLandmarkType.pinkyTip,
   ];
 
-  /// True from the first valid hold frame until the pose is lost or blocked.
+  /// True during a static hold or an armed Zoom Out-to-Zoom In transition.
   bool get isGestureActive => _pendingDirection != ZoomDirection.none;
 
-  /// Direction currently accumulating its one-second hold.
+  /// Direction currently holding or being prepared by the opening candidate.
   ZoomDirection get pendingDirection => _pendingDirection;
 
-  /// Returns a direction continuously after its static pose is held for 1s.
-  ZoomDirection detect({required Hand hand, required Size imageSize}) {
+  /// True while directions must yield to an armed or active opening sequence.
+  bool get reservesZoomInOpeningTransition =>
+      _zoomInOpeningPhase != _ZoomInOpeningPhase.idle;
+
+  /// True in the released-pinch stage before the opening becomes Zoom In.
+  bool get isOpeningZoomInCandidate =>
+      _zoomInOpeningPhase == _ZoomInOpeningPhase.candidate;
+
+  /// True when the current non-closed pose is being evaluated as Zoom In.
+  bool get hasZoomInDebugPose => _hasZoomInDebugPose;
+
+  /// Returns static directions after 1s, or Zoom In immediately after a
+  /// recognized Zoom Out pinch opens through the candidate stage.
+  ZoomDirection detect({
+    required Hand hand,
+    required Size imageSize,
+    required bool mirrorHorizontally,
+    bool? mirrorScreenHorizontally,
+  }) {
     if (!geometry.isReliableHand(hand) || !_isFiniteImageSize(imageSize)) {
       clearState();
       return ZoomDirection.none;
     }
 
-    final pose = _staticZoomPose(hand);
+    final pose = _zoomPose(
+      hand,
+      imageSize: imageSize,
+      mirrorPalmHorizontally: mirrorHorizontally,
+      mirrorScreenHorizontally: mirrorScreenHorizontally ?? mirrorHorizontally,
+    );
     if (pose == null) {
       clearState();
       return ZoomDirection.none;
     }
-
     final now = _now();
+    switch (pose.type) {
+      case _ZoomPoseType.zoomOut:
+        _hasZoomInDebugPose = false;
+        // Closing again ends any previous opening sequence. A new transition
+        // is armed only after Zoom Out itself has completed its static hold.
+        _zoomInOpeningPhase = _ZoomInOpeningPhase.idle;
+        final direction = _detectStaticPose(
+          pose: pose,
+          direction: ZoomDirection.zoomOut,
+          now: now,
+        );
+        if (direction == ZoomDirection.zoomOut) {
+          _zoomInOpeningPhase = _ZoomInOpeningPhase.armed;
+        }
+        return direction;
+      case _ZoomPoseType.openingCandidate:
+        _hasZoomInDebugPose = true;
+        if (_zoomInOpeningPhase == _ZoomInOpeningPhase.idle) {
+          clearState();
+          _hasZoomInDebugPose = true;
+          return ZoomDirection.none;
+        }
+
+        _zoomInOpeningPhase = _ZoomInOpeningPhase.candidate;
+        if (_pendingDirection != ZoomDirection.zoomIn) {
+          _startPendingPose(pose, ZoomDirection.zoomIn, now);
+        }
+        return ZoomDirection.none;
+      case _ZoomPoseType.zoomIn:
+        _hasZoomInDebugPose = true;
+        if (_zoomInOpeningPhase == _ZoomInOpeningPhase.candidate ||
+            _zoomInOpeningPhase == _ZoomInOpeningPhase.active) {
+          _zoomInOpeningPhase = _ZoomInOpeningPhase.active;
+          if (_pendingDirection != ZoomDirection.zoomIn) {
+            _startPendingPose(pose, ZoomDirection.zoomIn, now);
+          }
+          return ZoomDirection.zoomIn;
+        }
+
+        _zoomInOpeningPhase = _ZoomInOpeningPhase.idle;
+        return _detectStaticPose(
+          pose: pose,
+          direction: ZoomDirection.zoomIn,
+          now: now,
+        );
+    }
+  }
+
+  ZoomDirection _detectStaticPose({
+    required _ZoomPose pose,
+    required ZoomDirection direction,
+    required DateTime now,
+  }) {
     final startedAt = _holdStartedAt;
-    if (_pendingDirection != pose.direction ||
+    if (_pendingDirection != direction ||
         startedAt == null ||
         now.isBefore(startedAt)) {
-      _startHold(pose, now);
+      _startPendingPose(pose, direction, now);
       return ZoomDirection.none;
     }
 
@@ -65,7 +141,7 @@ class ZoomGestureDetector {
           currentStableFingerOffsets: pose.stableFingerOffsets,
           currentHandSize: pose.handSize,
         )) {
-      _startHold(pose, now);
+      _startPendingPose(pose, direction, now);
       return ZoomDirection.none;
     }
 
@@ -74,7 +150,7 @@ class ZoomGestureDetector {
       return ZoomDirection.none;
     }
 
-    return pose.direction;
+    return direction;
   }
 
   /// Clears the active pose and requires a fresh one-second hold.
@@ -84,6 +160,8 @@ class ZoomGestureDetector {
     _startPalmCenter = null;
     _startHandSize = null;
     _startStableFingerOffsets = null;
+    _zoomInOpeningPhase = _ZoomInOpeningPhase.idle;
+    _hasZoomInDebugPose = false;
   }
 
   bool _isFiniteImageSize(Size imageSize) {
@@ -93,16 +171,25 @@ class ZoomGestureDetector {
         imageSize.height > 0;
   }
 
-  void _startHold(_StaticZoomPose pose, DateTime now) {
-    _pendingDirection = pose.direction;
+  void _startPendingPose(
+    _ZoomPose pose,
+    ZoomDirection direction,
+    DateTime now,
+  ) {
+    _pendingDirection = direction;
     _holdStartedAt = now;
     _startPalmCenter = pose.palmCenter;
     _startHandSize = pose.handSize;
     _startStableFingerOffsets = pose.stableFingerOffsets;
   }
 
-  /// Builds the simplified angle-based zoom-in or closed-pinch zoom-out pose.
-  _StaticZoomPose? _staticZoomPose(Hand hand) {
+  /// Classifies a closed pinch, released-pinch candidate, or open Zoom In.
+  _ZoomPose? _zoomPose(
+    Hand hand, {
+    required Size imageSize,
+    required bool mirrorPalmHorizontally,
+    required bool mirrorScreenHorizontally,
+  }) {
     if (!_hasOtherFingersClosedByAngle(hand)) return null;
 
     final thumbIp = _zoomVisibleLandmark(hand, HandLandmarkType.thumbIP);
@@ -136,12 +223,35 @@ class ZoomGestureDetector {
     );
     if (!indexIsAboveThumb) return null;
 
-    final isZoomIn = _hasZoomInThumbIndexAngle(
+    final thumbIndexAngle = _zoomInThumbIndexAngleDegrees(
       thumbIp: thumbIp,
       thumbTip: thumbTip,
       indexDip: indexDip,
       indexTip: indexTip,
     );
+    final forwardRayIntersection = geometry.forwardRayIntersection2D(
+      firstStart: thumbTip,
+      firstThrough: thumbIp,
+      secondStart: indexTip,
+      secondThrough: indexDip,
+      minForwardScale: HandGestureThresholds.zoomInMinForwardRayScale,
+      parallelToleranceDegrees:
+          HandGestureThresholds.zoomInParallelRayToleranceDegrees,
+      minParallelLineSeparation:
+          handSize * HandGestureThresholds.zoomInParallelMinLineSeparationRatio,
+    );
+    final hasHandQuadrantRayRelation =
+        forwardRayIntersection != null &&
+        geometry.isForwardRayRelationInHandQuadrant2D(
+          relation: forwardRayIntersection,
+          firstStart: thumbTip,
+          firstThrough: thumbIp,
+          secondStart: indexTip,
+          secondThrough: indexDip,
+          imageSize: imageSize,
+          handedness: hand.handedness,
+          mirrorHorizontally: mirrorScreenHorizontally,
+        );
     final distance2dRatio =
         geometry.distanceBetweenLandmarks(thumbTip, indexTip) / handSize;
     final distance3dRatio =
@@ -159,17 +269,15 @@ class ZoomGestureDetector {
         distance3dRatio + _distanceComparisonEpsilon >=
             HandGestureThresholds.zoomInMinDistanceRatio;
 
-    // A closed pinch always belongs to Zoom Out, even when its fingertip
-    // segments also happen to form the Zoom In angle. The separation gap
-    // between the closed and open thresholds keeps noisy frames neutral.
-    final direction = isClosedPinch
-        ? ZoomDirection.zoomOut
-        : isZoomIn && isClearlySeparated
-        ? ZoomDirection.zoomIn
-        : ZoomDirection.none;
-    if (direction == ZoomDirection.none) return null;
+    if (!isClosedPinch &&
+        !_isPalmSideFacingCamera(
+          hand,
+          mirrorHorizontally: mirrorPalmHorizontally,
+        )) {
+      return null;
+    }
 
-    if (direction == ZoomDirection.zoomOut &&
+    if (isClosedPinch &&
         geometry.isThumbTuckedForFist3D(
               hand: hand,
               palmCenter: palmCenter,
@@ -190,15 +298,24 @@ class ZoomGestureDetector {
       return null;
     }
 
-    return _StaticZoomPose(
-      direction: direction,
+    final type = isClosedPinch
+        ? _ZoomPoseType.zoomOut
+        : isClearlySeparated && hasHandQuadrantRayRelation
+        ? _ZoomPoseType.zoomIn
+        : thumbIndexAngle != null
+        ? _ZoomPoseType.openingCandidate
+        : null;
+    if (type == null) return null;
+
+    return _ZoomPose(
+      type: type,
       palmCenter: palmCenter,
       handSize: handSize,
       stableFingerOffsets: stableFingerOffsets,
     );
   }
 
-  /// Requires only middle, ring, and pinky to remain folded for Zoom In.
+  /// Requires middle, ring, and pinky to remain folded for both zoom poses.
   bool _hasOtherFingersClosedByAngle(Hand hand) {
     for (final chainTypes
         in HandGestureThresholds.directionFingerChainTypes.skip(1)) {
@@ -216,7 +333,7 @@ class ZoomGestureDetector {
   }
 
   /// Uses the visible 2D fingertip segments from thumb 3->4 and index 7->8.
-  bool _hasZoomInThumbIndexAngle({
+  double? _zoomInThumbIndexAngleDegrees({
     required HandLandmark thumbIp,
     required HandLandmark thumbTip,
     required HandLandmark indexDip,
@@ -228,12 +345,44 @@ class ZoomGestureDetector {
       secondStart: indexDip,
       secondEnd: indexTip,
     );
-    if (angle == null) return false;
+    return angle;
+  }
 
-    return angle + _angleComparisonEpsilon >=
-            HandGestureThresholds.zoomInThumbIndexMinAngleDegrees &&
-        angle - _angleComparisonEpsilon <=
-            HandGestureThresholds.zoomInThumbIndexMaxAngleDegrees;
+  /// Uses handedness and projected palm chirality to reject the back of hand.
+  /// Unknown handedness or missing palm anchors fail closed for Zoom In.
+  bool _isPalmSideFacingCamera(Hand hand, {required bool mirrorHorizontally}) {
+    final handedness = hand.handedness;
+    final wrist = _zoomVisibleLandmark(hand, HandLandmarkType.wrist);
+    final indexMcp = _zoomVisibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerMCP,
+    );
+    final pinkyMcp = _zoomVisibleLandmark(hand, HandLandmarkType.pinkyMCP);
+    if (handedness == null ||
+        wrist == null ||
+        indexMcp == null ||
+        pinkyMcp == null) {
+      return false;
+    }
+
+    var expectedPalmSide = handedness == Handedness.right ? 1.0 : -1.0;
+    if (mirrorHorizontally) expectedPalmSide *= -1;
+
+    final indexX = indexMcp.x - wrist.x;
+    final indexY = indexMcp.y - wrist.y;
+    final pinkyX = pinkyMcp.x - wrist.x;
+    final pinkyY = pinkyMcp.y - wrist.y;
+    final indexLength = math.sqrt(indexX * indexX + indexY * indexY);
+    final pinkyLength = math.sqrt(pinkyX * pinkyX + pinkyY * pinkyY);
+    if (indexLength <= _distanceComparisonEpsilon ||
+        pinkyLength <= _distanceComparisonEpsilon) {
+      return false;
+    }
+
+    final normalizedCross =
+        (indexX * pinkyY - indexY * pinkyX) / (indexLength * pinkyLength);
+    return normalizedCross * expectedPalmSide + _angleComparisonEpsilon >=
+        HandGestureThresholds.zoomInMinPalmSideCross;
   }
 
   Map<HandLandmarkType, HandPoint3D> _stableFingerOffsets({
@@ -256,7 +405,7 @@ class ZoomGestureDetector {
     return offsets;
   }
 
-  bool _isPalmStable(_StaticZoomPose pose) {
+  bool _isPalmStable(_ZoomPose pose) {
     final startPalmCenter = _startPalmCenter;
     final startHandSize = _startHandSize;
     if (startPalmCenter == null || startHandSize == null) return false;
@@ -308,15 +457,19 @@ class ZoomGestureDetector {
   }
 }
 
-class _StaticZoomPose {
-  const _StaticZoomPose({
-    required this.direction,
+enum _ZoomPoseType { zoomOut, openingCandidate, zoomIn }
+
+enum _ZoomInOpeningPhase { idle, armed, candidate, active }
+
+class _ZoomPose {
+  const _ZoomPose({
+    required this.type,
     required this.palmCenter,
     required this.handSize,
     required this.stableFingerOffsets,
   });
 
-  final ZoomDirection direction;
+  final _ZoomPoseType type;
   final HandPoint3D palmCenter;
   final double handSize;
   final Map<HandLandmarkType, HandPoint3D> stableFingerOffsets;

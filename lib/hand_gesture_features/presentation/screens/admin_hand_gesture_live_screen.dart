@@ -46,12 +46,14 @@ import '../../domain/services/zoom_gesture_detector.dart';
 import '../../domain/utils/camera_frame_box_mapper.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
 import '../painters/object_detection_debug_painter.dart';
+import '../painters/direction_debug_overlay_painter.dart';
 import '../painters/follow_target_overlay_painter.dart';
 import '../painters/hand_focus_overlay_painter.dart';
 import '../painters/hand_landmark_overlay_painter.dart';
 import '../painters/object_detection_debug_painter_factory.dart';
 import '../painters/object_optical_flow_debug_painter.dart';
 import '../painters/recording_hand_landmark_overlay_painter.dart';
+import '../painters/zoom_in_debug_overlay_painter.dart';
 import '../utils/hand_gesture_label_mapper.dart';
 import '../utils/camera_orientation_preferences.dart';
 import '../utils/palm_orientation_coordinate_policy.dart';
@@ -139,6 +141,10 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final bool _showFollowTargetDebugOverlay = false;
   // Set true to inspect optical-flow points, raw boxes, and confidence.
   final bool _showObjectOpticalFlowDebugOverlay = false;
+  // Set false to hide the Zoom In rays, angle, and intersection point.
+  final bool _showZoomInDebugOverlay = true;
+  // Set false to hide direction sectors and the full-screen index axis.
+  final bool _showDirectionDebugOverlay = true;
 
   String _gestureText = 'Show your hand';
   String _handText = '';

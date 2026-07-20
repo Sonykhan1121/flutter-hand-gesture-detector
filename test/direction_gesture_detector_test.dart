@@ -4,11 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/constants/hand_gesture_thresholds.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/enums/hand_move_direction.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/enums/zoom_direction.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/direction_gesture_detector.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/services/zoom_gesture_detector.dart';
 import 'package:hand_detection/hand_detection.dart';
 
 const _imageSize = Size(400, 400);
 const _indexBase = Offset(200, 205);
+const _verticalUpZoomConflictLandmarks = <HandLandmarkType, Offset>{
+  HandLandmarkType.wrist: Offset(0, 285),
+  HandLandmarkType.thumbMCP: Offset(200, 220),
+  HandLandmarkType.thumbIP: Offset(230, 220),
+  HandLandmarkType.thumbTip: Offset(260, 220),
+};
 
 const _fingerChains = [
   [
@@ -57,7 +65,7 @@ void main() {
           HandMoveDirection.left => _confirmMovingLeft(detector, hand),
           HandMoveDirection.right => _confirmMovingRight(detector, hand),
           HandMoveDirection.down => _confirmMovingDown(detector, hand),
-          _ => _detect(detector, hand),
+          _ => _confirmMovingUp(detector, hand),
         };
         expect(result, testCase.$2);
       });
@@ -83,7 +91,7 @@ void main() {
           HandMoveDirection.left => _confirmMovingLeft(detector, hand),
           HandMoveDirection.right => _confirmMovingRight(detector, hand),
           HandMoveDirection.down => _confirmMovingDown(detector, hand),
-          _ => _detect(detector, hand),
+          _ => _confirmMovingUp(detector, hand),
         };
         expect(result, testCase.$2);
       });
@@ -110,7 +118,7 @@ void main() {
 
     test('mirroring does not swap up or down', () {
       expect(
-        _detect(
+        _confirmMovingUp(
           detector,
           _pointingHand(indexVector: const Offset(20, -90)),
           mirrorHorizontally: true,
@@ -239,7 +247,7 @@ void main() {
       expect(detector.debugSummary, contains('tip not clearly left'));
     });
 
-    test('requires both folded angle and palm-distance checks', () {
+    test('uses folded angle but ignores fingertip-to-palm distance', () {
       final openMiddle = _pointingHand(
         indexVector: const Offset(-90, 0),
         openOtherFingerIndexes: const {1},
@@ -253,8 +261,10 @@ void main() {
           HandLandmarkType.middleFingerTip: Offset(350, 50),
         },
       );
-      expect(_detect(detector, distantMiddleTip), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('middle finger not folded'));
+      expect(
+        _confirmMovingLeft(detector, distantMiddleTip),
+        HandMoveDirection.left,
+      );
     });
 
     test('requires every specified point 0 and 5-20 to be reliable', () {
@@ -349,7 +359,7 @@ void main() {
       );
     });
 
-    test('rejects either index joint below 145 degrees', () {
+    test('accepts a rightward bend below the old 145 degree limit', () {
       final indexPoints = [
         _indexBase,
         _indexBase + const Offset(30, 0),
@@ -357,13 +367,28 @@ void main() {
         _indexBase + const Offset(90, 20),
       ];
 
-      for (var frame = 0; frame < 4; frame += 1) {
-        expect(
-          _detect(detector, _pointingHand(indexPoints: indexPoints)),
-          HandMoveDirection.none,
-        );
-      }
-      expect(detector.debugSummary, contains('index joints'));
+      expect(
+        _confirmMovingRight(detector, _pointingHand(indexPoints: indexPoints)),
+        HandMoveDirection.right,
+      );
+    });
+
+    test('accepts the easier right bend after horizontal mirroring', () {
+      final indexPoints = [
+        _indexBase,
+        _indexBase + const Offset(-30, 0),
+        _indexBase + const Offset(-45, 26),
+        _indexBase + const Offset(-60, 52),
+      ];
+
+      expect(
+        _confirmMovingRight(
+          detector,
+          _pointingHand(indexPoints: indexPoints),
+          mirrorHorizontally: true,
+        ),
+        HandMoveDirection.right,
+      );
     });
 
     test('rejects an index tip that is not clearly right of the palm', () {
@@ -376,7 +401,7 @@ void main() {
       expect(detector.debugSummary, contains('tip not clearly right'));
     });
 
-    test('requires both folded angle and palm-distance checks', () {
+    test('uses folded angle but ignores fingertip-to-palm distance', () {
       final openMiddle = _pointingHand(
         indexVector: const Offset(90, 0),
         openOtherFingerIndexes: const {1},
@@ -390,8 +415,10 @@ void main() {
           HandLandmarkType.middleFingerTip: Offset(350, 50),
         },
       );
-      expect(_detect(detector, distantMiddleTip), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('middle finger not folded'));
+      expect(
+        _confirmMovingRight(detector, distantMiddleTip),
+        HandMoveDirection.right,
+      );
     });
 
     test('requires every specified point 0 and 5-20 to be reliable', () {
@@ -427,6 +454,40 @@ void main() {
         HandMoveDirection.right,
       );
     });
+
+    test('reserves a touching bent-right pinch for Zoom Out', () {
+      final indexPoints = [
+        _indexBase,
+        _indexBase + const Offset(30, 0),
+        _indexBase + const Offset(45, 26),
+        _indexBase + const Offset(60, 52),
+      ];
+      final hand = _pointingHand(
+        indexPoints: indexPoints,
+        includeThumb: true,
+        landmarkOverrides: const {
+          HandLandmarkType.thumbMCP: Offset(220, 250),
+          HandLandmarkType.thumbIP: Offset(240, 245),
+          HandLandmarkType.thumbTip: Offset(260, 257),
+        },
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('zoom-out closed pinch'));
+
+      final zoomDetector = ZoomGestureDetector(
+        now: () => DateTime.utc(2026, 7, 19),
+      );
+      expect(
+        zoomDetector.detect(
+          hand: hand,
+          imageSize: _imageSize,
+          mirrorHorizontally: false,
+        ),
+        ZoomDirection.none,
+      );
+      expect(zoomDetector.pendingDirection, ZoomDirection.zoomOut);
+    });
   });
 
   group('DirectionGestureDetector Moving Up 21-landmark replacement', () {
@@ -436,10 +497,11 @@ void main() {
       detector = DirectionGestureDetector();
     });
 
-    test('triggers immediately on the first matching frame', () {
+    test('triggers on the third steady matching frame', () {
       final hand = _pointingHand(indexVector: const Offset(0, -90));
 
-      expect(_detect(detector, hand), HandMoveDirection.up);
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(_detect(detector, hand), HandMoveDirection.none);
       expect(_detect(detector, hand), HandMoveDirection.up);
     });
 
@@ -449,7 +511,7 @@ void main() {
           indexVector: _vectorAtScreenDirectionDegrees(angle),
         );
 
-        expect(_detect(detector, hand), HandMoveDirection.up);
+        expect(_confirmMovingUp(detector, hand), HandMoveDirection.up);
       });
     }
 
@@ -465,7 +527,10 @@ void main() {
 
     test('retains active moving up throughout 70 to 125 degrees', () {
       expect(
-        _detect(detector, _pointingHand(indexVector: const Offset(0, -90))),
+        _confirmMovingUp(
+          detector,
+          _pointingHand(indexVector: const Offset(0, -90)),
+        ),
         HandMoveDirection.up,
       );
 
@@ -487,7 +552,10 @@ void main() {
 
     test('leaving the active range ends moving up immediately', () {
       expect(
-        _detect(detector, _pointingHand(indexVector: const Offset(0, -90))),
+        _confirmMovingUp(
+          detector,
+          _pointingHand(indexVector: const Offset(0, -90)),
+        ),
         HandMoveDirection.up,
       );
 
@@ -510,7 +578,7 @@ void main() {
       ]) {
         detector.clearState();
         expect(
-          _detect(
+          _confirmMovingUp(
             detector,
             _pointingHand(
               indexVector: const Offset(0, -90),
@@ -523,7 +591,7 @@ void main() {
 
       detector.clearState();
       expect(
-        _detect(
+        _confirmMovingUp(
           detector,
           _pointingHand(
             indexVector: const Offset(0, -90),
@@ -536,7 +604,7 @@ void main() {
 
     test('accepts either handedness and mirrored screen coordinates', () {
       expect(
-        _detect(
+        _confirmMovingUp(
           detector,
           _pointingHand(
             indexVector: const Offset(0, -90),
@@ -549,7 +617,7 @@ void main() {
       detector.clearState();
 
       expect(
-        _detect(
+        _confirmMovingUp(
           detector,
           _pointingHand(indexVector: const Offset(0, -90)),
           mirrorHorizontally: true,
@@ -558,7 +626,7 @@ void main() {
       );
     });
 
-    test('rejects either index joint below 135 degrees', () {
+    test('rejects an index joint below its required straightness', () {
       final indexPoints = [
         _indexBase,
         _indexBase + const Offset(0, -30),
@@ -567,13 +635,13 @@ void main() {
       ];
 
       expect(
-        _detect(detector, _pointingHand(indexPoints: indexPoints)),
+        _confirmMovingUp(detector, _pointingHand(indexPoints: indexPoints)),
         HandMoveDirection.none,
       );
       expect(detector.debugSummary, contains('index joints'));
     });
 
-    test('accepts a moderate bend while points 5-8 rise near the y-axis', () {
+    test('keeps the 135 degree 5-6-7 boundary for moving up', () {
       final indexPoints = [
         _indexBase,
         _indexBase + const Offset(25, -25),
@@ -582,9 +650,28 @@ void main() {
       ];
 
       expect(
-        _detect(detector, _pointingHand(indexPoints: indexPoints)),
+        _confirmMovingUp(detector, _pointingHand(indexPoints: indexPoints)),
         HandMoveDirection.up,
       );
+    });
+
+    for (final angle in const [170.0, 180.0]) {
+      test('accepts a 6-7-8 angle of $angle degrees for moving up', () {
+        final hand = _pointingHand(
+          indexPoints: _indexPointsWithDistalAngle(const Offset(0, -90), angle),
+        );
+
+        expect(_confirmMovingUp(detector, hand), HandMoveDirection.up);
+      });
+    }
+
+    test('rejects a 6-7-8 angle below 170 degrees for moving up', () {
+      final hand = _pointingHand(
+        indexPoints: _indexPointsWithDistalAngle(const Offset(0, -90), 169),
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('169.0'));
     });
 
     test('requires points 5, 6, 7, and 8 to rise in order', () {
@@ -617,7 +704,7 @@ void main() {
       expect(detector.debugSummary, contains('not aligned with the y-axis'));
     });
 
-    test('requires both folded angle and palm-distance checks', () {
+    test('uses folded angle but ignores fingertip-to-palm distance', () {
       final openMiddle = _pointingHand(
         indexVector: const Offset(0, -90),
         openOtherFingerIndexes: const {1},
@@ -631,8 +718,10 @@ void main() {
           HandLandmarkType.middleFingerTip: Offset(350, 50),
         },
       );
-      expect(_detect(detector, distantMiddleTip), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('middle finger not folded'));
+      expect(
+        _confirmMovingUp(detector, distantMiddleTip),
+        HandMoveDirection.up,
+      );
     });
 
     test('requires every specified point 5-20 to be reliable', () {
@@ -645,29 +734,37 @@ void main() {
       expect(detector.debugSummary, contains('missing required point 5-20'));
     });
 
-    test('ignores missing and extended thumb landmarks', () {
-      expect(
-        _detect(
-          detector,
-          _pointingHand(indexVector: const Offset(0, -90), includeThumb: false),
-        ),
-        HandMoveDirection.up,
-      );
-
-      detector.clearState();
-
-      expect(
-        _detect(
-          detector,
-          _pointingHand(
-            indexVector: const Offset(0, -90),
-            includeThumb: true,
-            thumbTip: const Offset(105, 155),
+    test(
+      'ignores a missing thumb and does not yield an axis intersection to zoom',
+      () {
+        expect(
+          _confirmMovingUp(
+            detector,
+            _pointingHand(
+              indexVector: const Offset(0, -90),
+              includeThumb: false,
+            ),
           ),
-        ),
-        HandMoveDirection.up,
-      );
-    });
+          HandMoveDirection.up,
+        );
+
+        detector.clearState();
+
+        expect(
+          _confirmMovingUp(
+            detector,
+            _pointingHand(
+              indexVector: const Offset(0, -90),
+              includeThumb: true,
+              thumbTip: const Offset(105, 155),
+              landmarkOverrides: const {HandLandmarkType.wrist: Offset(0, 285)},
+            ),
+          ),
+          HandMoveDirection.up,
+        );
+        expect(detector.debugSummary, isNot(contains('zoom-in thumb/index')));
+      },
+    );
   });
 
   group('DirectionGestureDetector Moving Down 21-landmark replacement', () {
@@ -872,6 +969,25 @@ void main() {
       expect(detector.debugSummary, contains('points 6-8 joint'));
     });
 
+    for (final angle in const [170.0, 180.0]) {
+      test('accepts a 6-7-8 angle of $angle degrees for moving down', () {
+        final hand = _pointingHand(
+          indexPoints: _indexPointsWithDistalAngle(const Offset(0, 90), angle),
+        );
+
+        expect(_confirmMovingDown(detector, hand), HandMoveDirection.down);
+      });
+    }
+
+    test('rejects a 6-7-8 angle below 170 degrees for moving down', () {
+      final hand = _pointingHand(
+        indexPoints: _indexPointsWithDistalAngle(const Offset(0, 90), 169),
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('169.0'));
+    });
+
     test('rejects points 6-8 that spread too far from the y-axis', () {
       final indexPoints = [
         _indexBase,
@@ -887,7 +1003,7 @@ void main() {
       expect(detector.debugSummary, contains('not aligned with the y-axis'));
     });
 
-    test('requires both folded angle and palm-distance checks', () {
+    test('uses folded angle but ignores fingertip-to-palm distance', () {
       final openMiddle = _pointingHand(
         indexVector: const Offset(0, 90),
         openOtherFingerIndexes: const {1},
@@ -901,8 +1017,10 @@ void main() {
           HandLandmarkType.middleFingerTip: Offset(350, 50),
         },
       );
-      expect(_detect(detector, distantMiddleTip), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('middle finger not folded'));
+      expect(
+        _confirmMovingDown(detector, distantMiddleTip),
+        HandMoveDirection.down,
+      );
     });
 
     test('ignores point 5 but requires points 6-8 and 9-20', () {
@@ -961,30 +1079,28 @@ void main() {
     });
 
     for (final testCase in const [
-      (0.0, HandMoveDirection.right),
-      (90.0, HandMoveDirection.up),
-      (180.0, HandMoveDirection.left),
-      (270.0, HandMoveDirection.down),
+      (0.0, HandMoveDirection.right, HandMoveDirection.right),
+      (90.0, HandMoveDirection.up, HandMoveDirection.none),
+      (180.0, HandMoveDirection.left, HandMoveDirection.left),
+      (270.0, HandMoveDirection.down, HandMoveDirection.none),
     ]) {
-      test(
-        'accepts an approximately 150 degree index for ${testCase.$2.name}',
-        () {
-          final hand = _pointingHand(
-            indexPoints: _moderatelyBentIndexPoints(testCase.$1),
-          );
-          final result = switch (testCase.$2) {
-            HandMoveDirection.left => _confirmMovingLeft(detector, hand),
-            HandMoveDirection.right => _confirmMovingRight(detector, hand),
-            HandMoveDirection.down => _confirmMovingDown(detector, hand),
-            _ => _detect(detector, hand),
-          };
+      test('${testCase.$3 == HandMoveDirection.none ? 'rejects' : 'accepts'} '
+          'an approximately 150 degree index for ${testCase.$2.name}', () {
+        final hand = _pointingHand(
+          indexPoints: _moderatelyBentIndexPoints(testCase.$1),
+        );
+        final result = switch (testCase.$2) {
+          HandMoveDirection.left => _confirmMovingLeft(detector, hand),
+          HandMoveDirection.right => _confirmMovingRight(detector, hand),
+          HandMoveDirection.down => _confirmMovingDown(detector, hand),
+          _ => _confirmMovingUp(detector, hand),
+        };
 
-          expect(result, testCase.$2);
-        },
-      );
+        expect(result, testCase.$3);
+      });
     }
 
-    test('moving right rejects an index bent to approximately 138 degrees', () {
+    test('moving right accepts an index bent to approximately 138 degrees', () {
       final indexPoints = [
         _indexBase,
         _indexBase + const Offset(30, 0),
@@ -993,13 +1109,12 @@ void main() {
       ];
 
       expect(
-        _detect(detector, _pointingHand(indexPoints: indexPoints)),
-        HandMoveDirection.none,
+        _confirmMovingRight(detector, _pointingHand(indexPoints: indexPoints)),
+        HandMoveDirection.right,
       );
-      expect(detector.debugSummary, contains('index joints'));
     });
 
-    test('does not use an easier bend rule for moving right', () {
+    test('uses the easier bend rule for moving right', () {
       final indexPoints = [
         _indexBase,
         _indexBase + const Offset(30, 0),
@@ -1008,10 +1123,9 @@ void main() {
       ];
 
       expect(
-        _detect(detector, _pointingHand(indexPoints: indexPoints)),
-        HandMoveDirection.none,
+        _confirmMovingRight(detector, _pointingHand(indexPoints: indexPoints)),
+        HandMoveDirection.right,
       );
-      expect(detector.debugSummary, contains('index joints'));
     });
 
     test('rejects a clearly folded index in every direction', () {
@@ -1026,7 +1140,7 @@ void main() {
         _detect(detector, _pointingHand(indexPoints: indexPoints)),
         HandMoveDirection.none,
       );
-      expect(detector.debugSummary, contains('index joints'));
+      expect(detector.debugSummary, contains('straightness'));
     });
 
     test('accepts a short index when its tip is clearly right of the palm', () {
@@ -1108,7 +1222,7 @@ void main() {
         _detect(detector, _pointingHand(indexPoints: indexPoints)),
         HandMoveDirection.none,
       );
-      expect(detector.debugSummary, contains('index joints'));
+      expect(detector.debugSummary, contains('straightness'));
     });
 
     test('preserves screen direction under a large index-depth change', () {
@@ -1133,7 +1247,7 @@ void main() {
           HandMoveDirection.left => _confirmMovingLeft(detector, hand),
           HandMoveDirection.right => _confirmMovingRight(detector, hand),
           HandMoveDirection.down => _confirmMovingDown(detector, hand),
-          _ => _detect(detector, hand),
+          _ => _confirmMovingUp(detector, hand),
         };
         expect(result, testCase.$2);
       });
@@ -1149,7 +1263,7 @@ void main() {
         ),
       );
 
-      expect(_detect(detector, hand), HandMoveDirection.up);
+      expect(_confirmMovingUp(detector, hand), HandMoveDirection.up);
       expect(detector.debugSummary, contains('package pointingUp'));
     });
 
@@ -1208,34 +1322,103 @@ void main() {
       detector = DirectionGestureDetector();
     });
 
-    for (final angle in const [0.0, 44.0, 91.0, 180.0]) {
-      test('does not cancel direction at $angle degrees', () {
-        const thumbMid = Offset(200, 240);
-        final thumbVector = _vectorAtDegrees(angle, length: 60);
+    for (final angle in const [0.0, 5.0, 44.0]) {
+      test('reserves a $angle degree forward opening for zoom in', () {
+        final landmarks = angle <= 5
+            ? _quadrant4ParallelZoomConflictLandmarks(angle)
+            : _horizontalZoomConflictLandmarks(
+                180 - angle,
+                intersection: const Offset(320, 205),
+              );
         final hand = _pointingHand(
+          indexVector: angle <= 5 ? const Offset(0, -90) : const Offset(-90, 0),
           includeThumb: true,
-          landmarkOverrides: {
-            HandLandmarkType.thumbMCP: thumbMid - thumbVector,
-            HandLandmarkType.thumbIP: thumbMid - thumbVector * 0.5,
-            HandLandmarkType.thumbTip: thumbMid + thumbVector * 0.5,
-          },
+          landmarkOverrides: landmarks,
         );
 
-        expect(_confirmMovingRight(detector, hand), HandMoveDirection.right);
-        expect(detector.debugSummary, isNot(contains('zoom-in thumb/index')));
+        expect(_detect(detector, hand), HandMoveDirection.none);
+        expect(detector.debugSummary, contains('zoom-in thumb/index'));
       });
     }
 
-    test('cancels direction at the exact 2% vertical gap', () {
-      const thumbMid = Offset(200, 209);
-      final thumbVector = _vectorAtDegrees(60, length: 60);
+    for (final angle in const [91.0, 110.0]) {
+      test('reserves a $angle degree opening for zoom in', () {
+        final hand = _pointingHand(
+          indexVector: const Offset(-90, 0),
+          includeThumb: true,
+          landmarkOverrides: _horizontalZoomConflictLandmarks(
+            180 - angle,
+            intersection: const Offset(320, 205),
+          ),
+        );
+
+        expect(_detect(detector, hand), HandMoveDirection.none);
+        expect(detector.debugSummary, contains('zoom-in thumb/index'));
+      });
+    }
+
+    test('allows direction when the 180 degree rays are parallel', () {
       final hand = _pointingHand(
         includeThumb: true,
-        landmarkOverrides: {
-          HandLandmarkType.thumbMCP: thumbMid - thumbVector,
-          HandLandmarkType.thumbIP: thumbMid - thumbVector * 0.5,
-          HandLandmarkType.thumbTip: thumbMid + thumbVector * 0.5,
-        },
+        landmarkOverrides: _horizontalZoomConflictLandmarks(180),
+      );
+
+      expect(_confirmMovingRight(detector, hand), HandMoveDirection.right);
+      expect(detector.debugSummary, isNot(contains('zoom-in thumb/index')));
+    });
+
+    test('allows direction when same-facing parallel rays are too close', () {
+      final hand = _pointingHand(
+        includeThumb: true,
+        landmarkOverrides: _horizontalZoomConflictLandmarks(
+          0,
+          intersection: const Offset(180, 215),
+          rayDistance: 30,
+        ),
+      );
+
+      expect(_confirmMovingRight(detector, hand), HandMoveDirection.right);
+      expect(detector.debugSummary, isNot(contains('zoom-in thumb/index')));
+    });
+
+    test('allows direction when right-hand rays meet outside quadrant 4', () {
+      final hand = _pointingHand(
+        includeThumb: true,
+        landmarkOverrides: _horizontalZoomConflictLandmarks(
+          45,
+          intersection: const Offset(180, 205),
+        ),
+      );
+
+      expect(_confirmMovingRight(detector, hand), HandMoveDirection.right);
+      expect(detector.debugSummary, isNot(contains('zoom-in thumb/index')));
+    });
+
+    test('reserves a forward intersection beyond two hand sizes', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(-90, 0),
+        includeThumb: true,
+        landmarkOverrides: _horizontalZoomConflictLandmarks(
+          174,
+          intersection: const Offset(1000, 205),
+          rayDistance: 800,
+        ),
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('zoom-in thumb/index'));
+    });
+
+    test('cancels direction at the exact 2% vertical gap', () {
+      final hand = _pointingHand(
+        indexPoints: _indexPointsWithDistalAngle(const Offset(-90, 0), 169),
+        includeThumb: true,
+        landmarkOverrides: _horizontalZoomConflictLandmarks(
+          120,
+          intersection: const Offset(320, 205),
+          segmentLength: 2,
+          rayDistance: 1 + 4 / math.sin(math.pi / 3),
+        ),
       );
 
       expect(_detect(detector, hand), HandMoveDirection.none);
@@ -1243,62 +1426,73 @@ void main() {
     });
 
     test('does not cancel direction below the 2% vertical gap', () {
-      const thumbMid = Offset(200, 208.9);
-      final thumbVector = _vectorAtDegrees(60, length: 60);
       final hand = _pointingHand(
+        indexPoints: _indexPointsWithDistalAngle(const Offset(-90, 0), 169),
         includeThumb: true,
-        landmarkOverrides: {
-          HandLandmarkType.thumbMCP: thumbMid - thumbVector,
-          HandLandmarkType.thumbIP: thumbMid - thumbVector * 0.5,
-          HandLandmarkType.thumbTip: thumbMid + thumbVector * 0.5,
-        },
+        landmarkOverrides: _horizontalZoomConflictLandmarks(
+          120,
+          intersection: const Offset(320, 205),
+          segmentLength: 2,
+          rayDistance: 1 + 3.9 / math.sin(math.pi / 3),
+        ),
       );
 
-      expect(_confirmMovingRight(detector, hand), HandMoveDirection.right);
+      expect(_confirmMovingLeft(detector, hand), HandMoveDirection.left);
       expect(detector.debugSummary, isNot(contains('zoom-in thumb/index')));
     });
 
-    test('cancels direction at the 45 degree lower boundary', () {
+    test('reserves the former 45 degree lower boundary for zoom in', () {
       final hand = _pointingHand(
+        indexPoints: _indexPointsWithDistalAngle(const Offset(-90, 0), 169),
         includeThumb: true,
-        landmarkOverrides: const {
-          HandLandmarkType.thumbMCP: Offset(140, 180),
-          HandLandmarkType.thumbIP: Offset(170, 210),
-          HandLandmarkType.thumbTip: Offset(230, 270),
-        },
+        landmarkOverrides: _horizontalZoomConflictLandmarks(
+          135,
+          intersection: const Offset(320, 205),
+        ),
       );
 
       expect(_detect(detector, hand), HandMoveDirection.none);
       expect(detector.debugSummary, contains('angle=45.0deg'));
     });
 
-    test('cancels direction when straight thumb and index are 90 degrees', () {
+    test('axis intersection does not reserve a 90 degree zoom pose', () {
       final hand = _pointingHand(
         indexVector: const Offset(0, -90),
+        indexPoints: _indexPointsWithDistalAngle(const Offset(0, -90), 169),
         includeThumb: true,
-        landmarkOverrides: const {
-          HandLandmarkType.thumbMCP: Offset(110, 260),
-          HandLandmarkType.thumbIP: Offset(155, 260),
-          HandLandmarkType.thumbTip: Offset(200, 260),
-        },
+        landmarkOverrides: _verticalUpZoomConflictLandmarks,
       );
 
       expect(_detect(detector, hand), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('angle=90.0deg'));
+      expect(detector.debugSummary, isNot(contains('zoom-in thumb/index')));
     });
 
-    test('cancels direction even when thumb and index tips are close', () {
+    test('axis intersection leaves a 170 degree pose available for up', () {
       final hand = _pointingHand(
+        indexVector: const Offset(0, -90),
+        indexPoints: _indexPointsWithDistalAngle(const Offset(0, -90), 170),
         includeThumb: true,
-        landmarkOverrides: const {
-          HandLandmarkType.thumbMCP: Offset(200, 295),
-          HandLandmarkType.thumbIP: Offset(230, 265),
-          HandLandmarkType.thumbTip: Offset(290, 205),
-        },
+        landmarkOverrides: _verticalUpZoomConflictLandmarks,
+      );
+
+      expect(_confirmMovingUp(detector, hand), HandMoveDirection.up);
+      expect(detector.debugSummary, isNot(contains('zoom-in thumb/index')));
+    });
+
+    test('does not reserve close thumb and index tips for zoom in', () {
+      final hand = _pointingHand(
+        indexPoints: _indexPointsWithDistalAngle(const Offset(90, 0), 169),
+        includeThumb: true,
+        landmarkOverrides: _horizontalZoomConflictLandmarks(
+          45,
+          intersection: const Offset(260, 205),
+          segmentLength: 1,
+          rayDistance: 0.5 + 4 / math.sin(math.pi / 4),
+        ),
       );
 
       expect(_detect(detector, hand), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('zoom-in thumb/index'));
+      expect(detector.debugSummary, isNot(contains('zoom-in thumb/index')));
     });
 
     test('does not cancel package pointingUp when other fingers are open', () {
@@ -1306,18 +1500,14 @@ void main() {
         indexVector: const Offset(0, -90),
         includeThumb: true,
         openOtherFingerIndexes: const {1, 2, 3},
-        landmarkOverrides: const {
-          HandLandmarkType.thumbMCP: Offset(110, 260),
-          HandLandmarkType.thumbIP: Offset(155, 260),
-          HandLandmarkType.thumbTip: Offset(200, 260),
-        },
+        landmarkOverrides: _verticalUpZoomConflictLandmarks,
         gesture: const GestureResult(
           type: GestureType.pointingUp,
           confidence: 1,
         ),
       );
 
-      expect(_detect(detector, hand), HandMoveDirection.up);
+      expect(_confirmMovingUp(detector, hand), HandMoveDirection.up);
       expect(detector.debugSummary, contains('package pointingUp'));
     });
   });
@@ -1412,6 +1602,97 @@ void main() {
       detector = DirectionGestureDetector();
     });
 
+    for (final testCase in const [
+      (Offset(-90, 0), HandMoveDirection.left),
+      (Offset(90, 0), HandMoveDirection.right),
+      (Offset(0, -90), HandMoveDirection.up),
+      (Offset(0, 90), HandMoveDirection.down),
+    ]) {
+      test('does not count ${testCase.$2.name} while the hand moves', () {
+        for (final x in const [0.0, 10.0, 20.0, 30.0, 40.0]) {
+          expect(
+            _detect(
+              detector,
+              _pointingHand(indexVector: testCase.$1, handOffset: Offset(x, 0)),
+            ),
+            HandMoveDirection.none,
+          );
+        }
+        expect(detector.debugSummary, contains('hand moving'));
+
+        final settledHand = _pointingHand(
+          indexVector: testCase.$1,
+          handOffset: const Offset(40, 0),
+        );
+        expect(_detect(detector, settledHand), HandMoveDirection.none);
+        expect(_detect(detector, settledHand), HandMoveDirection.none);
+        expect(_detect(detector, settledHand), testCase.$2);
+      });
+    }
+
+    test('cancels an active direction as soon as the hand moves', () {
+      final hand = _pointingHand(indexVector: const Offset(90, 0));
+      expect(_confirmMovingRight(detector, hand), HandMoveDirection.right);
+
+      expect(
+        _detect(
+          detector,
+          _pointingHand(
+            indexVector: const Offset(90, 0),
+            handOffset: const Offset(10, 0),
+          ),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(detector.debugSummary, contains('hand moving'));
+    });
+
+    test('allows small hand-box jitter inside the three percent radius', () {
+      expect(
+        _detect(
+          detector,
+          _pointingHand(
+            indexVector: const Offset(90, 0),
+            handOffset: Offset.zero,
+          ),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _pointingHand(
+            indexVector: const Offset(90, 0),
+            handOffset: const Offset(2, 0),
+          ),
+        ),
+        HandMoveDirection.none,
+      );
+      expect(
+        _detect(
+          detector,
+          _pointingHand(
+            indexVector: const Offset(90, 0),
+            handOffset: const Offset(4, 0),
+          ),
+        ),
+        HandMoveDirection.right,
+      );
+    });
+
+    test('exposes candidate and accepted direction for debug drawing', () {
+      final hand = _pointingHand(indexVector: const Offset(90, 0));
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugCandidateDirection, HandMoveDirection.right);
+      expect(detector.debugAcceptedDirection, HandMoveDirection.none);
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(_detect(detector, hand), HandMoveDirection.right);
+      expect(detector.debugCandidateDirection, HandMoveDirection.right);
+      expect(detector.debugAcceptedDirection, HandMoveDirection.right);
+    });
+
     test('keeps right inside its 305 to 70 degree screen sector', () {
       expect(
         _confirmMovingRight(
@@ -1435,7 +1716,10 @@ void main() {
 
     test('exact upper-right diagonal uses right three-frame confirmation', () {
       expect(
-        _detect(detector, _pointingHand(indexVector: const Offset(0, -90))),
+        _confirmMovingUp(
+          detector,
+          _pointingHand(indexVector: const Offset(0, -90)),
+        ),
         HandMoveDirection.up,
       );
 
@@ -1584,6 +1868,22 @@ HandMoveDirection _confirmMovingRight(
   return result;
 }
 
+HandMoveDirection _confirmMovingUp(
+  DirectionGestureDetector detector,
+  Hand hand, {
+  bool mirrorHorizontally = false,
+}) {
+  var result = HandMoveDirection.none;
+  for (
+    var frame = 1;
+    frame <= HandGestureThresholds.directionRequiredSteadyFrames;
+    frame += 1
+  ) {
+    result = _detect(detector, hand, mirrorHorizontally: mirrorHorizontally);
+  }
+  return result;
+}
+
 HandMoveDirection _confirmMovingDown(
   DirectionGestureDetector detector,
   Hand hand, {
@@ -1613,6 +1913,41 @@ Offset _vectorAtScreenDirectionDegrees(double degrees, {double length = 100}) {
   return Offset(math.cos(radians) * length, -math.sin(radians) * length);
 }
 
+Map<HandLandmarkType, Offset> _horizontalZoomConflictLandmarks(
+  double angleDegrees, {
+  Offset intersection = const Offset(180, 205),
+  double segmentLength = 30,
+  double rayDistance = 90,
+}) {
+  final segmentDirection = _vectorAtDegrees(angleDegrees, length: 1);
+  return {
+    HandLandmarkType.thumbMCP:
+        intersection + segmentDirection * (rayDistance - 2 * segmentLength),
+    HandLandmarkType.thumbIP:
+        intersection + segmentDirection * (rayDistance - segmentLength),
+    HandLandmarkType.thumbTip: intersection + segmentDirection * rayDistance,
+  };
+}
+
+Map<HandLandmarkType, Offset> _quadrant4ParallelZoomConflictLandmarks(
+  double angleDegrees,
+) {
+  const thumbTip = Offset(120, 180);
+  const thumbRay = Offset(30, 30);
+  const indexTip = Offset(210, 100);
+  final indexRayAngle = (45 + angleDegrees) * math.pi / 180;
+  final indexRay =
+      Offset(math.cos(indexRayAngle), math.sin(indexRayAngle)) *
+      thumbRay.distance;
+
+  return {
+    HandLandmarkType.thumbIP: thumbTip + thumbRay,
+    HandLandmarkType.thumbTip: thumbTip,
+    HandLandmarkType.indexFingerDIP: indexTip + indexRay,
+    HandLandmarkType.indexFingerTip: indexTip,
+  };
+}
+
 Hand _pointingHand({
   Offset indexVector = const Offset(90, 0),
   List<Offset>? indexPoints,
@@ -1625,6 +1960,7 @@ Hand _pointingHand({
   Set<HandLandmarkType> lowVisibilityTypes = const {},
   bool includeThumb = false,
   Offset thumbTip = const Offset(195, 225),
+  Offset handOffset = Offset.zero,
   double score = 1,
   Handedness handedness = Handedness.right,
   GestureResult? gesture,
@@ -1634,7 +1970,7 @@ Hand _pointingHand({
   void addLandmark(HandLandmarkType type, Offset point, {double? z}) {
     if (missingTypes.contains(type)) return;
 
-    final resolvedPoint = landmarkOverrides[type] ?? point;
+    final resolvedPoint = (landmarkOverrides[type] ?? point) + handOffset;
 
     landmarks.add(
       HandLandmark(
@@ -1686,7 +2022,12 @@ Hand _pointingHand({
   }
 
   return Hand(
-    boundingBox: BoundingBox.ltrb(100, 100, 300, 300),
+    boundingBox: BoundingBox.ltrb(
+      100 + handOffset.dx,
+      100 + handOffset.dy,
+      300 + handOffset.dx,
+      300 + handOffset.dy,
+    ),
     score: score,
     landmarks: landmarks,
     imageWidth: _imageSize.width.toInt(),
@@ -1698,6 +2039,19 @@ Hand _pointingHand({
 
 List<Offset> _straightChainPoints(Offset base, Offset vector) {
   return [base, base + vector * 0.35, base + vector * 0.70, base + vector];
+}
+
+List<Offset> _indexPointsWithDistalAngle(Offset vector, double angleDegrees) {
+  final dip = _indexBase + vector * 0.70;
+  final tip = _indexBase + vector;
+  final segmentLength = vector.distance * 0.35;
+  final tipSegmentAngle = math.atan2(vector.dy, vector.dx);
+  final pipRayAngle = tipSegmentAngle + angleDegrees * math.pi / 180;
+  final pip =
+      dip +
+      Offset(math.cos(pipRayAngle), math.sin(pipRayAngle)) * segmentLength;
+
+  return [_indexBase, pip, dip, tip];
 }
 
 List<Offset> _moderatelyBentIndexPoints(double screenDirectionDegrees) {
