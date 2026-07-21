@@ -268,6 +268,124 @@ void main() {
       );
     });
 
+    test('accepts an adjacent vertical gap at the exact minimum', () {
+      final detector = CustomGestureDetector();
+      final startedAt = DateTime(2026, 7, 18, 10);
+      final baseline = _allLongFingersHand();
+      final indexMcp = _landmarkOffset(
+        baseline,
+        HandLandmarkType.indexFingerMCP,
+      );
+      final handSize = 220.0;
+      final minGap =
+          handSize *
+          HandGestureThresholds.returnToMainMinAdjacentVerticalGapHandSizeRatio;
+      final hand = _allLongFingersHand(
+        landmarkOverrides: {
+          HandLandmarkType.indexFingerPIP: Offset(
+            indexMcp.dx,
+            indexMcp.dy + minGap,
+          ),
+        },
+      );
+
+      detector.detect(
+        hand: hand,
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+        now: startedAt,
+      );
+      expect(
+        detector
+            .detect(
+              hand: hand,
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+              now: startedAt.add(
+                HandGestureThresholds.returnToMainDownHoldDuration,
+              ),
+            )
+            .isCancelEverything,
+        isTrue,
+      );
+    });
+
+    test('any too-close neighboring pair on any finger cancels the pose', () {
+      const chains = HandGestureThresholds.directionFingerChainTypes;
+      final baseline = _allLongFingersHand();
+      final minGap =
+          220.0 *
+          HandGestureThresholds.returnToMainMinAdjacentVerticalGapHandSizeRatio;
+
+      for (final chain in chains) {
+        for (var pairIndex = 0; pairIndex < 3; pairIndex += 1) {
+          final detector = CustomGestureDetector();
+          final previous = _landmarkOffset(baseline, chain[pairIndex]);
+          final next = _landmarkOffset(baseline, chain[pairIndex + 1]);
+          final hand = _allLongFingersHand(
+            landmarkOverrides: {
+              chain[pairIndex + 1]: Offset(next.dx, previous.dy + minGap - 0.1),
+            },
+          );
+          final startedAt = DateTime(2026, 7, 18, 10);
+
+          detector.detect(
+            hand: hand,
+            imageSize: _imageSize,
+            mirrorHorizontally: false,
+            now: startedAt,
+          );
+          expect(
+            detector
+                .detect(
+                  hand: hand,
+                  imageSize: _imageSize,
+                  mirrorHorizontally: false,
+                  now: startedAt.add(const Duration(seconds: 2)),
+                )
+                .isCancelEverything,
+            isFalse,
+            reason: '${chain[pairIndex].name}→${chain[pairIndex + 1].name}',
+          );
+        }
+      }
+    });
+
+    test('a locally reversed pair cancels despite an overall downward tip', () {
+      final detector = CustomGestureDetector();
+      final startedAt = DateTime(2026, 7, 18, 10);
+      final middlePip = _landmarkOffset(
+        _allLongFingersHand(),
+        HandLandmarkType.middleFingerPIP,
+      );
+      final hand = _allLongFingersHand(
+        landmarkOverrides: {
+          HandLandmarkType.middleFingerDIP: Offset(
+            middlePip.dx,
+            middlePip.dy - 1,
+          ),
+        },
+      );
+
+      detector.detect(
+        hand: hand,
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+        now: startedAt,
+      );
+      expect(
+        detector
+            .detect(
+              hand: hand,
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+              now: startedAt.add(const Duration(seconds: 2)),
+            )
+            .isCancelEverything,
+        isFalse,
+      );
+    });
+
     test('the previous index-circle motion no longer triggers', () {
       final detector = CustomGestureDetector();
       final startedAt = DateTime(2026, 7, 18, 10);
@@ -296,19 +414,224 @@ void main() {
   });
 
   group('CustomGestureDetector punch', () {
-    test('detects punch immediately without adding a display hold', () {
+    test('recording path detects punch immediately before its time hold', () {
       final detector = CustomGestureDetector();
 
       final result = detector.detect(
         hand: _punchHand(),
         imageSize: _imageSize,
         mirrorHorizontally: false,
+        requirePunchConfirmation: false,
       );
 
       expect(result.isPunch, isTrue);
       expect(
         HandGestureThresholds.recordPauseHoldDuration,
         const Duration(seconds: 1),
+      );
+    });
+
+    test('normal preview confirms a steady punch on exactly frame three', () {
+      final detector = CustomGestureDetector();
+      final hand = _punchHand();
+
+      for (var frame = 1; frame <= 3; frame += 1) {
+        final result = detector.detect(
+          hand: hand,
+          imageSize: _imageSize,
+          mirrorHorizontally: false,
+          requirePunchConfirmation: true,
+        );
+
+        expect(
+          result.isPunch,
+          frame == HandGestureThresholds.punchRequiredConsecutiveFrames,
+          reason: 'frame $frame',
+        );
+      }
+    });
+
+    test('normal preview allows small hand-center jitter', () {
+      final detector = CustomGestureDetector();
+
+      for (final testCase in const [
+        (Offset.zero, false),
+        (Offset(4, 0), false),
+        (Offset(8, 0), true),
+      ]) {
+        expect(
+          detector
+              .detect(
+                hand: _punchHand(palmOffset: testCase.$1),
+                imageSize: _imageSize,
+                mirrorHorizontally: false,
+                requirePunchConfirmation: true,
+              )
+              .isPunch,
+          testCase.$2,
+        );
+      }
+    });
+
+    test('moving hand restarts three steady punch frames', () {
+      final detector = CustomGestureDetector();
+
+      expect(
+        detector
+            .detect(
+              hand: _punchHand(),
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+              requirePunchConfirmation: true,
+            )
+            .isPunch,
+        isFalse,
+      );
+      expect(
+        detector
+            .detect(
+              hand: _punchHand(palmOffset: const Offset(20, 0)),
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+              requirePunchConfirmation: true,
+            )
+            .isPunch,
+        isFalse,
+      );
+
+      for (var steadyFrame = 1; steadyFrame <= 3; steadyFrame += 1) {
+        expect(
+          detector
+              .detect(
+                hand: _punchHand(palmOffset: const Offset(20, 0)),
+                imageSize: _imageSize,
+                mirrorHorizontally: false,
+                requirePunchConfirmation: true,
+              )
+              .isPunch,
+          steadyFrame == 3,
+          reason: 'steady frame $steadyFrame after movement',
+        );
+      }
+    });
+
+    test('a non-punch frame resets normal-preview confirmation', () {
+      final detector = CustomGestureDetector();
+      final punch = _punchHand();
+
+      for (var frame = 0; frame < 2; frame += 1) {
+        expect(
+          detector
+              .detect(
+                hand: punch,
+                imageSize: _imageSize,
+                mirrorHorizontally: false,
+                requirePunchConfirmation: true,
+              )
+              .isPunch,
+          isFalse,
+        );
+      }
+
+      expect(
+        detector
+            .detect(
+              hand: _punchHand(openFingerIndexes: const {0}),
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+              requirePunchConfirmation: true,
+            )
+            .isPunch,
+        isFalse,
+      );
+
+      for (var frame = 1; frame <= 3; frame += 1) {
+        expect(
+          detector
+              .detect(
+                hand: punch,
+                imageSize: _imageSize,
+                mirrorHorizontally: false,
+                requirePunchConfirmation: true,
+              )
+              .isPunch,
+          frame == 3,
+          reason: 'frame $frame after interruption',
+        );
+      }
+    });
+
+    test('recording mode clears partial normal-preview confirmation', () {
+      final detector = CustomGestureDetector();
+      final punch = _punchHand();
+
+      for (var frame = 0; frame < 2; frame += 1) {
+        expect(
+          detector
+              .detect(
+                hand: punch,
+                imageSize: _imageSize,
+                mirrorHorizontally: false,
+                requirePunchConfirmation: true,
+              )
+              .isPunch,
+          isFalse,
+        );
+      }
+
+      expect(
+        detector
+            .detect(
+              hand: punch,
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+              requirePunchConfirmation: false,
+            )
+            .isPunch,
+        isTrue,
+      );
+
+      for (var frame = 1; frame <= 3; frame += 1) {
+        expect(
+          detector
+              .detect(
+                hand: punch,
+                imageSize: _imageSize,
+                mirrorHorizontally: false,
+                requirePunchConfirmation: true,
+              )
+              .isPunch,
+          frame == 3,
+          reason: 'normal-preview frame $frame after recording mode',
+        );
+      }
+    });
+
+    test('clearState resets partial punch confirmation', () {
+      final detector = CustomGestureDetector();
+      final punch = _punchHand();
+
+      for (var frame = 0; frame < 2; frame += 1) {
+        detector.detect(
+          hand: punch,
+          imageSize: _imageSize,
+          mirrorHorizontally: false,
+          requirePunchConfirmation: true,
+        );
+      }
+
+      detector.clearState();
+
+      expect(
+        detector
+            .detect(
+              hand: punch,
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+              requirePunchConfirmation: true,
+            )
+            .isPunch,
+        isFalse,
       );
     });
 
@@ -519,6 +842,13 @@ void main() {
   });
 }
 
+Offset _landmarkOffset(Hand hand, HandLandmarkType type) {
+  final landmark = hand.landmarks.firstWhere(
+    (landmark) => landmark.type == type,
+  );
+  return Offset(landmark.x, landmark.y);
+}
+
 Hand _allLongFingersHand({
   List<Offset> fingerVectors = const [
     Offset(0, 90),
@@ -527,6 +857,7 @@ Hand _allLongFingersHand({
     Offset(0, 90),
   ],
   double score = 1,
+  Map<HandLandmarkType, Offset> landmarkOverrides = const {},
 }) {
   const chainTypes = [
     [
@@ -572,10 +903,11 @@ Hand _allLongFingersHand({
     final vector = fingerVectors[fingerIndex];
 
     for (var pointIndex = 0; pointIndex < 4; pointIndex++) {
+      final type = chainTypes[fingerIndex][pointIndex];
       landmarks.add(
         _landmark(
-          chainTypes[fingerIndex][pointIndex],
-          base + vector * (pointIndex / 3),
+          type,
+          landmarkOverrides[type] ?? base + vector * (pointIndex / 3),
         ),
       );
     }
@@ -759,7 +1091,12 @@ Hand _punchHand({
   }
 
   return Hand(
-    boundingBox: BoundingBox.ltrb(40, 40, 360, 360),
+    boundingBox: BoundingBox.ltrb(
+      40 + palmOffset.dx,
+      40 + palmOffset.dy,
+      360 + palmOffset.dx,
+      360 + palmOffset.dy,
+    ),
     score: score,
     landmarks: landmarks,
     imageWidth: _imageSize.width.toInt(),

@@ -69,6 +69,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('handles unavailable angle geometry without throwing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      CustomPaint(
+        size: const Size(320, 480),
+        painter: DirectionDebugOverlayPainter(
+          hand: _directionHand(includeAngleLandmarks: false),
+          imageSize: const Size(200, 300),
+          mirrorHorizontally: false,
+          candidateDirection: HandMoveDirection.up,
+          acceptedDirection: HandMoveDirection.none,
+          debugSummary: 'direction: up rejected; missing angle points',
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
   test('repaints when live direction debug inputs change', () {
     final painter = DirectionDebugOverlayPainter(
       hand: _directionHand(),
@@ -94,13 +114,46 @@ void main() {
       isTrue,
     );
   });
+
+  test('does not repaint for hidden debug text changes', () {
+    final painter = DirectionDebugOverlayPainter(
+      hand: _directionHand(),
+      imageSize: const Size(200, 300),
+      mirrorHorizontally: false,
+      candidateDirection: HandMoveDirection.left,
+      acceptedDirection: HandMoveDirection.none,
+      debugSummary: 'first hidden summary',
+    );
+
+    expect(
+      painter.shouldRepaint(
+        DirectionDebugOverlayPainter(
+          hand: painter.hand,
+          imageSize: painter.imageSize,
+          mirrorHorizontally: painter.mirrorHorizontally,
+          candidateDirection: painter.candidateDirection,
+          acceptedDirection: painter.acceptedDirection,
+          debugSummary: 'different hidden summary',
+        ),
+      ),
+      isFalse,
+    );
+  });
 }
 
-Hand _directionHand() {
+Hand _directionHand({bool includeAngleLandmarks = true}) {
   return Hand(
     boundingBox: BoundingBox.ltrb(40, 60, 170, 270),
     score: 1,
     landmarks: [
+      if (includeAngleLandmarks)
+        HandLandmark(
+          type: HandLandmarkType.wrist,
+          x: 100,
+          y: 265,
+          z: 0,
+          visibility: 1,
+        ),
       HandLandmark(
         type: HandLandmarkType.indexFingerMCP,
         x: 80,
@@ -115,6 +168,14 @@ Hand _directionHand() {
         z: 0,
         visibility: 1,
       ),
+      if (includeAngleLandmarks)
+        HandLandmark(
+          type: HandLandmarkType.indexFingerDIP,
+          x: 130,
+          y: 130,
+          z: 0,
+          visibility: 1,
+        ),
       HandLandmark(
         type: HandLandmarkType.indexFingerTip,
         x: 155,
@@ -122,6 +183,92 @@ Hand _directionHand() {
         z: 0,
         visibility: 1,
       ),
+      if (includeAngleLandmarks) ...[
+        HandLandmark(
+          type: HandLandmarkType.middleFingerMCP,
+          x: 100,
+          y: 220,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.middleFingerPIP,
+          x: 105,
+          y: 190,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.middleFingerDIP,
+          x: 115,
+          y: 205,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.middleFingerTip,
+          x: 110,
+          y: 215,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.ringFingerMCP,
+          x: 120,
+          y: 225,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.ringFingerPIP,
+          x: 125,
+          y: 195,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.ringFingerDIP,
+          x: 135,
+          y: 210,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.ringFingerTip,
+          x: 130,
+          y: 220,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.pinkyMCP,
+          x: 140,
+          y: 230,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.pinkyPIP,
+          x: 145,
+          y: 200,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.pinkyDIP,
+          x: 155,
+          y: 215,
+          z: 0,
+          visibility: 1,
+        ),
+        HandLandmark(
+          type: HandLandmarkType.pinkyTip,
+          x: 150,
+          y: 225,
+          z: 0,
+          visibility: 1,
+        ),
+      ],
     ],
     imageWidth: 200,
     imageHeight: 300,

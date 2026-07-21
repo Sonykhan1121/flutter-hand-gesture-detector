@@ -278,14 +278,12 @@ abstract final class HandGestureThresholds {
   static const double movingLeftIndexMinStraightnessRatio = 0.80;
   static const double movingLeftMinDirectionAngleDegrees = 125.0;
   static const double movingLeftMaxDirectionAngleDegrees = 235.0;
-  static const double movingLeftFoldedFingerMaxJointAngleDegrees = 145.0;
   static const int movingLeftRequiredConsecutiveFrames = 3;
 
   /// Static Moving Right thresholds based only on points 0 and 5-20.
   static const double movingRightIndexMinStraightnessRatio = 0.80;
   static const double movingRightMinDirectionAngleDegrees = 305.0;
   static const double movingRightMaxDirectionAngleDegrees = 70.0;
-  static const double movingRightFoldedFingerMaxJointAngleDegrees = 145.0;
   static const int movingRightRequiredConsecutiveFrames = 3;
 
   /// Easy Moving Up thresholds: index points 5-8 set direction.
@@ -296,7 +294,6 @@ abstract final class HandGestureThresholds {
   static const double movingUpInitialMaxDirectionAngleDegrees = 120.0;
   static const double movingUpActiveMinDirectionAngleDegrees = 70.0;
   static const double movingUpActiveMaxDirectionAngleDegrees = 125.0;
-  static const double movingUpFoldedFingerMaxJointAngleDegrees = 145.0;
 
   /// Easy Moving Down thresholds: only index points 6-8 set direction.
   static const double movingDownMinPipToTipPalmWidthRatio = 0.15;
@@ -305,7 +302,29 @@ abstract final class HandGestureThresholds {
   static const double movingDownInitialMaxDirectionAngleDegrees = 295.0;
   static const double movingDownActiveMinDirectionAngleDegrees = 235.0;
   static const double movingDownActiveMaxDirectionAngleDegrees = 305.0;
-  static const double movingDownFoldedFingerMaxJointAngleDegrees = 145.0;
+
+  /// A direction can tolerate one uncertain/unavailable middle/ring/pinky.
+  /// Any finger that is visible and clearly open still rejects the pose.
+  static const int directionMinConfirmedFoldedFingerCount = 2;
+
+  /// Maximum squared MCP-to-tip reach relative to squared palm width.
+  /// This is the easier 85% reach boundary represented as 0.85².
+  static const double directionFoldedMaxReachAreaRatio = 0.7225;
+
+  /// Maximum squared PIP/DIP/TIP spread relative to squared palm width.
+  /// This is the easier 40% top-span boundary represented as 0.40².
+  static const double directionFoldedMaxTopClusterAreaRatio = 0.16;
+
+  /// Every clustered top point must remain within the easier 85% reach
+  /// distance, represented as a 72.25% occupied-area ratio.
+  static const double directionFoldedMaxClusterMcpAreaRatio = 0.7225;
+
+  /// A closed finger's direct MCP-to-tip shortcut is at most 80% of its path.
+  static const double directionFoldedMaxCompressionRatio = 0.80;
+
+  /// Strong open evidence starts at 90% reach (0.90²) and 85% compression.
+  static const double directionOpenMinReachAreaRatio = 0.81;
+  static const double directionOpenMinCompressionRatio = 0.85;
   static const int movingDownRequiredConsecutiveFrames = 3;
 
   /// Shared projected-finger thresholds used by 3D geometry checks.
@@ -342,10 +361,20 @@ abstract final class HandGestureThresholds {
   /// Requires the index PIP itself to bend, not only its fingertip to curl in.
   static const double punchIndexPipMaxJointAngleDegrees = 120.0;
 
+  /// Normal-preview punch feedback needs a steady three-frame confirmation.
+  /// Recording mode still uses raw punch detection plus its one-second hold.
+  static const double punchMaxHandCenterMovementRatio = 0.03;
+  static const int punchRequiredConsecutiveFrames = 3;
+
   /// Static down-pointing hold used to return every task to its main state.
   static const Duration returnToMainDownHoldDuration = Duration(seconds: 1);
   static const double returnToMainFingerMinJointAngleDegrees = 135.0;
   static const double returnToMainFingerMinProjectedHandSizeRatio = 0.20;
+
+  /// Every MCP→PIP→DIP→TIP step must descend by at least 4% of hand size.
+  /// This rejects overlapping, congested, or locally reversed landmarks even
+  /// when the overall MCP-to-tip direction still points downward.
+  static const double returnToMainMinAdjacentVerticalGapHandSizeRatio = 0.04;
   static const Duration cancelEverythingHoldDuration = Duration(
     milliseconds: 900,
   );

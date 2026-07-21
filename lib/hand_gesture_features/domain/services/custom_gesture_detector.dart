@@ -15,12 +15,16 @@ class CustomGestureDetector {
 
   DateTime? _returnToMainDownStartedAt;
   DateTime? _lastCancelEverythingDetectedAt;
+  Offset? _punchSteadyHandCenter;
+  double? _punchSteadyHandSize;
+  int _punchSteadyFrameCount = 0;
 
   /// Evaluates all custom gestures for the current hand frame.
   CustomGestureDetectionResult detect({
     required Hand hand,
     required Size imageSize,
     required bool mirrorHorizontally,
+    bool requirePunchConfirmation = false,
     DateTime? now,
   }) {
     if (!geometry.isReliableHand(hand) ||
@@ -43,7 +47,10 @@ class CustomGestureDetector {
       ),
       isOk: _isOkGesture(hand),
       isCallMe: _isCallMeGesture(hand),
-      isPunch: _isPunchGesture(hand),
+      isPunch: _detectPunchGesture(
+        hand,
+        requireConfirmation: requirePunchConfirmation,
+      ),
     );
   }
 
@@ -51,6 +58,7 @@ class CustomGestureDetector {
   void clearState() {
     _returnToMainDownStartedAt = null;
     _lastCancelEverythingDetectedAt = null;
+    _clearPunchConfirmationState();
   }
 
   /// Detects return-to-main after all four long fingers point down for 1 second.
@@ -101,6 +109,14 @@ class CustomGestureDetector {
     for (final chainTypes in HandGestureThresholds.directionFingerChainTypes) {
       final chain = geometry.visibleFingerChain(hand, chainTypes);
       if (chain == null) return false;
+
+      final descendingOrder = geometry.evaluateDescendingFingerChain(
+        chain: chain,
+        handSize: handSize,
+        minAdjacentGapRatio: HandGestureThresholds
+            .returnToMainMinAdjacentVerticalGapHandSizeRatio,
+      );
+      if (descendingOrder == null || !descendingOrder.matches) return false;
 
       final jointAngle = geometry.fingerJointAngleDegrees3D(
         mcp: chain[0],
@@ -408,6 +424,70 @@ class CustomGestureDetector {
 
     return closestIndexDistance <=
         handSize * HandGestureThresholds.punchThumbMaxIndexDistanceRatio;
+  }
+
+  /// Keeps raw one-frame punch recognition for recording controls, while the
+  /// normal preview can opt into a steady three-frame confirmation.
+  bool _detectPunchGesture(Hand hand, {required bool requireConfirmation}) {
+    final matchesPunch = _isPunchGesture(hand);
+    if (!requireConfirmation) {
+      _clearPunchConfirmationState();
+      return matchesPunch;
+    }
+
+    if (!matchesPunch) {
+      _clearPunchConfirmationState();
+      return false;
+    }
+
+    final box = hand.boundingBox;
+    final currentCenter = Offset(
+      (box.left + box.right) / 2,
+      (box.top + box.bottom) / 2,
+    );
+    final currentHandSize = geometry.handSizeFromBoundingBox(box);
+    if (!currentCenter.dx.isFinite ||
+        !currentCenter.dy.isFinite ||
+        !currentHandSize.isFinite ||
+        currentHandSize <= 0) {
+      _clearPunchConfirmationState();
+      return false;
+    }
+
+    final anchorCenter = _punchSteadyHandCenter;
+    final anchorHandSize = _punchSteadyHandSize;
+    if (anchorCenter == null || anchorHandSize == null) {
+      _punchSteadyHandCenter = currentCenter;
+      _punchSteadyHandSize = currentHandSize;
+      _punchSteadyFrameCount = 1;
+      return false;
+    }
+
+    final referenceHandSize = math.max(anchorHandSize, currentHandSize);
+    final movementRatio =
+        geometry.distanceBetweenOffsets(anchorCenter, currentCenter) /
+        referenceHandSize;
+    if (!movementRatio.isFinite ||
+        movementRatio > HandGestureThresholds.punchMaxHandCenterMovementRatio) {
+      _punchSteadyHandCenter = currentCenter;
+      _punchSteadyHandSize = currentHandSize;
+      // The frame that proves movement does not count as a steady frame.
+      _punchSteadyFrameCount = 0;
+      return false;
+    }
+
+    _punchSteadyFrameCount = math.min(
+      _punchSteadyFrameCount + 1,
+      HandGestureThresholds.punchRequiredConsecutiveFrames,
+    );
+    return _punchSteadyFrameCount >=
+        HandGestureThresholds.punchRequiredConsecutiveFrames;
+  }
+
+  void _clearPunchConfirmationState() {
+    _punchSteadyHandCenter = null;
+    _punchSteadyHandSize = null;
+    _punchSteadyFrameCount = 0;
   }
 
   /// Holds the return-to-main result briefly so the UI does not flicker.

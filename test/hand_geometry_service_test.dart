@@ -234,6 +234,301 @@ void main() {
     });
   });
 
+  group('HandGeometryService direction finger compression', () {
+    const geometry = HandGeometryService();
+
+    HandLandmark point(double x, double y, {double z = 0}) {
+      return HandLandmark(
+        type: HandLandmarkType.middleFingerMCP,
+        x: x,
+        y: y,
+        z: z,
+        visibility: 1,
+      );
+    }
+
+    test('is near one for a straight chain and small for a curled chain', () {
+      expect(
+        geometry.fingerCompressionRatio3D(
+          mcp: point(0, 0),
+          pip: point(0, -10),
+          dip: point(0, -20),
+          tip: point(0, -30),
+        ),
+        closeTo(1, 1e-9),
+      );
+
+      final compression = geometry.fingerCompressionRatio3D(
+        mcp: point(0, 0),
+        pip: point(0, -30),
+        dip: point(0, -60),
+        tip: point(0, -5),
+      );
+      expect(compression, closeTo(5 / 115, 1e-9));
+      expect(
+        geometry.isFingerFoldedByCompression3D(
+          mcp: point(0, 0),
+          pip: point(0, -30),
+          dip: point(0, -60),
+          tip: point(0, -5),
+          palmWidth: 50,
+        ),
+        isTrue,
+      );
+    });
+
+    test('uses squared finger reach as a palm-relative area ratio', () {
+      expect(
+        geometry.fingerReachAreaRatio3D(
+          mcp: point(0, 0),
+          tip: point(0, -35),
+          palmWidth: 50,
+        ),
+        closeTo(0.49, 1e-9),
+      );
+      expect(
+        geometry.fingerReachAreaRatio3D(
+          mcp: point(0, 0),
+          tip: point(0, -45),
+          palmWidth: 50,
+        ),
+        closeTo(0.81, 1e-9),
+      );
+    });
+
+    test('uses squared top spread and MCP reach for the cluster area', () {
+      final mcp = point(0, 0);
+      final pip = point(0, -20);
+      final dip = point(0, -30);
+      final tip = point(0, -35);
+
+      expect(
+        geometry.fingerTopClusterAreaRatio3D(
+          pip: pip,
+          dip: dip,
+          tip: tip,
+          palmWidth: 50,
+        ),
+        closeTo(0.09, 1e-9),
+      );
+      expect(
+        geometry.fingerTopMaxMcpAreaRatio3D(
+          mcp: mcp,
+          pip: pip,
+          dip: dip,
+          tip: tip,
+          palmWidth: 50,
+        ),
+        closeTo(0.49, 1e-9),
+      );
+      expect(
+        geometry.isFingerTopClusterFolded3D(
+          mcp: mcp,
+          pip: pip,
+          dip: dip,
+          tip: tip,
+          palmWidth: 50,
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'accepts the 80 percent compression boundary inside the easier reach',
+      () {
+        expect(
+          geometry.isFingerFoldedByCompression3D(
+            mcp: point(0, 0),
+            pip: point(0, 5),
+            dip: point(0, 0),
+            tip: point(40, 0),
+            palmWidth: 50,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('accepts the easier 85 percent MCP-to-tip distance boundary', () {
+      expect(
+        geometry.isFingerFoldedByCompression3D(
+          mcp: point(0, 0),
+          pip: point(0, 30),
+          dip: point(0, 60),
+          tip: point(42.5, 0),
+          palmWidth: 50,
+        ),
+        isTrue,
+      );
+    });
+
+    test('accepts the easier 16 percent top and 85 percent near distance', () {
+      expect(
+        geometry.isFingerTopClusterFolded3D(
+          mcp: point(0, 0),
+          pip: point(22.5, 0),
+          dip: point(32.5, 0),
+          tip: point(42.5, 0),
+          palmWidth: 50,
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'requires both 81 percent reach area and 85 percent compression to be open',
+      () {
+        expect(
+          geometry.isFingerClearlyOpenByArea3D(
+            mcp: point(0, 0),
+            pip: point(0, -15),
+            dip: point(0, -30),
+            tip: point(0, -45),
+            palmWidth: 50,
+          ),
+          isTrue,
+        );
+        expect(
+          geometry.isFingerClearlyOpenByArea3D(
+            mcp: point(0, 0),
+            pip: point(0, -15),
+            dip: point(0, -30),
+            tip: point(0, -44.5),
+            palmWidth: 50,
+          ),
+          isFalse,
+        );
+      },
+    );
+
+    test('gives the same folded result from opposite depth orientations', () {
+      for (final depthSign in const [-1.0, 1.0]) {
+        expect(
+          geometry.isFingerFoldedByCompression3D(
+            mcp: point(0, 0),
+            pip: point(0, -30, z: 0.10 * depthSign),
+            dip: point(0, -60, z: 0.20 * depthSign),
+            tip: point(0, -5, z: 0.02 * depthSign),
+            palmWidth: 50,
+          ),
+          isTrue,
+        );
+      }
+    });
+
+    test('requires the folded fingertip to remain near its MCP', () {
+      final mcp = point(0, 0);
+      final pip = point(0, -30);
+      final dip = point(0, -60);
+      final tip = point(35, -35);
+
+      expect(
+        geometry.fingerCompressionRatio3D(
+          mcp: mcp,
+          pip: pip,
+          dip: dip,
+          tip: tip,
+        ),
+        lessThan(0.70),
+      );
+      expect(
+        geometry.isFingerFoldedByCompression3D(
+          mcp: mcp,
+          pip: pip,
+          dip: dip,
+          tip: tip,
+          palmWidth: 50,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a degenerate chain', () {
+      final samePoint = point(0, 0);
+      expect(
+        geometry.fingerCompressionRatio3D(
+          mcp: samePoint,
+          pip: samePoint,
+          dip: samePoint,
+          tip: samePoint,
+        ),
+        isNull,
+      );
+      expect(
+        geometry.isFingerFoldedByCompression3D(
+          mcp: samePoint,
+          pip: samePoint,
+          dip: samePoint,
+          tip: samePoint,
+          palmWidth: 50,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('HandGeometryService descending finger-chain order', () {
+    const geometry = HandGeometryService();
+
+    HandLandmark point(double y) => HandLandmark(
+      type: HandLandmarkType.indexFingerMCP,
+      x: 20,
+      y: y,
+      z: 0,
+      visibility: 1,
+    );
+
+    test('accepts all three adjacent pairs at the exact minimum gap', () {
+      final result = geometry.evaluateDescendingFingerChain(
+        chain: [point(0), point(4), point(8), point(12)],
+        handSize: 100,
+        minAdjacentGapRatio: 0.04,
+      );
+
+      expect(result, isNotNull);
+      expect(result!.adjacentVerticalGapRatios, [0.04, 0.04, 0.04]);
+      expect(result.adjacentPairMatches, [isTrue, isTrue, isTrue]);
+      expect(result.matches, isTrue);
+    });
+
+    test('rejects a too-close pair and a locally reversed pair', () {
+      final tooClose = geometry.evaluateDescendingFingerChain(
+        chain: [point(0), point(4), point(7.9), point(12)],
+        handSize: 100,
+        minAdjacentGapRatio: 0.04,
+      );
+      final reversed = geometry.evaluateDescendingFingerChain(
+        chain: [point(0), point(4), point(3), point(12)],
+        handSize: 100,
+        minAdjacentGapRatio: 0.04,
+      );
+
+      expect(tooClose!.adjacentPairMatches, [isTrue, isFalse, isTrue]);
+      expect(tooClose.matches, isFalse);
+      expect(reversed!.adjacentPairMatches, [isTrue, isFalse, isTrue]);
+      expect(reversed.matches, isFalse);
+    });
+
+    test('rejects incomplete chains and invalid scale inputs', () {
+      expect(
+        geometry.evaluateDescendingFingerChain(
+          chain: [point(0), point(4), point(8)],
+          handSize: 100,
+          minAdjacentGapRatio: 0.04,
+        ),
+        isNull,
+      );
+      expect(
+        geometry.evaluateDescendingFingerChain(
+          chain: [point(0), point(4), point(8), point(12)],
+          handSize: 0,
+          minAdjacentGapRatio: 0.04,
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('HandGeometryService forwardRayIntersection2D', () {
     const geometry = HandGeometryService();
 

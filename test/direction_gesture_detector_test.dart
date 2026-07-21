@@ -137,6 +137,71 @@ void main() {
         HandMoveDirection.down,
       );
     });
+
+    for (final testCase in const [
+      (Offset(-90, 0), HandMoveDirection.left),
+      (Offset(90, 0), HandMoveDirection.right),
+      (Offset(0, -90), HandMoveDirection.up),
+      (Offset(0, 90), HandMoveDirection.down),
+    ]) {
+      test(
+        '${testCase.$2.name} accepts a compressed fold when its 2D angle fails',
+        () {
+          final hand = _pointingHand(
+            indexVector: testCase.$1,
+            landmarkOverrides: _compressedFingerOverrides(
+              _fingerChains[1],
+              const Offset(190, 225),
+            ),
+          );
+
+          final result = switch (testCase.$2) {
+            HandMoveDirection.left => _confirmMovingLeft(detector, hand),
+            HandMoveDirection.right => _confirmMovingRight(detector, hand),
+            HandMoveDirection.down => _confirmMovingDown(detector, hand),
+            _ => _confirmMovingUp(detector, hand),
+          };
+          expect(result, testCase.$2);
+        },
+      );
+    }
+
+    test('one conflicting area measurement is tolerated as uncertain', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, 90),
+        landmarkOverrides: _compressedFingerOverrides(
+          _fingerChains[1],
+          const Offset(190, 225),
+          tip: const Offset(225, 190),
+        ),
+      );
+
+      expect(_confirmMovingDown(detector, hand), HandMoveDirection.down);
+    });
+
+    for (final testCase in const [
+      (Offset(-90, 0), HandMoveDirection.left),
+      (Offset(90, 0), HandMoveDirection.right),
+    ]) {
+      test('${testCase.$2.name} still needs two confirmed folded fingers', () {
+        final hand = _pointingHand(
+          indexVector: testCase.$1,
+          missingTypes: const {
+            HandLandmarkType.middleFingerMCP,
+            HandLandmarkType.middleFingerPIP,
+            HandLandmarkType.middleFingerDIP,
+            HandLandmarkType.middleFingerTip,
+            HandLandmarkType.ringFingerMCP,
+            HandLandmarkType.ringFingerPIP,
+            HandLandmarkType.ringFingerDIP,
+            HandLandmarkType.ringFingerTip,
+          },
+        );
+
+        expect(_detect(detector, hand), HandMoveDirection.none);
+        expect(detector.debugSummary, contains('only 1/3 folded fingers'));
+      });
+    }
   });
 
   group('DirectionGestureDetector Moving Left 21-landmark replacement', () {
@@ -247,7 +312,7 @@ void main() {
       expect(detector.debugSummary, contains('tip not clearly left'));
     });
 
-    test('uses folded angle but ignores fingertip-to-palm distance', () {
+    test('rejects a clearly open middle finger by palm-relative area', () {
       final openMiddle = _pointingHand(
         indexVector: const Offset(-90, 0),
         openOtherFingerIndexes: const {1},
@@ -263,19 +328,47 @@ void main() {
       );
       expect(
         _confirmMovingLeft(detector, distantMiddleTip),
-        HandMoveDirection.left,
+        HandMoveDirection.none,
       );
     });
 
-    test('requires every specified point 0 and 5-20 to be reliable', () {
+    test('tolerates one unavailable folded finger landmark', () {
       final hand = _pointingHand(
         indexVector: const Offset(-90, 0),
         lowVisibilityTypes: const {HandLandmarkType.ringFingerDIP},
       );
 
-      expect(_detect(detector, hand), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('missing required point'));
+      expect(_confirmMovingLeft(detector, hand), HandMoveDirection.left);
     });
+
+    test(
+      'tolerates one unavailable folded finger but requires point 0 and 5-8',
+      () {
+        expect(
+          _confirmMovingLeft(
+            detector,
+            _pointingHand(
+              indexVector: const Offset(-90, 0),
+              missingTypes: const {
+                HandLandmarkType.ringFingerMCP,
+                HandLandmarkType.ringFingerPIP,
+                HandLandmarkType.ringFingerDIP,
+                HandLandmarkType.ringFingerTip,
+              },
+            ),
+          ),
+          HandMoveDirection.left,
+        );
+
+        detector.clearState();
+        final missingIndexPoint = _pointingHand(
+          indexVector: const Offset(-90, 0),
+          lowVisibilityTypes: const {HandLandmarkType.indexFingerDIP},
+        );
+        expect(_detect(detector, missingIndexPoint), HandMoveDirection.none);
+        expect(detector.debugSummary, contains('missing required point'));
+      },
+    );
   });
 
   group('DirectionGestureDetector Moving Right 21-landmark replacement', () {
@@ -401,7 +494,7 @@ void main() {
       expect(detector.debugSummary, contains('tip not clearly right'));
     });
 
-    test('uses folded angle but ignores fingertip-to-palm distance', () {
+    test('rejects a clearly open middle finger by palm-relative area', () {
       final openMiddle = _pointingHand(
         indexVector: const Offset(90, 0),
         openOtherFingerIndexes: const {1},
@@ -417,19 +510,47 @@ void main() {
       );
       expect(
         _confirmMovingRight(detector, distantMiddleTip),
-        HandMoveDirection.right,
+        HandMoveDirection.none,
       );
     });
 
-    test('requires every specified point 0 and 5-20 to be reliable', () {
+    test('tolerates one unavailable folded finger landmark', () {
       final hand = _pointingHand(
         indexVector: const Offset(90, 0),
         lowVisibilityTypes: const {HandLandmarkType.ringFingerDIP},
       );
 
-      expect(_detect(detector, hand), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('missing required point'));
+      expect(_confirmMovingRight(detector, hand), HandMoveDirection.right);
     });
+
+    test(
+      'tolerates one unavailable folded finger but requires point 0 and 5-8',
+      () {
+        expect(
+          _confirmMovingRight(
+            detector,
+            _pointingHand(
+              indexVector: const Offset(90, 0),
+              missingTypes: const {
+                HandLandmarkType.ringFingerMCP,
+                HandLandmarkType.ringFingerPIP,
+                HandLandmarkType.ringFingerDIP,
+                HandLandmarkType.ringFingerTip,
+              },
+            ),
+          ),
+          HandMoveDirection.right,
+        );
+
+        detector.clearState();
+        final missingWrist = _pointingHand(
+          indexVector: const Offset(90, 0),
+          missingTypes: const {HandLandmarkType.wrist},
+        );
+        expect(_detect(detector, missingWrist), HandMoveDirection.none);
+        expect(detector.debugSummary, contains('missing required point'));
+      },
+    );
 
     test('ignores missing and extended thumb landmarks', () {
       expect(
@@ -704,7 +825,7 @@ void main() {
       expect(detector.debugSummary, contains('not aligned with the y-axis'));
     });
 
-    test('uses folded angle but ignores fingertip-to-palm distance', () {
+    test('rejects a clearly open middle finger by palm-relative area', () {
       final openMiddle = _pointingHand(
         indexVector: const Offset(0, -90),
         openOtherFingerIndexes: const {1},
@@ -720,19 +841,94 @@ void main() {
       );
       expect(
         _confirmMovingUp(detector, distantMiddleTip),
-        HandMoveDirection.up,
+        HandMoveDirection.none,
       );
     });
 
-    test('requires every specified point 5-20 to be reliable', () {
+    test('tolerates one unavailable folded finger but requires points 5-8', () {
+      expect(
+        _confirmMovingUp(
+          detector,
+          _pointingHand(
+            indexVector: const Offset(0, -90),
+            missingTypes: const {
+              HandLandmarkType.ringFingerMCP,
+              HandLandmarkType.ringFingerPIP,
+              HandLandmarkType.ringFingerDIP,
+              HandLandmarkType.ringFingerTip,
+            },
+          ),
+        ),
+        HandMoveDirection.up,
+      );
+
+      detector.clearState();
+      final missingIndexPoint = _pointingHand(
+        indexVector: const Offset(0, -90),
+        lowVisibilityTypes: const {HandLandmarkType.indexFingerDIP},
+      );
+      expect(_detect(detector, missingIndexPoint), HandMoveDirection.none);
+      expect(
+        detector.debugSummary,
+        contains('missing required index point 5-8'),
+      );
+    });
+
+    test('tolerates one unavailable folded finger landmark', () {
       final hand = _pointingHand(
         indexVector: const Offset(0, -90),
-        lowVisibilityTypes: const {HandLandmarkType.ringFingerDIP},
+        lowVisibilityTypes: const {HandLandmarkType.middleFingerDIP},
+      );
+
+      expect(_confirmMovingUp(detector, hand), HandMoveDirection.up);
+    });
+
+    test('accepts a congested folded finger for moving up too', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, -90),
+        landmarkOverrides: const {
+          HandLandmarkType.middleFingerPIP: Offset(190, 210),
+          HandLandmarkType.middleFingerDIP: Offset(190, 209),
+          HandLandmarkType.middleFingerTip: Offset(191, 208),
+        },
+      );
+
+      expect(_confirmMovingUp(detector, hand), HandMoveDirection.up);
+    });
+
+    test('requires at least two visible folded fingers for moving up', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, -90),
+        missingTypes: const {
+          HandLandmarkType.middleFingerMCP,
+          HandLandmarkType.middleFingerPIP,
+          HandLandmarkType.middleFingerDIP,
+          HandLandmarkType.middleFingerTip,
+          HandLandmarkType.ringFingerMCP,
+          HandLandmarkType.ringFingerPIP,
+          HandLandmarkType.ringFingerDIP,
+          HandLandmarkType.ringFingerTip,
+        },
       );
 
       expect(_detect(detector, hand), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('missing required point 5-20'));
+      expect(detector.debugSummary, contains('only 1/3 folded fingers'));
     });
+
+    for (final angle in const [155.0, 156.0]) {
+      test('$angle degree alone does not fold an area-open middle finger', () {
+        final hand = _pointingHand(
+          indexVector: const Offset(0, -90),
+          landmarkOverrides: _fingerJointOverrides(
+            _fingerChains[1],
+            const Offset(190, 225),
+            angle,
+          ),
+        );
+
+        expect(_detect(detector, hand), HandMoveDirection.none);
+      });
+    }
 
     test(
       'ignores a missing thumb and does not yield an axis intersection to zoom',
@@ -1003,7 +1199,7 @@ void main() {
       expect(detector.debugSummary, contains('not aligned with the y-axis'));
     });
 
-    test('uses folded angle but ignores fingertip-to-palm distance', () {
+    test('rejects a clearly open middle finger by palm-relative area', () {
       final openMiddle = _pointingHand(
         indexVector: const Offset(0, 90),
         openOtherFingerIndexes: const {1},
@@ -1019,11 +1215,120 @@ void main() {
       );
       expect(
         _confirmMovingDown(detector, distantMiddleTip),
-        HandMoveDirection.down,
+        HandMoveDirection.none,
       );
     });
 
-    test('ignores point 5 but requires points 6-8 and 9-20', () {
+    for (final clusteredFinger in const [
+      (
+        'middle',
+        HandLandmarkType.middleFingerPIP,
+        HandLandmarkType.middleFingerDIP,
+        HandLandmarkType.middleFingerTip,
+        Offset(190, 210),
+        Offset(190, 209),
+        Offset(191, 208),
+      ),
+      (
+        'ring',
+        HandLandmarkType.ringFingerPIP,
+        HandLandmarkType.ringFingerDIP,
+        HandLandmarkType.ringFingerTip,
+        Offset(215, 210),
+        Offset(215, 209),
+        Offset(216, 208),
+      ),
+      (
+        'pinky',
+        HandLandmarkType.pinkyPIP,
+        HandLandmarkType.pinkyDIP,
+        HandLandmarkType.pinkyTip,
+        Offset(240, 205),
+        Offset(240, 204),
+        Offset(241, 203),
+      ),
+    ]) {
+      test(
+        'accepts a folded ${clusteredFinger.$1} whose top three points cluster near its MCP',
+        () {
+          final hand = _pointingHand(
+            indexVector: const Offset(0, 90),
+            landmarkOverrides: {
+              clusteredFinger.$2: clusteredFinger.$5,
+              clusteredFinger.$3: clusteredFinger.$6,
+              clusteredFinger.$4: clusteredFinger.$7,
+            },
+          );
+
+          expect(_confirmMovingDown(detector, hand), HandMoveDirection.down);
+        },
+      );
+    }
+
+    test('rejects a compact top-point cluster far from its MCP joint', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, 90),
+        landmarkOverrides: const {
+          HandLandmarkType.middleFingerPIP: Offset(300, 100),
+          HandLandmarkType.middleFingerDIP: Offset(301, 99),
+          HandLandmarkType.middleFingerTip: Offset(302, 98),
+        },
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('middle finger not folded'));
+    });
+
+    test('rejects top points that are near the MCP but not congested', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, 90),
+        landmarkOverrides: const {
+          HandLandmarkType.middleFingerPIP: Offset(190, 210),
+          HandLandmarkType.middleFingerDIP: Offset(190, 209),
+          HandLandmarkType.middleFingerTip: Offset(225, 180),
+        },
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('middle finger not folded'));
+    });
+
+    test('tolerates one depth-conflicted finger as uncertain', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, 90),
+        landmarkOverrides: const {
+          HandLandmarkType.middleFingerPIP: Offset(190, 210),
+          HandLandmarkType.middleFingerDIP: Offset(190, 209),
+          HandLandmarkType.middleFingerTip: Offset(191, 208),
+        },
+        landmarkDepthOverrides: const {HandLandmarkType.middleFingerTip: 100},
+      );
+
+      expect(_confirmMovingDown(detector, hand), HandMoveDirection.down);
+    });
+
+    test('rejects when two fingers have uncertain area measurements', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, 90),
+        landmarkOverrides: const {
+          HandLandmarkType.middleFingerPIP: Offset(190, 210),
+          HandLandmarkType.middleFingerDIP: Offset(190, 209),
+          HandLandmarkType.middleFingerTip: Offset(191, 208),
+          HandLandmarkType.ringFingerPIP: Offset(215, 210),
+          HandLandmarkType.ringFingerDIP: Offset(215, 209),
+          HandLandmarkType.ringFingerTip: Offset(216, 208),
+        },
+        landmarkDepthOverrides: const {
+          HandLandmarkType.middleFingerTip: 100,
+          HandLandmarkType.ringFingerTip: 100,
+        },
+      );
+
+      expect(_detect(detector, hand), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('only 1/3 folded fingers'));
+    });
+
+    test('ignores point 5, tolerates one folded finger loss, requires 6-8', () {
       expect(
         _confirmMovingDown(
           detector,
@@ -1037,14 +1342,77 @@ void main() {
 
       detector.clearState();
 
+      expect(
+        _confirmMovingDown(
+          detector,
+          _pointingHand(
+            indexVector: const Offset(0, 90),
+            missingTypes: const {
+              HandLandmarkType.middleFingerMCP,
+              HandLandmarkType.middleFingerPIP,
+              HandLandmarkType.middleFingerDIP,
+              HandLandmarkType.middleFingerTip,
+            },
+          ),
+        ),
+        HandMoveDirection.down,
+      );
+
+      detector.clearState();
+
+      final missingIndexPoint = _pointingHand(
+        indexVector: const Offset(0, 90),
+        missingTypes: const {HandLandmarkType.indexFingerDIP},
+      );
+      expect(_detect(detector, missingIndexPoint), HandMoveDirection.none);
+      expect(
+        detector.debugSummary,
+        contains('missing required index point 6-8'),
+      );
+    });
+
+    test('tolerates one unavailable folded finger landmark', () {
       final hand = _pointingHand(
         indexVector: const Offset(0, 90),
-        lowVisibilityTypes: const {HandLandmarkType.ringFingerDIP},
+        lowVisibilityTypes: const {HandLandmarkType.middleFingerDIP},
+      );
+
+      expect(_confirmMovingDown(detector, hand), HandMoveDirection.down);
+    });
+
+    test('rejects when only one folded finger remains visible for down', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, 90),
+        missingTypes: const {
+          HandLandmarkType.middleFingerMCP,
+          HandLandmarkType.middleFingerPIP,
+          HandLandmarkType.middleFingerDIP,
+          HandLandmarkType.middleFingerTip,
+          HandLandmarkType.ringFingerMCP,
+          HandLandmarkType.ringFingerPIP,
+          HandLandmarkType.ringFingerDIP,
+          HandLandmarkType.ringFingerTip,
+        },
       );
 
       expect(_detect(detector, hand), HandMoveDirection.none);
-      expect(detector.debugSummary, contains('missing required point'));
+      expect(detector.debugSummary, contains('invalid palm width'));
     });
+
+    for (final angle in const [155.0, 156.0]) {
+      test('$angle degree alone does not fold an area-open middle finger', () {
+        final hand = _pointingHand(
+          indexVector: const Offset(0, 90),
+          landmarkOverrides: _fingerJointOverrides(
+            _fingerChains[1],
+            const Offset(190, 225),
+            angle,
+          ),
+        );
+
+        expect(_detect(detector, hand), HandMoveDirection.none);
+      });
+    }
 
     test('ignores missing and extended thumb landmarks', () {
       expect(
@@ -1958,6 +2326,7 @@ Hand _pointingHand({
   Map<HandLandmarkType, Offset> landmarkOverrides = const {},
   Set<HandLandmarkType> missingTypes = const {},
   Set<HandLandmarkType> lowVisibilityTypes = const {},
+  Map<HandLandmarkType, double> landmarkDepthOverrides = const {},
   bool includeThumb = false,
   Offset thumbTip = const Offset(195, 225),
   Offset handOffset = Offset.zero,
@@ -1977,7 +2346,7 @@ Hand _pointingHand({
         type: type,
         x: resolvedPoint.dx,
         y: resolvedPoint.dy,
-        z: z ?? baseDepth,
+        z: landmarkDepthOverrides[type] ?? z ?? baseDepth,
         visibility: lowVisibilityTypes.contains(type) ? 0.2 : 1,
       ),
     );
@@ -2086,4 +2455,34 @@ List<Offset> _foldedChainPoints(Offset base, {double rotationDegrees = 0}) {
     base + rotate(const Offset(8, -18)),
     base + rotate(const Offset(6, -5)),
   ];
+}
+
+Map<HandLandmarkType, Offset> _fingerJointOverrides(
+  List<HandLandmarkType> chain,
+  Offset mcp,
+  double jointAngleDegrees,
+) {
+  final pip = mcp + const Offset(0, -30);
+  final distalRadians = (90 + jointAngleDegrees) * math.pi / 180;
+  final distalVector = Offset(
+    math.cos(distalRadians) * 20,
+    math.sin(distalRadians) * 20,
+  );
+  final dip = pip + distalVector;
+  final tip = dip + distalVector;
+
+  return {chain[0]: mcp, chain[1]: pip, chain[2]: dip, chain[3]: tip};
+}
+
+Map<HandLandmarkType, Offset> _compressedFingerOverrides(
+  List<HandLandmarkType> chain,
+  Offset mcp, {
+  Offset? tip,
+}) {
+  return {
+    chain[0]: mcp,
+    chain[1]: mcp + const Offset(0, -30),
+    chain[2]: mcp + const Offset(0, -60),
+    chain[3]: tip ?? mcp + const Offset(0, -5),
+  };
 }

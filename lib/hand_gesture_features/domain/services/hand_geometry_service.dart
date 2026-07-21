@@ -35,9 +35,26 @@ class ForwardRayIntersection2D {
   bool get isAtInfinity => kind == ForwardRayIntersectionKind.atInfinity;
 }
 
+/// Per-pair vertical ordering for a four-point MCP→PIP→DIP→TIP chain.
+class DescendingFingerChainEvaluation {
+  const DescendingFingerChainEvaluation({
+    required this.adjacentVerticalGapRatios,
+    required this.adjacentPairMatches,
+  });
+
+  final List<double> adjacentVerticalGapRatios;
+  final List<bool> adjacentPairMatches;
+
+  bool get matches =>
+      adjacentPairMatches.length == 3 &&
+      adjacentPairMatches.every((pairMatches) => pairMatches);
+}
+
 /// Shared landmark geometry utilities used by all gesture detectors.
 class HandGeometryService {
   const HandGeometryService();
+
+  static const double _ratioBoundaryTolerance = 1e-9;
 
   /// Returns true when the hand has landmarks, confidence, and usable bounds.
   bool isReliableHand(Hand hand) {
@@ -287,6 +304,174 @@ class HandGeometryService {
     return math.acos(cosValue) * 180 / math.pi;
   }
 
+  /// Direct MCP-to-tip distance divided by the complete 3D finger bone path.
+  ///
+  /// A straight finger is close to 1.0. A curled finger has a shorter direct
+  /// shortcut than its MCP-PIP-DIP-TIP path, so the ratio becomes smaller.
+  /// Returns null for degenerate or non-finite chains.
+  double? fingerCompressionRatio3D({
+    required HandLandmark mcp,
+    required HandLandmark pip,
+    required HandLandmark dip,
+    required HandLandmark tip,
+  }) {
+    final mcpToPip = distanceBetweenLandmarks3D(mcp, pip);
+    final pipToDip = distanceBetweenLandmarks3D(pip, dip);
+    final dipToTip = distanceBetweenLandmarks3D(dip, tip);
+    final bonePathLength = mcpToPip + pipToDip + dipToTip;
+    final directDistance = distanceBetweenLandmarks3D(mcp, tip);
+    if (!bonePathLength.isFinite ||
+        !directDistance.isFinite ||
+        bonePathLength <= 1e-9) {
+      return null;
+    }
+
+    final ratio = directDistance / bonePathLength;
+    return ratio.isFinite ? ratio : null;
+  }
+
+  /// Squared MCP-to-tip reach relative to squared palm width.
+  ///
+  /// This is an occupied-area ratio rather than a landmark polygon area. A
+  /// straight collinear finger therefore remains large instead of collapsing
+  /// to a misleading zero-area polygon.
+  double? fingerReachAreaRatio3D({
+    required HandLandmark mcp,
+    required HandLandmark tip,
+    required double palmWidth,
+  }) {
+    return _squaredSpanAreaRatio(
+      span: distanceBetweenLandmarks3D(mcp, tip),
+      palmWidth: palmWidth,
+    );
+  }
+
+  /// Squared maximum spread among PIP, DIP, and TIP versus squared palm width.
+  double? fingerTopClusterAreaRatio3D({
+    required HandLandmark pip,
+    required HandLandmark dip,
+    required HandLandmark tip,
+    required double palmWidth,
+  }) {
+    final span = [
+      distanceBetweenLandmarks3D(pip, dip),
+      distanceBetweenLandmarks3D(pip, tip),
+      distanceBetweenLandmarks3D(dip, tip),
+    ].reduce(math.max);
+    return _squaredSpanAreaRatio(span: span, palmWidth: palmWidth);
+  }
+
+  /// Squared farthest top-point reach from MCP versus squared palm width.
+  double? fingerTopMaxMcpAreaRatio3D({
+    required HandLandmark mcp,
+    required HandLandmark pip,
+    required HandLandmark dip,
+    required HandLandmark tip,
+    required double palmWidth,
+  }) {
+    final span = [
+      distanceBetweenLandmarks3D(mcp, pip),
+      distanceBetweenLandmarks3D(mcp, dip),
+      distanceBetweenLandmarks3D(mcp, tip),
+    ].reduce(math.max);
+    return _squaredSpanAreaRatio(span: span, palmWidth: palmWidth);
+  }
+
+  /// Detects a folded chain from angle-free 3D reach area and compression.
+  bool isFingerFoldedByCompression3D({
+    required HandLandmark mcp,
+    required HandLandmark pip,
+    required HandLandmark dip,
+    required HandLandmark tip,
+    required double palmWidth,
+  }) {
+    final compression = fingerCompressionRatio3D(
+      mcp: mcp,
+      pip: pip,
+      dip: dip,
+      tip: tip,
+    );
+    final reachArea = fingerReachAreaRatio3D(
+      mcp: mcp,
+      tip: tip,
+      palmWidth: palmWidth,
+    );
+    return compression != null &&
+        compression <=
+            HandGestureThresholds.directionFoldedMaxCompressionRatio +
+                _ratioBoundaryTolerance &&
+        reachArea != null &&
+        reachArea <=
+            HandGestureThresholds.directionFoldedMaxReachAreaRatio +
+                _ratioBoundaryTolerance;
+  }
+
+  /// Detects a folded finger from angle-free 3D top-point occupied areas.
+  bool isFingerTopClusterFolded3D({
+    required HandLandmark mcp,
+    required HandLandmark pip,
+    required HandLandmark dip,
+    required HandLandmark tip,
+    required double palmWidth,
+  }) {
+    final topClusterArea = fingerTopClusterAreaRatio3D(
+      pip: pip,
+      dip: dip,
+      tip: tip,
+      palmWidth: palmWidth,
+    );
+    final maxMcpArea = fingerTopMaxMcpAreaRatio3D(
+      mcp: mcp,
+      pip: pip,
+      dip: dip,
+      tip: tip,
+      palmWidth: palmWidth,
+    );
+    return topClusterArea != null &&
+        topClusterArea <=
+            HandGestureThresholds.directionFoldedMaxTopClusterAreaRatio +
+                _ratioBoundaryTolerance &&
+        maxMcpArea != null &&
+        maxMcpArea <=
+            HandGestureThresholds.directionFoldedMaxClusterMcpAreaRatio +
+                _ratioBoundaryTolerance;
+  }
+
+  /// Strong angle-free evidence that a complete finger chain is extended.
+  bool isFingerClearlyOpenByArea3D({
+    required HandLandmark mcp,
+    required HandLandmark pip,
+    required HandLandmark dip,
+    required HandLandmark tip,
+    required double palmWidth,
+  }) {
+    final reachArea = fingerReachAreaRatio3D(
+      mcp: mcp,
+      tip: tip,
+      palmWidth: palmWidth,
+    );
+    final compression = fingerCompressionRatio3D(
+      mcp: mcp,
+      pip: pip,
+      dip: dip,
+      tip: tip,
+    );
+    return reachArea != null &&
+        reachArea >= HandGestureThresholds.directionOpenMinReachAreaRatio &&
+        compression != null &&
+        compression >= HandGestureThresholds.directionOpenMinCompressionRatio;
+  }
+
+  double? _squaredSpanAreaRatio({
+    required double span,
+    required double palmWidth,
+  }) {
+    if (!span.isFinite || !palmWidth.isFinite || palmWidth <= 0) return null;
+    final normalizedSpan = span / palmWidth;
+    final ratio = normalizedSpan * normalizedSpan;
+    return ratio.isFinite ? ratio : null;
+  }
+
   /// Returns true when a finger is bent enough to count as folded in 2D.
   bool isFingerFoldedByAngle({
     required HandLandmark mcp,
@@ -347,6 +532,38 @@ class HandGeometryService {
     }
 
     return chain;
+  }
+
+  /// Checks every adjacent finger landmark independently in screen Y.
+  /// Positive gaps move downward because image-space Y increases downward.
+  DescendingFingerChainEvaluation? evaluateDescendingFingerChain({
+    required List<HandLandmark> chain,
+    required double handSize,
+    required double minAdjacentGapRatio,
+  }) {
+    if (chain.length < 4 ||
+        !handSize.isFinite ||
+        handSize <= 0 ||
+        !minAdjacentGapRatio.isFinite ||
+        minAdjacentGapRatio < 0) {
+      return null;
+    }
+
+    final gapRatios = <double>[];
+    final pairMatches = <bool>[];
+    for (var index = 0; index < 3; index += 1) {
+      final gapRatio = (chain[index + 1].y - chain[index].y) / handSize;
+      if (!gapRatio.isFinite) return null;
+      gapRatios.add(gapRatio);
+      pairMatches.add(
+        gapRatio + _ratioBoundaryTolerance >= minAdjacentGapRatio,
+      );
+    }
+
+    return DescendingFingerChainEvaluation(
+      adjacentVerticalGapRatios: List.unmodifiable(gapRatios),
+      adjacentPairMatches: List.unmodifiable(pairMatches),
+    );
   }
 
   /// Checks whether a 4-point finger chain is straight enough in 3D.

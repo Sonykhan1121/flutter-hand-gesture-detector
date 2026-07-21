@@ -347,6 +347,7 @@ extension on _AdminHandGestureLiveScreenState {
       hand: bestHand,
       imageSize: detectionImageSize,
       mirrorHorizontally: mirrorDirectionalGestureCoordinates,
+      requirePunchConfirmation: !_isVideoRecording,
     );
 
     if (rawCustomGestureResult.isOnlyCancelEverything) {
