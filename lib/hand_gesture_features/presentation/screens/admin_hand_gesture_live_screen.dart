@@ -143,8 +143,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final bool _showObjectOpticalFlowDebugOverlay = false;
   // Set false to hide the Zoom In rays, angle, and intersection point.
   final bool _showZoomInDebugOverlay = true;
-  // Keep the previous direction/finger-fold circle diagnostics hidden.
-  final bool _showDirectionDebugOverlay = false;
+  // Set false after validating the four-way direction debug geometry.
+  final bool _showDirectionDebugOverlay = true;
 
   String _gestureText = 'Show your hand';
   String _handText = '';

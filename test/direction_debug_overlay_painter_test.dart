@@ -115,7 +115,7 @@ void main() {
     );
   });
 
-  test('does not repaint for hidden debug text changes', () {
+  test('repaints when visible checklist text changes', () {
     final painter = DirectionDebugOverlayPainter(
       hand: _directionHand(),
       imageSize: const Size(200, 300),
@@ -136,7 +136,7 @@ void main() {
           debugSummary: 'different hidden summary',
         ),
       ),
-      isFalse,
+      isTrue,
     );
   });
 }

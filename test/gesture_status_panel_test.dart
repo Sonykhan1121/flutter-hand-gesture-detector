@@ -27,6 +27,45 @@ void main() {
       },
     );
 
+    testWidgets('hides show-your-hand text once a hand is detected', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: GestureStatusPanel(
+              gestureText: 'Show your hand',
+              handText: 'Right hand',
+              gestureConfidence: 0,
+              detectedHandsCount: 1,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Show your hand'), findsNothing);
+      expect(find.textContaining('Hands: 1'), findsOneWidget);
+    });
+
+    testWidgets('keeps show-your-hand text when no hand is detected', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: GestureStatusPanel(
+              gestureText: 'Show your hand',
+              handText: '',
+              gestureConfidence: 0,
+              detectedHandsCount: 0,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Show your hand'), findsOneWidget);
+    });
+
     testWidgets('marks every movement direction as detected', (tester) async {
       for (final gestureText in const [
         'Moving left',

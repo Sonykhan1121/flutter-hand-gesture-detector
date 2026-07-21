@@ -19,6 +19,8 @@ class GestureStatusPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasGesture = gestureConfidence > 0;
+    final showGestureText =
+        gestureText != 'Show your hand' || detectedHandsCount == 0;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -45,16 +47,18 @@ class GestureStatusPanel extends StatelessWidget {
                 color: hasGesture ? const Color(0xFF00FB46) : Colors.white,
                 size: 34,
               ),
-              const SizedBox(height: 10),
-              Text(
-                gestureText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: hasGesture ? const Color(0xFF00FB46) : Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
+              if (showGestureText) ...[
+                const SizedBox(height: 10),
+                Text(
+                  gestureText,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: hasGesture ? const Color(0xFF00FB46) : Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 8),
               Text(
                 _subtitleText(),
