@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/constants/hand_gesture_thresholds.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/hand_geometry_service.dart';
 import 'package:hand_detection/hand_detection.dart';
 
@@ -115,6 +116,188 @@ void main() {
           _handWithLandmark(score: 0.2),
           _handWithLandmark(score: double.nan),
         ]),
+        isNull,
+      );
+    });
+  });
+
+  group('HandGeometryService palm-side orientation', () {
+    const geometry = HandGeometryService();
+
+    bool isPalm(Hand hand, {bool mirrorHorizontally = false}) =>
+        geometry.isPalmSideFacingCamera(
+          hand: hand,
+          mirrorHorizontally: mirrorHorizontally,
+          minNormalizedCross: 0.10,
+          minLandmarkVisibility: 0.5,
+        );
+
+    test('accepts right and left palms with chirality correction', () {
+      expect(isPalm(_palmOrientationHand()), isTrue);
+      expect(
+        isPalm(
+          _palmOrientationHand(mirrorPose: true, handedness: Handedness.left),
+        ),
+        isTrue,
+      );
+    });
+
+    test('accepts a mirrored right palm only with coordinate correction', () {
+      final mirroredPalm = _palmOrientationHand(mirrorPose: true);
+
+      expect(isPalm(mirroredPalm), isFalse);
+      expect(isPalm(mirroredPalm, mirrorHorizontally: true), isTrue);
+    });
+
+    test('fails closed for unknown handedness and unreliable anchors', () {
+      expect(isPalm(_palmOrientationHand(handedness: null)), isFalse);
+      expect(
+        isPalm(
+          _palmOrientationHand(missingTypes: const {HandLandmarkType.wrist}),
+        ),
+        isFalse,
+      );
+      expect(
+        isPalm(
+          _palmOrientationHand(
+            lowVisibilityTypes: const {HandLandmarkType.pinkyMCP},
+          ),
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('HandGeometryService palm landmark circle', () {
+    const geometry = HandGeometryService();
+
+    PalmLandmarkCircleEvaluation? evaluate(
+      Hand hand, {
+      Size imageSize = const Size(200, 300),
+    }) => geometry.evaluatePalmLandmarkCircle2D(
+      hand: hand,
+      imageSize: imageSize,
+      requiredTypes: HandGestureThresholds.directionCompactPalmCircleTypes,
+      radiusPalmWidthRatio:
+          HandGestureThresholds.directionCompactPalmCircleRadiusPalmWidthRatio,
+      minimumRadiusImageShortSideRatio:
+          HandGestureThresholds
+              .directionCompactPalmCircleMinImageShortSideRatio,
+    );
+
+    test('accepts point 5 and points 9-20 inside the palm-scaled circle', () {
+      final result = evaluate(_compactCircleHand());
+
+      expect(result, isNotNull);
+      expect(result!.allRequiredInside, isTrue);
+      expect(result.center, const Offset(145, 208));
+      expect(result.palmScaledRadius, 81);
+      expect(result.minimumRadius, 30);
+      expect(result.radius, 81);
+      expect(result.minimumRadiusApplied, isFalse);
+      expect(result.insideCount, result.requiredCount);
+      expect(result.requiredCount, 13);
+    });
+
+    test('clamps a small hand to 15% of the image shorter side', () {
+      final result = evaluate(
+        _compactCircleHand(),
+        imageSize: const Size(1000, 800),
+      );
+
+      expect(result, isNotNull);
+      expect(result!.palmScaledRadius, 81);
+      expect(result.minimumRadius, 120);
+      expect(result.radius, 120);
+      expect(result.minimumRadiusApplied, isTrue);
+    });
+
+    test('uses the same minimum in portrait and landscape frames', () {
+      final portrait = evaluate(
+        _compactCircleHand(),
+        imageSize: const Size(800, 1000),
+      );
+      final landscape = evaluate(
+        _compactCircleHand(),
+        imageSize: const Size(1000, 800),
+      );
+
+      expect(portrait!.minimumRadius, 120);
+      expect(landscape!.minimumRadius, 120);
+      expect(portrait.radius, landscape.radius);
+    });
+
+    test('keeps the shared radius at the exact equality boundary', () {
+      final result = evaluate(
+        _compactCircleHand(),
+        imageSize: const Size(540, 800),
+      );
+
+      expect(result, isNotNull);
+      expect(result!.palmScaledRadius, 81);
+      expect(result.minimumRadius, 81);
+      expect(result.radius, 81);
+      expect(result.minimumRadiusApplied, isFalse);
+    });
+
+    test('accepts the final-radius boundary and rejects beyond it', () {
+      final onBoundary = evaluate(
+        _compactCircleHand(
+          overrides: const {HandLandmarkType.pinkyTip: Offset(265, 208)},
+        ),
+        imageSize: const Size(1000, 800),
+      );
+      final beyondBoundary = evaluate(
+        _compactCircleHand(
+          overrides: const {HandLandmarkType.pinkyTip: Offset(265.01, 208)},
+        ),
+        imageSize: const Size(1000, 800),
+      );
+
+      expect(onBoundary!.radius, 120);
+      expect(onBoundary.insideByType[HandLandmarkType.pinkyTip], isTrue);
+      expect(beyondBoundary!.insideByType[HandLandmarkType.pinkyTip], isFalse);
+    });
+
+    test('reports a visible point outside the palm-scaled circle', () {
+      final result = evaluate(
+        _compactCircleHand(
+          overrides: const {HandLandmarkType.pinkyTip: Offset(190, 70)},
+        ),
+      );
+
+      expect(result, isNotNull);
+      expect(result!.allRequiredInside, isFalse);
+      expect(result.insideByType[HandLandmarkType.pinkyTip], isFalse);
+    });
+
+    test('fails closed when an MCP circle anchor is missing', () {
+      expect(
+        evaluate(
+          _compactCircleHand(
+            missingTypes: const {HandLandmarkType.ringFingerMCP},
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('fails closed when wrist point 0 is missing', () {
+      expect(
+        evaluate(
+          _compactCircleHand(missingTypes: const {HandLandmarkType.wrist}),
+        ),
+        isNull,
+      );
+    });
+
+    test('fails closed for invalid image dimensions', () {
+      expect(
+        evaluate(_compactCircleHand(), imageSize: const Size(0, 400)),
+        isNull,
+      );
+      expect(
+        evaluate(_compactCircleHand(), imageSize: const Size(double.nan, 400)),
         isNull,
       );
     });
@@ -938,6 +1121,84 @@ Hand _handWithoutLandmarks({double score = 1}) {
     boundingBox: BoundingBox.ltrb(0, 0, 400, 400),
     score: score,
     landmarks: const [],
+    imageWidth: 400,
+    imageHeight: 400,
+    handedness: Handedness.right,
+  );
+}
+
+Hand _palmOrientationHand({
+  bool mirrorPose = false,
+  Handedness? handedness = Handedness.right,
+  Set<HandLandmarkType> missingTypes = const {},
+  Set<HandLandmarkType> lowVisibilityTypes = const {},
+}) {
+  const mirrorAxisX = 110.0;
+  final landmarks = <HandLandmark>[];
+
+  void add(HandLandmarkType type, Offset point) {
+    if (missingTypes.contains(type)) return;
+    final x = mirrorPose ? 2 * mirrorAxisX - point.dx : point.dx;
+    landmarks.add(
+      HandLandmark(
+        type: type,
+        x: x,
+        y: point.dy,
+        z: 0,
+        visibility: lowVisibilityTypes.contains(type) ? 0.2 : 1,
+      ),
+    );
+  }
+
+  add(HandLandmarkType.wrist, const Offset(100, 180));
+  add(HandLandmarkType.indexFingerMCP, const Offset(80, 120));
+  add(HandLandmarkType.pinkyMCP, const Offset(140, 120));
+
+  return Hand(
+    boundingBox: BoundingBox.ltrb(50, 80, 170, 200),
+    score: 1,
+    landmarks: landmarks,
+    imageWidth: 400,
+    imageHeight: 400,
+    handedness: handedness,
+  );
+}
+
+Hand _compactCircleHand({
+  Map<HandLandmarkType, Offset> overrides = const {},
+  Set<HandLandmarkType> missingTypes = const {},
+}) {
+  const positions = <HandLandmarkType, Offset>{
+    HandLandmarkType.wrist: Offset(145, 240),
+    HandLandmarkType.indexFingerMCP: Offset(100, 200),
+    HandLandmarkType.middleFingerMCP: Offset(130, 200),
+    HandLandmarkType.middleFingerPIP: Offset(130, 170),
+    HandLandmarkType.middleFingerDIP: Offset(140, 180),
+    HandLandmarkType.middleFingerTip: Offset(135, 195),
+    HandLandmarkType.ringFingerMCP: Offset(160, 200),
+    HandLandmarkType.ringFingerPIP: Offset(160, 170),
+    HandLandmarkType.ringFingerDIP: Offset(170, 180),
+    HandLandmarkType.ringFingerTip: Offset(165, 195),
+    HandLandmarkType.pinkyMCP: Offset(190, 200),
+    HandLandmarkType.pinkyPIP: Offset(185, 170),
+    HandLandmarkType.pinkyDIP: Offset(190, 180),
+    HandLandmarkType.pinkyTip: Offset(185, 195),
+  };
+
+  return Hand(
+    boundingBox: BoundingBox.ltrb(70, 100, 220, 240),
+    score: 1,
+    landmarks: [
+      for (final entry in positions.entries)
+        if (!missingTypes.contains(entry.key))
+          HandLandmark(
+            type: entry.key,
+            x: (overrides[entry.key] ?? entry.value).dx,
+            y: (overrides[entry.key] ?? entry.value).dy,
+            z: 0,
+            visibility: 1,
+          ),
+    ],
     imageWidth: 400,
     imageHeight: 400,
     handedness: Handedness.right,

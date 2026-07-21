@@ -50,6 +50,38 @@ class DescendingFingerChainEvaluation {
       adjacentPairMatches.every((pairMatches) => pairMatches);
 }
 
+/// A palm-scaled, frame-minimum-clamped 2D circle and its required landmarks.
+class PalmLandmarkCircleEvaluation {
+  const PalmLandmarkCircleEvaluation({
+    required this.center,
+    required this.palmWidth,
+    required this.palmScaledRadius,
+    required this.minimumRadius,
+    required this.radius,
+    required this.minimumRadiusApplied,
+    required this.insideByType,
+    required this.missingTypes,
+  });
+
+  final Offset center;
+  final double palmWidth;
+  final double palmScaledRadius;
+  final double minimumRadius;
+  final double radius;
+  final bool minimumRadiusApplied;
+  final Map<HandLandmarkType, bool> insideByType;
+  final Set<HandLandmarkType> missingTypes;
+
+  int get insideCount => insideByType.values.where((inside) => inside).length;
+
+  int get requiredCount => insideByType.length + missingTypes.length;
+
+  bool get allRequiredInside =>
+      missingTypes.isEmpty &&
+      insideByType.length == requiredCount &&
+      insideByType.values.every((inside) => inside);
+}
+
 /// Shared landmark geometry utilities used by all gesture detectors.
 class HandGeometryService {
   const HandGeometryService();
@@ -128,6 +160,65 @@ class HandGeometryService {
     return landmark;
   }
 
+  /// Uses handedness and wrist/index/pinky chirality to prove that the palm
+  /// side, rather than the back of the hand, faces the camera.
+  ///
+  /// Missing handedness or unreliable palm anchors fail closed.
+  bool isPalmSideFacingCamera({
+    required Hand hand,
+    required bool mirrorHorizontally,
+    required double minNormalizedCross,
+    double minLandmarkVisibility = HandGestureThresholds.minLandmarkVisibility,
+  }) {
+    if (!minNormalizedCross.isFinite ||
+        minNormalizedCross < 0 ||
+        minNormalizedCross > 1) {
+      return false;
+    }
+
+    final handedness = hand.handedness;
+    final wrist = visibleLandmark(
+      hand,
+      HandLandmarkType.wrist,
+      minVisibility: minLandmarkVisibility,
+    );
+    final indexMcp = visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerMCP,
+      minVisibility: minLandmarkVisibility,
+    );
+    final pinkyMcp = visibleLandmark(
+      hand,
+      HandLandmarkType.pinkyMCP,
+      minVisibility: minLandmarkVisibility,
+    );
+    if (handedness == null ||
+        wrist == null ||
+        indexMcp == null ||
+        pinkyMcp == null) {
+      return false;
+    }
+
+    var expectedPalmSide = handedness == Handedness.right ? 1.0 : -1.0;
+    if (mirrorHorizontally) expectedPalmSide *= -1;
+
+    final indexX = indexMcp.x - wrist.x;
+    final indexY = indexMcp.y - wrist.y;
+    final pinkyX = pinkyMcp.x - wrist.x;
+    final pinkyY = pinkyMcp.y - wrist.y;
+    final indexLength = math.sqrt(indexX * indexX + indexY * indexY);
+    final pinkyLength = math.sqrt(pinkyX * pinkyX + pinkyY * pinkyY);
+    if (indexLength <= _ratioBoundaryTolerance ||
+        pinkyLength <= _ratioBoundaryTolerance) {
+      return false;
+    }
+
+    final normalizedCross =
+        (indexX * pinkyY - indexY * pinkyX) / (indexLength * pinkyLength);
+    return normalizedCross * expectedPalmSide + _ratioBoundaryTolerance >=
+        minNormalizedCross;
+  }
+
   /// Averages visible wrist and knuckle points into a 2D palm center.
   Offset? palmCenter(Hand hand) {
     final points = <HandLandmark>[];
@@ -148,6 +239,96 @@ class HandGeometryService {
     return Offset(
       average(points.map((point) => point.x)),
       average(points.map((point) => point.y)),
+    );
+  }
+
+  /// Builds a 2D circle from palm points and evaluates required landmarks.
+  ///
+  /// The center is the mean of points 0, 5, 9, 13, and 17. The scale reference
+  /// remains the largest pairwise distance between MCP points 5, 9, 13, 17.
+  /// The final radius is the larger of the palm-scaled radius and the configured
+  /// fraction of the detection image's shorter dimension.
+  PalmLandmarkCircleEvaluation? evaluatePalmLandmarkCircle2D({
+    required Hand hand,
+    required List<HandLandmarkType> requiredTypes,
+    required double radiusPalmWidthRatio,
+    required Size imageSize,
+    required double minimumRadiusImageShortSideRatio,
+  }) {
+    if (!radiusPalmWidthRatio.isFinite ||
+        radiusPalmWidthRatio <= 0 ||
+        !minimumRadiusImageShortSideRatio.isFinite ||
+        minimumRadiusImageShortSideRatio < 0 ||
+        !imageSize.width.isFinite ||
+        imageSize.width <= 0 ||
+        !imageSize.height.isFinite ||
+        imageSize.height <= 0) {
+      return null;
+    }
+
+    final mcpAnchors = HandGestureThresholds.palmReferenceTypes
+        .map((type) => visibleLandmark(hand, type))
+        .toList(growable: false);
+    final wrist = visibleLandmark(hand, HandLandmarkType.wrist);
+    if (wrist == null || mcpAnchors.any((anchor) => anchor == null)) {
+      return null;
+    }
+
+    final visibleMcpAnchors = mcpAnchors.cast<HandLandmark>();
+    final centerAnchors = [wrist, ...visibleMcpAnchors];
+    final center = Offset(
+      average(centerAnchors.map((anchor) => anchor.x)),
+      average(centerAnchors.map((anchor) => anchor.y)),
+    );
+    var palmWidth = 0.0;
+    for (var first = 0; first < visibleMcpAnchors.length; first += 1) {
+      for (
+        var second = first + 1;
+        second < visibleMcpAnchors.length;
+        second += 1
+      ) {
+        palmWidth = math.max(
+          palmWidth,
+          distanceBetweenLandmarks(
+            visibleMcpAnchors[first],
+            visibleMcpAnchors[second],
+          ),
+        );
+      }
+    }
+    if (!palmWidth.isFinite || palmWidth <= _ratioBoundaryTolerance) {
+      return null;
+    }
+
+    final palmScaledRadius = palmWidth * radiusPalmWidthRatio;
+    final minimumRadius =
+        math.min(imageSize.width, imageSize.height) *
+        minimumRadiusImageShortSideRatio;
+    if (!palmScaledRadius.isFinite || !minimumRadius.isFinite) return null;
+
+    final minimumRadiusApplied = minimumRadius > palmScaledRadius;
+    final radius = math.max(palmScaledRadius, minimumRadius);
+    final insideByType = <HandLandmarkType, bool>{};
+    final missingTypes = <HandLandmarkType>{};
+    for (final type in requiredTypes) {
+      final landmark = visibleLandmark(hand, type);
+      if (landmark == null) {
+        missingTypes.add(type);
+        continue;
+      }
+      insideByType[type] =
+          distance(landmark, center) <= radius + _ratioBoundaryTolerance;
+    }
+
+    return PalmLandmarkCircleEvaluation(
+      center: center,
+      palmWidth: palmWidth,
+      palmScaledRadius: palmScaledRadius,
+      minimumRadius: minimumRadius,
+      radius: radius,
+      minimumRadiusApplied: minimumRadiusApplied,
+      insideByType: Map.unmodifiable(insideByType),
+      missingTypes: Set.unmodifiable(missingTypes),
     );
   }
 
@@ -1101,12 +1282,11 @@ class HandGeometryService {
 
   /// Builds the convex hull around points using a monotonic chain algorithm.
   List<Offset> convexHull(List<Offset> points) {
-    final sortedPoints = [...points]
-      ..sort((a, b) {
-        final xCompare = a.dx.compareTo(b.dx);
-        if (xCompare != 0) return xCompare;
-        return a.dy.compareTo(b.dy);
-      });
+    final sortedPoints = [...points]..sort((a, b) {
+      final xCompare = a.dx.compareTo(b.dx);
+      if (xCompare != 0) return xCompare;
+      return a.dy.compareTo(b.dy);
+    });
 
     final uniquePoints = <Offset>[];
 

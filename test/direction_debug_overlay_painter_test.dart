@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/constants/hand_gesture_thresholds.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/enums/hand_move_direction.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/services/hand_geometry_service.dart';
 import 'package:gesture_detector/hand_gesture_features/presentation/painters/direction_debug_overlay_painter.dart';
 import 'package:hand_detection/hand_detection.dart';
 
@@ -89,6 +91,36 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('passes the frame-scaled minimum into the painted circle', (
+    tester,
+  ) async {
+    final geometry = _CapturingCircleGeometry();
+
+    await tester.pumpWidget(
+      CustomPaint(
+        size: const Size(320, 480),
+        painter: DirectionDebugOverlayPainter(
+          hand: _directionHand(),
+          imageSize: const Size(600, 800),
+          mirrorHorizontally: false,
+          candidateDirection: HandMoveDirection.right,
+          acceptedDirection: HandMoveDirection.none,
+          debugSummary: 'direction: confirming right 1/3',
+          geometry: geometry,
+        ),
+      ),
+    );
+
+    expect(geometry.receivedImageSize, const Size(600, 800));
+    expect(
+      geometry.receivedMinimumRatio,
+      HandGestureThresholds.directionCompactPalmCircleMinImageShortSideRatio,
+    );
+    expect(geometry.lastEvaluation!.minimumRadius, 90);
+    expect(geometry.lastEvaluation!.minimumRadiusApplied, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   test('repaints when live direction debug inputs change', () {
     final painter = DirectionDebugOverlayPainter(
       hand: _directionHand(),
@@ -134,6 +166,33 @@ void main() {
           candidateDirection: painter.candidateDirection,
           acceptedDirection: painter.acceptedDirection,
           debugSummary: 'different hidden summary',
+        ),
+      ),
+      isTrue,
+    );
+  });
+
+  test('repaints when the compact palm circle debug setting changes', () {
+    final painter = DirectionDebugOverlayPainter(
+      hand: _directionHand(),
+      imageSize: const Size(200, 300),
+      mirrorHorizontally: false,
+      candidateDirection: HandMoveDirection.right,
+      acceptedDirection: HandMoveDirection.none,
+      debugSummary: 'direction: confirming right 1/3',
+      showPalmCircle: true,
+    );
+
+    expect(
+      painter.shouldRepaint(
+        DirectionDebugOverlayPainter(
+          hand: painter.hand,
+          imageSize: painter.imageSize,
+          mirrorHorizontally: painter.mirrorHorizontally,
+          candidateDirection: painter.candidateDirection,
+          acceptedDirection: painter.acceptedDirection,
+          debugSummary: painter.debugSummary,
+          showPalmCircle: false,
         ),
       ),
       isTrue,
@@ -274,4 +333,29 @@ Hand _directionHand({bool includeAngleLandmarks = true}) {
     imageHeight: 300,
     handedness: Handedness.right,
   );
+}
+
+class _CapturingCircleGeometry extends HandGeometryService {
+  Size? receivedImageSize;
+  double? receivedMinimumRatio;
+  PalmLandmarkCircleEvaluation? lastEvaluation;
+
+  @override
+  PalmLandmarkCircleEvaluation? evaluatePalmLandmarkCircle2D({
+    required Hand hand,
+    required List<HandLandmarkType> requiredTypes,
+    required double radiusPalmWidthRatio,
+    required Size imageSize,
+    required double minimumRadiusImageShortSideRatio,
+  }) {
+    receivedImageSize = imageSize;
+    receivedMinimumRatio = minimumRadiusImageShortSideRatio;
+    return lastEvaluation = super.evaluatePalmLandmarkCircle2D(
+      hand: hand,
+      requiredTypes: requiredTypes,
+      radiusPalmWidthRatio: radiusPalmWidthRatio,
+      imageSize: imageSize,
+      minimumRadiusImageShortSideRatio: minimumRadiusImageShortSideRatio,
+    );
+  }
 }

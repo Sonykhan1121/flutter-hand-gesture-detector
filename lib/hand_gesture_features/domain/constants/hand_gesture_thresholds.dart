@@ -263,8 +263,8 @@ abstract final class HandGestureThresholds {
   static const double zoomIndexAboveThumbMinGapRatio = 0.02;
 
   /// Minimum normalized wrist/index/pinky orientation needed to prove that
-  /// the palm, rather than the back of the hand, faces the camera for Zoom In.
-  static const double zoomInMinPalmSideCross = 0.10;
+  /// the palm, rather than the back of the hand, faces the camera for zoom.
+  static const double zoomMinPalmSideCross = 0.10;
 
   /// Palm-extension requirement for the horizontal pointing directions.
   /// A tip at or closer than the palm plane uses 10%. The requirement grows
@@ -303,9 +303,36 @@ abstract final class HandGestureThresholds {
   static const double movingDownActiveMinDirectionAngleDegrees = 235.0;
   static const double movingDownActiveMaxDirectionAngleDegrees = 305.0;
 
-  /// A direction can tolerate one uncertain/unavailable middle/ring/pinky.
-  /// Any finger that is visible and clearly open still rejects the pose.
-  static const int directionMinConfirmedFoldedFingerCount = 2;
+  /// One confirmed folded middle/ring/pinky is enough for a direction.
+  /// The other two may be open, uncertain, or unavailable.
+  static const int directionMinConfirmedFoldedFingerCount = 1;
+
+  /// Alternative compact-palm direction shape. Point 5 and points 9-20 must
+  /// fit inside a circle centered on palm points 0, 5, 9, 13, and 17. Index
+  /// points 6-8 are deliberately excluded because they form the pointing ray.
+  static const List<HandLandmarkType> directionCompactPalmCircleTypes = [
+    HandLandmarkType.indexFingerMCP,
+    HandLandmarkType.middleFingerMCP,
+    HandLandmarkType.middleFingerPIP,
+    HandLandmarkType.middleFingerDIP,
+    HandLandmarkType.middleFingerTip,
+    HandLandmarkType.ringFingerMCP,
+    HandLandmarkType.ringFingerPIP,
+    HandLandmarkType.ringFingerDIP,
+    HandLandmarkType.ringFingerTip,
+    HandLandmarkType.pinkyMCP,
+    HandLandmarkType.pinkyPIP,
+    HandLandmarkType.pinkyDIP,
+    HandLandmarkType.pinkyTip,
+  ];
+
+  /// White debug-circle radius relative to the 2D MCP palm width. Change this
+  /// single value after live testing to make the compact circle larger/smaller.
+  static const double directionCompactPalmCircleRadiusPalmWidthRatio = 0.90;
+
+  /// Prevents a far/small hand from collapsing the compact direction circle.
+  /// This is a radius ratio of the detection frame's shorter dimension.
+  static const double directionCompactPalmCircleMinImageShortSideRatio = 0.15;
 
   /// Maximum squared MCP-to-tip reach relative to squared palm width.
   /// This is the easier 85% reach boundary represented as 0.85².
@@ -405,7 +432,7 @@ abstract final class HandGestureThresholds {
   /// Camera-frame cadence, manual zoom step, and recording hold timings.
   static const Duration minFrameProcessInterval = Duration(milliseconds: 50);
   static const double zoomStep = 0.2;
-  static const double gestureZoomStep = 0.08;
+  static const double gestureZoomStep = 0.10;
   static const Duration recordStartHoldDuration = Duration(seconds: 1);
   static const Duration recordPauseHoldDuration = Duration(seconds: 1);
   static const Duration recordStopHoldDuration = Duration(seconds: 2);

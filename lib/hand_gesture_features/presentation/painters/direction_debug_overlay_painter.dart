@@ -16,6 +16,7 @@ class DirectionDebugOverlayPainter extends CustomPainter {
     required this.candidateDirection,
     required this.acceptedDirection,
     required this.debugSummary,
+    this.showPalmCircle = true,
     this.previewQuarterTurns = 0,
     this.useRecordingPreviewMapping = false,
     this.geometry = const HandGeometryService(),
@@ -27,6 +28,7 @@ class DirectionDebugOverlayPainter extends CustomPainter {
   final HandMoveDirection candidateDirection;
   final HandMoveDirection acceptedDirection;
   final String debugSummary;
+  final bool showPalmCircle;
   final int previewQuarterTurns;
   final bool useRecordingPreviewMapping;
   final HandGeometryService geometry;
@@ -35,6 +37,22 @@ class DirectionDebugOverlayPainter extends CustomPainter {
   static const _green = Color(0xFF69F0AE);
   static const _red = Color(0xFFFF5252);
   static const _yellow = Color(0xFFFFD740);
+
+  static const Map<HandLandmarkType, String> _compactCirclePointNumbers = {
+    HandLandmarkType.indexFingerMCP: '5',
+    HandLandmarkType.middleFingerMCP: '9',
+    HandLandmarkType.middleFingerPIP: '10',
+    HandLandmarkType.middleFingerDIP: '11',
+    HandLandmarkType.middleFingerTip: '12',
+    HandLandmarkType.ringFingerMCP: '13',
+    HandLandmarkType.ringFingerPIP: '14',
+    HandLandmarkType.ringFingerDIP: '15',
+    HandLandmarkType.ringFingerTip: '16',
+    HandLandmarkType.pinkyMCP: '17',
+    HandLandmarkType.pinkyPIP: '18',
+    HandLandmarkType.pinkyDIP: '19',
+    HandLandmarkType.pinkyTip: '20',
+  };
 
   static const _foldFingerSpecs = [
     _FoldFingerSpec(
@@ -91,25 +109,51 @@ class DirectionDebugOverlayPainter extends CustomPainter {
 
     final mapPoint = _pointMapper(size);
     final mcpAngle = _visibleIndexDirectionAngleDegrees(currentHand);
-    final angleSector = mcpAngle == null
-        ? HandMoveDirection.none
-        : _directionForAngle(mcpAngle);
-    final nearestDirection = mcpAngle == null
-        ? HandMoveDirection.none
-        : _nearestDirectionForAngle(mcpAngle);
-    final displayDirection = acceptedDirection != HandMoveDirection.none
-        ? acceptedDirection
-        : candidateDirection != HandMoveDirection.none
-        ? candidateDirection
-        : angleSector != HandMoveDirection.none
-        ? angleSector
-        : nearestDirection;
+    final angleSector =
+        mcpAngle == null
+            ? HandMoveDirection.none
+            : _directionForAngle(mcpAngle);
+    final nearestDirection =
+        mcpAngle == null
+            ? HandMoveDirection.none
+            : _nearestDirectionForAngle(mcpAngle);
+    final displayDirection =
+        acceptedDirection != HandMoveDirection.none
+            ? acceptedDirection
+            : candidateDirection != HandMoveDirection.none
+            ? candidateDirection
+            : angleSector != HandMoveDirection.none
+            ? angleSector
+            : nearestDirection;
     final directionAngle = _visibleDirectionAngleDegrees(
       currentHand,
       displayDirection,
     );
     final indexEvaluation = _evaluateIndex(currentHand, displayDirection);
     final foldEvaluations = _evaluateFoldedFingers(currentHand);
+    final compactCircleEvaluation =
+        showPalmCircle
+            ? geometry.evaluatePalmLandmarkCircle2D(
+              hand: currentHand,
+              imageSize: imageSize,
+              requiredTypes:
+                  HandGestureThresholds.directionCompactPalmCircleTypes,
+              radiusPalmWidthRatio:
+                  HandGestureThresholds
+                      .directionCompactPalmCircleRadiusPalmWidthRatio,
+              minimumRadiusImageShortSideRatio:
+                  HandGestureThresholds
+                      .directionCompactPalmCircleMinImageShortSideRatio,
+            )
+            : null;
+
+    if (compactCircleEvaluation != null) {
+      _drawCompactPalmCircleOutline(
+        canvas: canvas,
+        evaluation: compactCircleEvaluation,
+        mapPoint: mapPoint,
+      );
+    }
 
     _drawIndexAxis(
       canvas: canvas,
@@ -126,6 +170,14 @@ class DirectionDebugOverlayPainter extends CustomPainter {
         mapPoint: mapPoint,
       );
     }
+    if (compactCircleEvaluation != null) {
+      _drawCompactPalmCirclePoints(
+        canvas: canvas,
+        hand: currentHand,
+        evaluation: compactCircleEvaluation,
+        mapPoint: mapPoint,
+      );
+    }
     _drawStatusPanel(
       canvas: canvas,
       size: size,
@@ -133,15 +185,17 @@ class DirectionDebugOverlayPainter extends CustomPainter {
       directionAngle: directionAngle,
       indexEvaluation: indexEvaluation,
       foldEvaluations: foldEvaluations,
+      compactCircleEvaluation: compactCircleEvaluation,
     );
     canvas.restore();
   }
 
   void _drawDirectionSectors(Canvas canvas, Size size) {
-    final guidePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = const Color(0xCCFFFFFF);
+    final guidePaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..color = const Color(0xCCFFFFFF);
     canvas.drawLine(Offset.zero, Offset(size.width, size.height), guidePaint);
     canvas.drawLine(Offset(size.width, 0), Offset(0, size.height), guidePaint);
 
@@ -192,11 +246,12 @@ class DirectionDebugOverlayPainter extends CustomPainter {
   }) {
     final isAccepted = acceptedDirection == direction;
     final isCandidate = !isAccepted && candidateDirection == direction;
-    final color = isAccepted
-        ? _green
-        : isCandidate
-        ? _yellow
-        : Colors.white.withValues(alpha: 0.86);
+    final color =
+        isAccepted
+            ? _green
+            : isCandidate
+            ? _yellow
+            : Colors.white.withValues(alpha: 0.86);
     final painter = TextPainter(
       text: TextSpan(
         text:
@@ -220,6 +275,85 @@ class DirectionDebugOverlayPainter extends CustomPainter {
   }
 
   String _degrees(double value) => '${value.toStringAsFixed(0)}°';
+
+  void _drawCompactPalmCircleOutline({
+    required Canvas canvas,
+    required PalmLandmarkCircleEvaluation evaluation,
+    required Offset Function(Offset) mapPoint,
+  }) {
+    final mappedCenter = mapPoint(evaluation.center);
+    final mappedRadiusX =
+        (mapPoint(evaluation.center + Offset(evaluation.radius, 0)) -
+                mappedCenter)
+            .distance;
+    final mappedRadiusY =
+        (mapPoint(evaluation.center + Offset(0, evaluation.radius)) -
+                mappedCenter)
+            .distance;
+    final radius = (mappedRadiusX + mappedRadiusY) / 2;
+    if (!radius.isFinite || radius <= 0) return;
+
+    canvas.drawCircle(
+      mappedCenter,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..color = Colors.black.withValues(alpha: 0.62),
+    );
+    canvas.drawCircle(
+      mappedCenter,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..color = Colors.white,
+    );
+    _drawPillText(
+      canvas,
+      text:
+          evaluation.minimumRadiusApplied
+              ? 'Palm circle MIN '
+                  '${(HandGestureThresholds.directionCompactPalmCircleMinImageShortSideRatio * 100).toStringAsFixed(0)}% frame'
+              : 'Palm circle '
+                  '${(HandGestureThresholds.directionCompactPalmCircleRadiusPalmWidthRatio * 100).toStringAsFixed(0)}% palm',
+      center: mappedCenter - Offset(0, radius + 14),
+      color: Colors.white,
+    );
+  }
+
+  void _drawCompactPalmCirclePoints({
+    required Canvas canvas,
+    required Hand hand,
+    required PalmLandmarkCircleEvaluation evaluation,
+    required Offset Function(Offset) mapPoint,
+  }) {
+    for (final entry in _compactCirclePointNumbers.entries) {
+      final landmark = geometry.visibleLandmark(hand, entry.key);
+      if (landmark == null) continue;
+      final point = mapPoint(Offset(landmark.x, landmark.y));
+      final isInside = evaluation.insideByType[entry.key] ?? false;
+      final color = isInside ? _green : _red;
+      canvas.drawCircle(point, 6, Paint()..color = color);
+      canvas.drawCircle(
+        point,
+        6,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = Colors.white,
+      );
+      _paintText(
+        canvas,
+        text: entry.value,
+        offset: point + const Offset(7, -17),
+        maxWidth: 28,
+        color: color,
+        fontSize: 10,
+        fontWeight: FontWeight.w900,
+      );
+    }
+  }
 
   void _drawIndexAxis({
     required Canvas canvas,
@@ -250,11 +384,12 @@ class DirectionDebugOverlayPainter extends CustomPainter {
     final axisDirection = axisVector / axisDistance;
     final extent =
         math.sqrt(size.width * size.width + size.height * size.height) * 2;
-    final axisPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..color = _cyan;
+    final axisPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4
+          ..strokeCap = StrokeCap.round
+          ..color = _cyan;
 
     canvas.drawLine(
       base - axisDirection * extent,
@@ -343,11 +478,12 @@ class DirectionDebugOverlayPainter extends CustomPainter {
           return _FoldDebugEvaluation(
             spec: spec,
             chain: chain,
-            state: isFolded
-                ? _FoldDebugState.folded
-                : isOpen
-                ? _FoldDebugState.open
-                : _FoldDebugState.uncertain,
+            state:
+                isFolded
+                    ? _FoldDebugState.folded
+                    : isOpen
+                    ? _FoldDebugState.open
+                    : _FoldDebugState.uncertain,
           );
         })
         .toList(growable: false);
@@ -366,11 +502,12 @@ class DirectionDebugOverlayPainter extends CustomPainter {
     }
     if (visibleEntries.isEmpty) return;
 
-    final pairPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round
-      ..color = _red.withValues(alpha: 0.86);
+    final pairPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..strokeCap = StrokeCap.round
+          ..color = _red.withValues(alpha: 0.86);
     // Every pair is connected so it is visible which landmark distances are
     // being judged for the folded-finger area/compression rules.
     for (var first = 0; first < visibleEntries.length; first += 1) {
@@ -409,11 +546,12 @@ class DirectionDebugOverlayPainter extends CustomPainter {
             canvas,
             end: mcp,
             direction: direction,
-            paint: Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 3
-              ..strokeCap = StrokeCap.round
-              ..color = _red,
+            paint:
+                Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 3
+                  ..strokeCap = StrokeCap.round
+                  ..color = _red,
           );
         }
       }
@@ -470,9 +608,10 @@ class DirectionDebugOverlayPainter extends CustomPainter {
         geometry.distanceBetweenLandmarks(chain[0], chain[1]) +
         geometry.distanceBetweenLandmarks(chain[1], chain[2]) +
         geometry.distanceBetweenLandmarks(chain[2], chain[3]);
-    final straightness = pathLength > 0
-        ? geometry.distanceBetweenLandmarks(chain[0], chain[3]) / pathLength
-        : 0.0;
+    final straightness =
+        pathLength > 0
+            ? geometry.distanceBetweenLandmarks(chain[0], chain[3]) / pathLength
+            : 0.0;
 
     switch (direction) {
       case HandMoveDirection.left:
@@ -485,11 +624,12 @@ class DirectionDebugOverlayPainter extends CustomPainter {
                 HandGestureThresholds.movingLeftIndexMinStraightnessRatio;
         return _IndexDebugEvaluation(
           matches: matches,
-          text: matches
-              ? 'Index: straight enough'
-              : 'Index: ${angle567.toStringAsFixed(0)}°/'
-                    '${angle678.toStringAsFixed(0)}°, '
-                    '${(straightness * 100).toStringAsFixed(0)}% straight',
+          text:
+              matches
+                  ? 'Index: straight enough'
+                  : 'Index: ${angle567.toStringAsFixed(0)}°/'
+                      '${angle678.toStringAsFixed(0)}°, '
+                      '${(straightness * 100).toStringAsFixed(0)}% straight',
           fix: 'Straighten points 5–8 toward LEFT',
         );
       case HandMoveDirection.right:
@@ -498,9 +638,10 @@ class DirectionDebugOverlayPainter extends CustomPainter {
             HandGestureThresholds.movingRightIndexMinStraightnessRatio;
         return _IndexDebugEvaluation(
           matches: matches,
-          text: matches
-              ? 'Index: straight enough'
-              : 'Index: ${(straightness * 100).toStringAsFixed(0)}% straight',
+          text:
+              matches
+                  ? 'Index: straight enough'
+                  : 'Index: ${(straightness * 100).toStringAsFixed(0)}% straight',
           fix: 'Straighten points 5–8 toward RIGHT',
         );
       case HandMoveDirection.up:
@@ -511,10 +652,11 @@ class DirectionDebugOverlayPainter extends CustomPainter {
                 HandGestureThresholds.verticalDirectionIndexMinAngleDegrees;
         return _IndexDebugEvaluation(
           matches: matches,
-          text: matches
-              ? 'Index: 5–8 straight enough'
-              : 'Index: 5–6–7 ${angle567.toStringAsFixed(0)}°, '
-                    '6–7–8 ${angle678.toStringAsFixed(0)}°',
+          text:
+              matches
+                  ? 'Index: 5–8 straight enough'
+                  : 'Index: 5–6–7 ${angle567.toStringAsFixed(0)}°, '
+                      '6–7–8 ${angle678.toStringAsFixed(0)}°',
           fix: 'Straighten 5–8; keep 6–7–8 at least 170°',
         );
       case HandMoveDirection.down:
@@ -523,18 +665,20 @@ class DirectionDebugOverlayPainter extends CustomPainter {
             HandGestureThresholds.verticalDirectionIndexMinAngleDegrees;
         return _IndexDebugEvaluation(
           matches: matches,
-          text: matches
-              ? 'Index: 6–8 straight enough'
-              : 'Index: 6–7–8 ${angle678.toStringAsFixed(0)}°',
+          text:
+              matches
+                  ? 'Index: 6–8 straight enough'
+                  : 'Index: 6–7–8 ${angle678.toStringAsFixed(0)}°',
           fix: 'Straighten points 6–8 to at least 170°',
         );
       case HandMoveDirection.none:
         final matches = straightness >= 0.80;
         return _IndexDebugEvaluation(
           matches: matches,
-          text: matches
-              ? 'Index: straight enough'
-              : 'Index: ${(straightness * 100).toStringAsFixed(0)}% straight',
+          text:
+              matches
+                  ? 'Index: straight enough'
+                  : 'Index: ${(straightness * 100).toStringAsFixed(0)}% straight',
           fix: 'Straighten points 5–8',
         );
     }
@@ -547,15 +691,17 @@ class DirectionDebugOverlayPainter extends CustomPainter {
     required double? directionAngle,
     required _IndexDebugEvaluation indexEvaluation,
     required List<_FoldDebugEvaluation> foldEvaluations,
+    required PalmLandmarkCircleEvaluation? compactCircleEvaluation,
   }) {
     final directionMatches =
         acceptedDirection != HandMoveDirection.none ||
         (displayDirection != HandMoveDirection.none &&
             directionAngle != null &&
             _isAngleForDirection(directionAngle, displayDirection));
-    final directionName = displayDirection == HandMoveDirection.none
-        ? 'NONE'
-        : displayDirection.name.toUpperCase();
+    final directionName =
+        displayDirection == HandMoveDirection.none
+            ? 'NONE'
+            : displayDirection.name.toUpperCase();
     final rows = <_StatusRow>[
       _StatusRow(
         matches: directionMatches,
@@ -565,6 +711,15 @@ class DirectionDebugOverlayPainter extends CustomPainter {
             '${directionAngle == null ? '' : ' (${directionAngle.toStringAsFixed(1)}°)'}',
       ),
       _StatusRow(matches: indexEvaluation.matches, text: indexEvaluation.text),
+      if (showPalmCircle)
+        _StatusRow(
+          matches: compactCircleEvaluation?.allRequiredInside ?? false,
+          text:
+              compactCircleEvaluation == null
+                  ? 'Palm circle: unavailable'
+                  : 'Palm circle: ${compactCircleEvaluation.insideCount}/'
+                      '${compactCircleEvaluation.requiredCount} inside',
+        ),
       for (final evaluation in foldEvaluations)
         _StatusRow(
           matches: evaluation.state == _FoldDebugState.folded,
@@ -576,6 +731,7 @@ class DirectionDebugOverlayPainter extends CustomPainter {
       directionMatches: directionMatches,
       indexEvaluation: indexEvaluation,
       foldEvaluations: foldEvaluations,
+      compactCircleEvaluation: compactCircleEvaluation,
     );
 
     final panelWidth = math.min(340.0, math.max(170.0, size.width - 24));
@@ -637,6 +793,7 @@ class DirectionDebugOverlayPainter extends CustomPainter {
     required bool directionMatches,
     required _IndexDebugEvaluation indexEvaluation,
     required List<_FoldDebugEvaluation> foldEvaluations,
+    required PalmLandmarkCircleEvaluation? compactCircleEvaluation,
   }) {
     if (!directionMatches) {
       if (displayDirection == HandMoveDirection.none) {
@@ -645,14 +802,17 @@ class DirectionDebugOverlayPainter extends CustomPainter {
       return 'Point the index farther ${displayDirection.name.toUpperCase()}';
     }
     if (!indexEvaluation.matches) return indexEvaluation.fix;
-    for (final evaluation in foldEvaluations) {
-      if (evaluation.state == _FoldDebugState.folded) continue;
-      final points = evaluation.spec.numbers;
-      if (evaluation.state == _FoldDebugState.unavailable) {
-        return 'Keep points ${points.join(', ')} visible';
+    final hasConfirmedFold = foldEvaluations.any(
+      (evaluation) => evaluation.state == _FoldDebugState.folded,
+    );
+    final compactCircleMatches =
+        compactCircleEvaluation?.allRequiredInside ?? false;
+    if (!hasConfirmedFold && !compactCircleMatches) {
+      if (compactCircleEvaluation != null &&
+          compactCircleEvaluation.missingTypes.isNotEmpty) {
+        return 'Keep points 5 and 9–20 visible';
       }
-      return 'Move points ${points[1]}, ${points[2]}, ${points[3]} '
-          'closer to point ${points[0]}';
+      return 'Put points 5 and 9–20 inside the white circle, or fold one finger';
     }
 
     final summary = debugSummary.toLowerCase();
@@ -751,25 +911,28 @@ class DirectionDebugOverlayPainter extends CustomPainter {
   }
 
   void _drawCheck(Canvas canvas, Offset center) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = _green;
-    final path = Path()
-      ..moveTo(center.dx - 8, center.dy)
-      ..lineTo(center.dx - 2, center.dy + 7)
-      ..lineTo(center.dx + 10, center.dy - 9);
+    final paint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = _green;
+    final path =
+        Path()
+          ..moveTo(center.dx - 8, center.dy)
+          ..lineTo(center.dx - 2, center.dy + 7)
+          ..lineTo(center.dx + 10, center.dy - 9);
     canvas.drawPath(path, paint);
   }
 
   void _drawCross(Canvas canvas, Offset center) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..color = _red;
+    final paint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4
+          ..strokeCap = StrokeCap.round
+          ..color = _red;
     canvas.drawLine(
       center + const Offset(-7, -7),
       center + const Offset(7, 7),
@@ -855,9 +1018,10 @@ class DirectionDebugOverlayPainter extends CustomPainter {
     Hand hand,
     HandMoveDirection direction,
   ) {
-    final baseType = direction == HandMoveDirection.down
-        ? HandLandmarkType.indexFingerPIP
-        : HandLandmarkType.indexFingerMCP;
+    final baseType =
+        direction == HandMoveDirection.down
+            ? HandLandmarkType.indexFingerPIP
+            : HandLandmarkType.indexFingerMCP;
     final base = geometry.visibleLandmark(hand, baseType);
     final tip = geometry.visibleLandmark(hand, HandLandmarkType.indexFingerTip);
     if (base == null || tip == null) return null;
@@ -1004,18 +1168,20 @@ class DirectionDebugOverlayPainter extends CustomPainter {
   }) {
     final normal = Offset(-direction.dy, direction.dx);
     final base = end - direction * 14;
-    final path = Path()
-      ..moveTo(end.dx, end.dy)
-      ..lineTo((base + normal * 6).dx, (base + normal * 6).dy)
-      ..moveTo(end.dx, end.dy)
-      ..lineTo((base - normal * 6).dx, (base - normal * 6).dy);
+    final path =
+        Path()
+          ..moveTo(end.dx, end.dy)
+          ..lineTo((base + normal * 6).dx, (base + normal * 6).dy)
+          ..moveTo(end.dx, end.dy)
+          ..lineTo((base - normal * 6).dx, (base - normal * 6).dy);
     canvas.drawPath(path, paint);
   }
 
   Offset Function(Offset) _pointMapper(Size canvasSize) {
-    final effectiveTurns = useRecordingPreviewMapping
-        ? _bestQuarterTurnsForCanvas(canvasSize)
-        : previewQuarterTurns % 4;
+    final effectiveTurns =
+        useRecordingPreviewMapping
+            ? _bestQuarterTurnsForCanvas(canvasSize)
+            : previewQuarterTurns % 4;
     final sourceSize = _sourceSizeForTurns(effectiveTurns);
     return (Offset sourcePoint) {
       final normalized = Offset(
@@ -1023,9 +1189,10 @@ class DirectionDebugOverlayPainter extends CustomPainter {
         sourcePoint.dy / imageSize.height,
       );
       if (!useRecordingPreviewMapping) {
-        final mirrored = mirrorHorizontally
-            ? Offset(1 - normalized.dx, normalized.dy)
-            : normalized;
+        final mirrored =
+            mirrorHorizontally
+                ? Offset(1 - normalized.dx, normalized.dy)
+                : normalized;
         final rotated = _rotateNormalizedPoint(mirrored, effectiveTurns);
         return Offset(
           rotated.dx * canvasSize.width,
@@ -1033,9 +1200,8 @@ class DirectionDebugOverlayPainter extends CustomPainter {
         );
       }
       final rotated = _rotateNormalizedPoint(normalized, effectiveTurns);
-      final mirrored = mirrorHorizontally
-          ? Offset(1 - rotated.dx, rotated.dy)
-          : rotated;
+      final mirrored =
+          mirrorHorizontally ? Offset(1 - rotated.dx, rotated.dy) : rotated;
       return _mapCoverPoint(
         normalizedPoint: mirrored,
         sourceSize: sourceSize,
@@ -1105,6 +1271,7 @@ class DirectionDebugOverlayPainter extends CustomPainter {
         oldDelegate.candidateDirection != candidateDirection ||
         oldDelegate.acceptedDirection != acceptedDirection ||
         oldDelegate.debugSummary != debugSummary ||
+        oldDelegate.showPalmCircle != showPalmCircle ||
         oldDelegate.previewQuarterTurns != previewQuarterTurns ||
         oldDelegate.useRecordingPreviewMapping != useRecordingPreviewMapping;
   }

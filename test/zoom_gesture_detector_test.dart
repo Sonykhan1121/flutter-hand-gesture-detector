@@ -141,6 +141,21 @@ void main() {
       );
     });
 
+    test('mirrored palm zooms out with palm chirality correction', () {
+      final hand = _zoomOutHand(mirrorPose: true);
+
+      expect(
+        _detect(detector, hand, mirrorHorizontally: true),
+        ZoomDirection.none,
+      );
+      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+      now = now.add(const Duration(seconds: 1));
+      expect(
+        _detect(detector, hand, mirrorHorizontally: true),
+        ZoomDirection.zoomOut,
+      );
+    });
+
     test('back of hand cannot start zoom in', () {
       final hand = _zoomHand(tipDistance: 80, mirrorPose: true);
 
@@ -162,6 +177,15 @@ void main() {
       expect(_detect(detector, hand), ZoomDirection.zoomIn);
     });
 
+    test('left palm can start zoom out with matching handedness', () {
+      final hand = _zoomOutHand(mirrorPose: true, handedness: Handedness.left);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, hand), ZoomDirection.zoomOut);
+    });
+
     test('unknown handedness cannot prove palm-side zoom in', () {
       final hand = _zoomHand(tipDistance: 80, handedness: null);
 
@@ -170,13 +194,41 @@ void main() {
       expect(detector.isGestureActive, isFalse);
     });
 
-    test('back of hand does not block closed-pinch zoom out', () {
+    test('back of hand cannot start zoom out', () {
       final hand = _zoomOutHand(mirrorPose: true);
 
       expect(_detect(detector, hand), ZoomDirection.none);
-      expect(detector.pendingDirection, ZoomDirection.zoomOut);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.isGestureActive, isFalse);
       now = now.add(const Duration(seconds: 1));
-      expect(_detect(detector, hand), ZoomDirection.zoomOut);
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.reservesZoomInOpeningTransition, isFalse);
+    });
+
+    test('unknown handedness cannot prove palm-side zoom out', () {
+      final hand = _zoomOutHand(handedness: null);
+
+      expect(_detect(detector, hand), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.isGestureActive, isFalse);
+    });
+
+    test('zoom out requires visible wrist, index MCP, and pinky MCP', () {
+      for (final type in const {
+        HandLandmarkType.wrist,
+        HandLandmarkType.indexFingerMCP,
+        HandLandmarkType.pinkyMCP,
+      }) {
+        for (final hand in [
+          _zoomOutHand(missingTypes: {type}),
+          _zoomOutHand(lowVisibilityTypes: {type}),
+        ]) {
+          detector.clearState();
+          expect(_detect(detector, hand), ZoomDirection.none);
+          expect(detector.pendingDirection, ZoomDirection.none);
+          expect(detector.isGestureActive, isFalse);
+        }
+      }
     });
 
     test('jumping from zoom out to an open pose starts a fresh hold', () {
@@ -624,6 +676,37 @@ void main() {
       expect(_detect(detector, hand), ZoomDirection.zoomIn);
     });
 
+    test('turning to the back side resets a zoom-out hold', () {
+      final palm = _zoomOutHand();
+      final back = _zoomOutHand(mirrorPose: true);
+
+      expect(_detect(detector, palm), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 800));
+      expect(_detect(detector, back), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.isGestureActive, isFalse);
+
+      expect(_detect(detector, palm), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 999));
+      expect(_detect(detector, palm), ZoomDirection.none);
+      now = now.add(const Duration(milliseconds: 1));
+      expect(_detect(detector, palm), ZoomDirection.zoomOut);
+    });
+
+    test('turning to the back side clears an armed opening transition', () {
+      final palm = _zoomOutHand();
+      final back = _zoomOutHand(mirrorPose: true);
+
+      expect(_detect(detector, palm), ZoomDirection.none);
+      now = now.add(const Duration(seconds: 1));
+      expect(_detect(detector, palm), ZoomDirection.zoomOut);
+      expect(detector.reservesZoomInOpeningTransition, isTrue);
+
+      expect(_detect(detector, back), ZoomDirection.none);
+      expect(detector.pendingDirection, ZoomDirection.none);
+      expect(detector.reservesZoomInOpeningTransition, isFalse);
+    });
+
     test('clearState requires a fresh hold', () {
       final hand = _zoomOutHand();
 
@@ -956,6 +1039,8 @@ Hand _zoomOutHand({
   double zOffset = 0,
   bool mirrorPose = false,
   Set<HandLandmarkType> missingTypes = const {},
+  Set<HandLandmarkType> lowVisibilityTypes = const {},
+  Handedness? handedness = Handedness.right,
 }) {
   return _zoomHand(
     tipDistance: 20,
@@ -963,6 +1048,8 @@ Hand _zoomOutHand({
     zOffset: zOffset,
     mirrorPose: mirrorPose,
     missingTypes: missingTypes,
+    lowVisibilityTypes: lowVisibilityTypes,
+    handedness: handedness,
     landmarkOverrides: const {
       HandLandmarkType.thumbMCP: Offset(45, 94),
       HandLandmarkType.thumbIP: Offset(72, 82),

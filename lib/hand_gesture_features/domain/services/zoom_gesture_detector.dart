@@ -17,7 +17,6 @@ class ZoomGestureDetector {
   final HandGeometryService geometry;
   final DateTime Function() _now;
 
-  static const double _angleComparisonEpsilon = 1e-9;
   static const double _distanceComparisonEpsilon = 1e-9;
 
   ZoomDirection _pendingDirection = ZoomDirection.none;
@@ -212,6 +211,14 @@ class ZoomGestureDetector {
     final palmCenter = geometry.palmCenter3D(hand);
     final handSize = geometry.handSizeFromBoundingBox(hand.boundingBox);
     if (palmCenter == null || handSize <= 0) return null;
+    if (!geometry.isPalmSideFacingCamera(
+      hand: hand,
+      mirrorHorizontally: mirrorPalmHorizontally,
+      minNormalizedCross: HandGestureThresholds.zoomMinPalmSideCross,
+      minLandmarkVisibility: HandGestureThresholds.zoomMinLandmarkVisibility,
+    )) {
+      return null;
+    }
 
     final indexIsAboveThumb = geometry.isLandmarkSegmentAbove2D(
       upperStart: indexDip,
@@ -268,14 +275,6 @@ class ZoomGestureDetector {
             HandGestureThresholds.zoomInMinDistanceRatio &&
         distance3dRatio + _distanceComparisonEpsilon >=
             HandGestureThresholds.zoomInMinDistanceRatio;
-
-    if (!isClosedPinch &&
-        !_isPalmSideFacingCamera(
-          hand,
-          mirrorHorizontally: mirrorPalmHorizontally,
-        )) {
-      return null;
-    }
 
     if (isClosedPinch &&
         geometry.isThumbTuckedForFist3D(
@@ -346,43 +345,6 @@ class ZoomGestureDetector {
       secondEnd: indexTip,
     );
     return angle;
-  }
-
-  /// Uses handedness and projected palm chirality to reject the back of hand.
-  /// Unknown handedness or missing palm anchors fail closed for Zoom In.
-  bool _isPalmSideFacingCamera(Hand hand, {required bool mirrorHorizontally}) {
-    final handedness = hand.handedness;
-    final wrist = _zoomVisibleLandmark(hand, HandLandmarkType.wrist);
-    final indexMcp = _zoomVisibleLandmark(
-      hand,
-      HandLandmarkType.indexFingerMCP,
-    );
-    final pinkyMcp = _zoomVisibleLandmark(hand, HandLandmarkType.pinkyMCP);
-    if (handedness == null ||
-        wrist == null ||
-        indexMcp == null ||
-        pinkyMcp == null) {
-      return false;
-    }
-
-    var expectedPalmSide = handedness == Handedness.right ? 1.0 : -1.0;
-    if (mirrorHorizontally) expectedPalmSide *= -1;
-
-    final indexX = indexMcp.x - wrist.x;
-    final indexY = indexMcp.y - wrist.y;
-    final pinkyX = pinkyMcp.x - wrist.x;
-    final pinkyY = pinkyMcp.y - wrist.y;
-    final indexLength = math.sqrt(indexX * indexX + indexY * indexY);
-    final pinkyLength = math.sqrt(pinkyX * pinkyX + pinkyY * pinkyY);
-    if (indexLength <= _distanceComparisonEpsilon ||
-        pinkyLength <= _distanceComparisonEpsilon) {
-      return false;
-    }
-
-    final normalizedCross =
-        (indexX * pinkyY - indexY * pinkyX) / (indexLength * pinkyLength);
-    return normalizedCross * expectedPalmSide + _angleComparisonEpsilon >=
-        HandGestureThresholds.zoomInMinPalmSideCross;
   }
 
   Map<HandLandmarkType, HandPoint3D> _stableFingerOffsets({

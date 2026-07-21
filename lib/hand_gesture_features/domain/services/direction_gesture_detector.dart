@@ -67,6 +67,7 @@ class DirectionGestureDetector {
     required Hand hand,
     required Size imageSize,
     required bool mirrorHorizontally,
+    bool? mirrorPalmHorizontally,
   }) {
     if (!geometry.isReliableHand(hand) || !_isFiniteImageSize(imageSize)) {
       clearState(reason: 'invalid frame');
@@ -84,6 +85,7 @@ class DirectionGestureDetector {
       hand,
       imageSize: imageSize,
       mirrorHorizontally: mirrorHorizontally,
+      mirrorPalmHorizontally: mirrorPalmHorizontally ?? mirrorHorizontally,
     );
     if (zoomInConflictAngle != null) {
       clearState(
@@ -118,6 +120,7 @@ class DirectionGestureDetector {
       _debugCandidateDirection = activeVerticalDirection;
       final activeVertical = _evaluateVerticalDirection(
         hand: hand,
+        imageSize: imageSize,
         mirrorHorizontally: mirrorHorizontally,
         direction: activeVerticalDirection,
         useActiveDirectionRange: true,
@@ -127,8 +130,8 @@ class DirectionGestureDetector {
         _movingRightPositiveFrames = 0;
         _movingDownPositiveFrames =
             activeVerticalDirection == HandMoveDirection.down
-            ? HandGestureThresholds.movingDownRequiredConsecutiveFrames
-            : 0;
+                ? HandGestureThresholds.movingDownRequiredConsecutiveFrames
+                : 0;
         _setDebugSummary(
           'direction: static ${activeVerticalDirection.name}; '
           'angle=${activeVertical.directionAngleDegrees!.toStringAsFixed(1)}deg',
@@ -166,7 +169,9 @@ class DirectionGestureDetector {
 
     final movingLeft = _evaluateHorizontalDirection(
       hand: hand,
+      imageSize: imageSize,
       mirrorHorizontally: mirrorHorizontally,
+      mirrorPalmHorizontally: mirrorPalmHorizontally ?? mirrorHorizontally,
       direction: HandMoveDirection.left,
     );
     if (movingLeft.matches) {
@@ -222,7 +227,9 @@ class DirectionGestureDetector {
 
     final movingRight = _evaluateHorizontalDirection(
       hand: hand,
+      imageSize: imageSize,
       mirrorHorizontally: mirrorHorizontally,
+      mirrorPalmHorizontally: mirrorPalmHorizontally ?? mirrorHorizontally,
       direction: HandMoveDirection.right,
     );
     if (movingRight.matches) {
@@ -276,6 +283,7 @@ class DirectionGestureDetector {
 
     final movingUp = _evaluateVerticalDirection(
       hand: hand,
+      imageSize: imageSize,
       mirrorHorizontally: mirrorHorizontally,
       direction: HandMoveDirection.up,
       useActiveDirectionRange: false,
@@ -319,6 +327,7 @@ class DirectionGestureDetector {
 
     final movingDown = _evaluateVerticalDirection(
       hand: hand,
+      imageSize: imageSize,
       mirrorHorizontally: mirrorHorizontally,
       direction: HandMoveDirection.down,
       useActiveDirectionRange: false,
@@ -456,7 +465,17 @@ class DirectionGestureDetector {
     Hand hand, {
     required Size imageSize,
     required bool mirrorHorizontally,
+    required bool mirrorPalmHorizontally,
   }) {
+    if (!geometry.isPalmSideFacingCamera(
+      hand: hand,
+      mirrorHorizontally: mirrorPalmHorizontally,
+      minNormalizedCross: HandGestureThresholds.zoomMinPalmSideCross,
+      minLandmarkVisibility: HandGestureThresholds.zoomMinLandmarkVisibility,
+    )) {
+      return null;
+    }
+
     final thumbIp = _zoomConflictLandmark(hand, HandLandmarkType.thumbIP);
     final thumbTip = _zoomConflictLandmark(hand, HandLandmarkType.thumbTip);
     final indexDip = _zoomConflictLandmark(
@@ -501,8 +520,8 @@ class DirectionGestureDetector {
     }
 
     // A zoom-in pose still requires the other three fingers to be folded.
-    for (final chainTypes
-        in HandGestureThresholds.directionFingerChainTypes.skip(1)) {
+    for (final chainTypes in HandGestureThresholds.directionFingerChainTypes
+        .skip(1)) {
       final mcp = _zoomConflictLandmark(hand, chainTypes[0]);
       final pip = _zoomConflictLandmark(hand, chainTypes[1]);
       final tip = _zoomConflictLandmark(hand, chainTypes[3]);
@@ -559,7 +578,16 @@ class DirectionGestureDetector {
 
   /// Identifies a touching thumb/index pose that a relaxed Moving-right check
   /// must leave for Zoom Out. Directions run before zoom in the live pipeline.
-  bool _isZoomOutConflict(Hand hand) {
+  bool _isZoomOutConflict(Hand hand, {required bool mirrorPalmHorizontally}) {
+    if (!geometry.isPalmSideFacingCamera(
+      hand: hand,
+      mirrorHorizontally: mirrorPalmHorizontally,
+      minNormalizedCross: HandGestureThresholds.zoomMinPalmSideCross,
+      minLandmarkVisibility: HandGestureThresholds.zoomMinLandmarkVisibility,
+    )) {
+      return false;
+    }
+
     final thumbIp = _zoomConflictLandmark(hand, HandLandmarkType.thumbIP);
     final thumbTip = _zoomConflictLandmark(hand, HandLandmarkType.thumbTip);
     final indexDip = _zoomConflictLandmark(
@@ -590,8 +618,8 @@ class DirectionGestureDetector {
       return false;
     }
 
-    for (final chainTypes
-        in HandGestureThresholds.directionFingerChainTypes.skip(1)) {
+    for (final chainTypes in HandGestureThresholds.directionFingerChainTypes
+        .skip(1)) {
       final mcp = _zoomConflictLandmark(hand, chainTypes[0]);
       final pip = _zoomConflictLandmark(hand, chainTypes[1]);
       final tip = _zoomConflictLandmark(hand, chainTypes[3]);
@@ -628,23 +656,25 @@ class DirectionGestureDetector {
 
   _VerticalDirectionEvaluation _evaluateVerticalDirection({
     required Hand hand,
+    required Size imageSize,
     required bool mirrorHorizontally,
     required HandMoveDirection direction,
     required bool useActiveDirectionRange,
   }) {
     final isUp = direction == HandMoveDirection.up;
-    final requiredTypes = isUp
-        ? const [
-            HandLandmarkType.indexFingerMCP,
-            HandLandmarkType.indexFingerPIP,
-            HandLandmarkType.indexFingerDIP,
-            HandLandmarkType.indexFingerTip,
-          ]
-        : const [
-            HandLandmarkType.indexFingerPIP,
-            HandLandmarkType.indexFingerDIP,
-            HandLandmarkType.indexFingerTip,
-          ];
+    final requiredTypes =
+        isUp
+            ? const [
+              HandLandmarkType.indexFingerMCP,
+              HandLandmarkType.indexFingerPIP,
+              HandLandmarkType.indexFingerDIP,
+              HandLandmarkType.indexFingerTip,
+            ]
+            : const [
+              HandLandmarkType.indexFingerPIP,
+              HandLandmarkType.indexFingerDIP,
+              HandLandmarkType.indexFingerTip,
+            ];
     final landmarks = <HandLandmarkType, HandLandmark>{};
     for (final type in requiredTypes) {
       final landmark = geometry.visibleLandmark(hand, type);
@@ -660,16 +690,20 @@ class DirectionGestureDetector {
     HandLandmark point(HandLandmarkType type) => landmarks[type]!;
     HandLandmark? visiblePoint(HandLandmarkType type) =>
         geometry.visibleLandmark(hand, type);
-    final indexMcp = isUp ? point(HandLandmarkType.indexFingerMCP) : null;
+    final indexMcp =
+        isUp
+            ? point(HandLandmarkType.indexFingerMCP)
+            : visiblePoint(HandLandmarkType.indexFingerMCP);
     final indexPip = point(HandLandmarkType.indexFingerPIP);
     final indexDip = point(HandLandmarkType.indexFingerDIP);
     final indexTip = point(HandLandmarkType.indexFingerTip);
-    final palmMcps = <HandLandmark?>[
-      if (isUp) indexMcp,
-      visiblePoint(HandLandmarkType.middleFingerMCP),
-      visiblePoint(HandLandmarkType.ringFingerMCP),
-      visiblePoint(HandLandmarkType.pinkyMCP),
-    ].whereType<HandLandmark>().toList();
+    final palmMcps =
+        <HandLandmark?>[
+          indexMcp,
+          visiblePoint(HandLandmarkType.middleFingerMCP),
+          visiblePoint(HandLandmarkType.ringFingerMCP),
+          visiblePoint(HandLandmarkType.pinkyMCP),
+        ].whereType<HandLandmark>().toList();
     final palmWidth = _maximumLandmarkDistance(palmMcps);
     if (!palmWidth.isFinite || palmWidth <= 0) {
       return const _VerticalDirectionEvaluation(
@@ -820,6 +854,7 @@ class DirectionGestureDetector {
     }
 
     var foldedFingerCount = 0;
+    var openFingerCount = 0;
     var uncertainFingerCount = 0;
     var unavailableFingerCount = 0;
     for (final finger in const [
@@ -852,15 +887,10 @@ class DirectionGestureDetector {
         tip: visiblePoint(finger.$5),
         palmWidth: foldPalmWidth,
       );
-      if (foldState == _DirectionFingerFoldState.open) {
-        return _VerticalDirectionEvaluation(
-          matches: false,
-          directionAngleDegrees: directionAngle,
-          reason: '${finger.$1} finger not folded (clearly open by area)',
-        );
-      }
       if (foldState == _DirectionFingerFoldState.folded) {
         foldedFingerCount += 1;
+      } else if (foldState == _DirectionFingerFoldState.open) {
+        openFingerCount += 1;
       } else if (foldState == _DirectionFingerFoldState.uncertain) {
         uncertainFingerCount += 1;
       } else if (foldState == _DirectionFingerFoldState.unavailable) {
@@ -868,24 +898,52 @@ class DirectionGestureDetector {
       }
     }
 
+    final compactPalmCircleMatches = _compactPalmCircleMatches(
+      hand,
+      imageSize: imageSize,
+    );
     if (foldedFingerCount <
-        HandGestureThresholds.directionMinConfirmedFoldedFingerCount) {
+            HandGestureThresholds.directionMinConfirmedFoldedFingerCount &&
+        !compactPalmCircleMatches) {
       return _VerticalDirectionEvaluation(
         matches: false,
         directionAngleDegrees: directionAngle,
         reason:
             'only $foldedFingerCount/3 folded fingers; '
+            '$openFingerCount open, '
             '$uncertainFingerCount uncertain, '
             '$unavailableFingerCount unavailable; need '
-            '${HandGestureThresholds.directionMinConfirmedFoldedFingerCount}',
+            '${HandGestureThresholds.directionMinConfirmedFoldedFingerCount}; '
+            'compact palm circle failed',
       );
     }
 
     return _VerticalDirectionEvaluation(
       matches: true,
       directionAngleDegrees: directionAngle,
-      reason: 'matched',
+      reason:
+          compactPalmCircleMatches && foldedFingerCount == 0
+              ? 'matched compact palm circle'
+              : 'matched',
     );
+  }
+
+  bool _compactPalmCircleMatches(Hand hand, {required Size imageSize}) {
+    return geometry
+            .evaluatePalmLandmarkCircle2D(
+              hand: hand,
+              imageSize: imageSize,
+              requiredTypes:
+                  HandGestureThresholds.directionCompactPalmCircleTypes,
+              radiusPalmWidthRatio:
+                  HandGestureThresholds
+                      .directionCompactPalmCircleRadiusPalmWidthRatio,
+              minimumRadiusImageShortSideRatio:
+                  HandGestureThresholds
+                      .directionCompactPalmCircleMinImageShortSideRatio,
+            )
+            ?.allRequiredInside ??
+        false;
   }
 
   _DirectionFingerFoldState _directionFingerFoldState({
@@ -932,16 +990,15 @@ class DirectionGestureDetector {
   }
 
   double _foldReferencePalmWidth(Hand hand) {
-    final mcps =
-        const [
-              HandLandmarkType.indexFingerMCP,
-              HandLandmarkType.middleFingerMCP,
-              HandLandmarkType.ringFingerMCP,
-              HandLandmarkType.pinkyMCP,
-            ]
-            .map((type) => geometry.visibleLandmark(hand, type))
-            .whereType<HandLandmark>()
-            .toList(growable: false);
+    final mcps = const [
+          HandLandmarkType.indexFingerMCP,
+          HandLandmarkType.middleFingerMCP,
+          HandLandmarkType.ringFingerMCP,
+          HandLandmarkType.pinkyMCP,
+        ]
+        .map((type) => geometry.visibleLandmark(hand, type))
+        .whereType<HandLandmark>()
+        .toList(growable: false);
     var maximumDistance = 0.0;
     for (var first = 0; first < mcps.length; first += 1) {
       for (var second = first + 1; second < mcps.length; second += 1) {
@@ -972,7 +1029,9 @@ class DirectionGestureDetector {
 
   _HorizontalDirectionEvaluation _evaluateHorizontalDirection({
     required Hand hand,
+    required Size imageSize,
     required bool mirrorHorizontally,
+    required bool mirrorPalmHorizontally,
     required HandMoveDirection direction,
   }) {
     final landmarks = <HandLandmarkType, HandLandmark>{};
@@ -1015,9 +1074,10 @@ class DirectionGestureDetector {
           palmAnchors.length,
     );
     final pinkyMcp = visiblePoint(HandLandmarkType.pinkyMCP);
-    final palmWidth = pinkyMcp != null
-        ? geometry.distanceBetweenLandmarks(indexMcp, pinkyMcp)
-        : _maximumLandmarkDistance(palmMcps);
+    final palmWidth =
+        pinkyMcp != null
+            ? geometry.distanceBetweenLandmarks(indexMcp, pinkyMcp)
+            : _maximumLandmarkDistance(palmMcps);
     if (!palmWidth.isFinite || palmWidth <= 0) {
       return const _HorizontalDirectionEvaluation(
         matches: false,
@@ -1038,16 +1098,21 @@ class DirectionGestureDetector {
       mirrorHorizontally: mirrorHorizontally,
     );
     final isLeft = direction == HandMoveDirection.left;
-    if (!isLeft && _isZoomOutConflict(hand)) {
+    if (!isLeft &&
+        _isZoomOutConflict(
+          hand,
+          mirrorPalmHorizontally: mirrorPalmHorizontally,
+        )) {
       return _HorizontalDirectionEvaluation(
         matches: false,
         directionAngleDegrees: directionAngle,
         reason: 'zoom-out closed pinch',
       );
     }
-    final minIndexStraightness = isLeft
-        ? HandGestureThresholds.movingLeftIndexMinStraightnessRatio
-        : HandGestureThresholds.movingRightIndexMinStraightnessRatio;
+    final minIndexStraightness =
+        isLeft
+            ? HandGestureThresholds.movingLeftIndexMinStraightnessRatio
+            : HandGestureThresholds.movingRightIndexMinStraightnessRatio;
     final tipPalmWidthOffsetRatio = _depthAwareTipPalmWidthOffsetRatio(
       indexTip: indexTip,
       palmAnchors: palmAnchors,
@@ -1082,10 +1147,11 @@ class DirectionGestureDetector {
         geometry.distanceBetweenLandmarks(indexMcp, indexPip) +
         geometry.distanceBetweenLandmarks(indexPip, indexDip) +
         geometry.distanceBetweenLandmarks(indexDip, indexTip);
-    final indexStraightness = indexPathLength > 0
-        ? geometry.distanceBetweenLandmarks(indexMcp, indexTip) /
-              indexPathLength
-        : 0.0;
+    final indexStraightness =
+        indexPathLength > 0
+            ? geometry.distanceBetweenLandmarks(indexMcp, indexTip) /
+                indexPathLength
+            : 0.0;
     if (!indexStraightness.isFinite ||
         indexStraightness < minIndexStraightness) {
       return _HorizontalDirectionEvaluation(
@@ -1108,10 +1174,12 @@ class DirectionGestureDetector {
     }
 
     final indexTipScreenX = _screenX(indexTip, mirrorHorizontally);
-    final indexTipBeyondPalm = isLeft
-        ? indexTipScreenX <= palmCenter.dx - palmWidth * tipPalmWidthOffsetRatio
-        : indexTipScreenX >=
-              palmCenter.dx + palmWidth * tipPalmWidthOffsetRatio;
+    final indexTipBeyondPalm =
+        isLeft
+            ? indexTipScreenX <=
+                palmCenter.dx - palmWidth * tipPalmWidthOffsetRatio
+            : indexTipScreenX >=
+                palmCenter.dx + palmWidth * tipPalmWidthOffsetRatio;
     if (!indexTipBeyondPalm) {
       return _HorizontalDirectionEvaluation(
         matches: false,
@@ -1123,6 +1191,7 @@ class DirectionGestureDetector {
     }
 
     var foldedFingerCount = 0;
+    var openFingerCount = 0;
     var uncertainFingerCount = 0;
     var unavailableFingerCount = 0;
     for (final finger in const [
@@ -1155,15 +1224,10 @@ class DirectionGestureDetector {
         tip: visiblePoint(finger.$5),
         palmWidth: foldPalmWidth,
       );
-      if (foldState == _DirectionFingerFoldState.open) {
-        return _HorizontalDirectionEvaluation(
-          matches: false,
-          directionAngleDegrees: directionAngle,
-          reason: '${finger.$1} finger not folded (clearly open by area)',
-        );
-      }
       if (foldState == _DirectionFingerFoldState.folded) {
         foldedFingerCount += 1;
+      } else if (foldState == _DirectionFingerFoldState.open) {
+        openFingerCount += 1;
       } else if (foldState == _DirectionFingerFoldState.uncertain) {
         uncertainFingerCount += 1;
       } else if (foldState == _DirectionFingerFoldState.unavailable) {
@@ -1171,23 +1235,33 @@ class DirectionGestureDetector {
       }
     }
 
+    final compactPalmCircleMatches = _compactPalmCircleMatches(
+      hand,
+      imageSize: imageSize,
+    );
     if (foldedFingerCount <
-        HandGestureThresholds.directionMinConfirmedFoldedFingerCount) {
+            HandGestureThresholds.directionMinConfirmedFoldedFingerCount &&
+        !compactPalmCircleMatches) {
       return _HorizontalDirectionEvaluation(
         matches: false,
         directionAngleDegrees: directionAngle,
         reason:
             'only $foldedFingerCount/3 folded fingers; '
+            '$openFingerCount open, '
             '$uncertainFingerCount uncertain, '
             '$unavailableFingerCount unavailable; need '
-            '${HandGestureThresholds.directionMinConfirmedFoldedFingerCount}',
+            '${HandGestureThresholds.directionMinConfirmedFoldedFingerCount}; '
+            'compact palm circle failed',
       );
     }
 
     return _HorizontalDirectionEvaluation(
       matches: true,
       directionAngleDegrees: directionAngle,
-      reason: 'matched',
+      reason:
+          compactPalmCircleMatches && foldedFingerCount == 0
+              ? 'matched compact palm circle'
+              : 'matched',
     );
   }
 
@@ -1203,9 +1277,10 @@ class DirectionGestureDetector {
     final maxDepthDelta =
         palmWidth *
         HandGestureThresholds.directionTipMaxDepthDeltaPalmWidthRatio;
-    final fartherProgress = maxDepthDelta > 0
-        ? (fartherDepthDelta / maxDepthDelta).clamp(0.0, 1.0).toDouble()
-        : 0.0;
+    final fartherProgress =
+        maxDepthDelta > 0
+            ? (fartherDepthDelta / maxDepthDelta).clamp(0.0, 1.0).toDouble()
+            : 0.0;
 
     return HandGestureThresholds.directionTipMinPalmWidthOffsetRatio +
         (HandGestureThresholds.directionTipMaxPalmWidthOffsetRatio -
@@ -1253,9 +1328,10 @@ class DirectionGestureDetector {
     required bool mirrorHorizontally,
     required HandMoveDirection direction,
   }) {
-    final baseType = direction == HandMoveDirection.down
-        ? HandLandmarkType.indexFingerPIP
-        : HandLandmarkType.indexFingerMCP;
+    final baseType =
+        direction == HandMoveDirection.down
+            ? HandLandmarkType.indexFingerPIP
+            : HandLandmarkType.indexFingerMCP;
     final base = geometry.visibleLandmark(hand, baseType);
     final indexTip = geometry.visibleLandmark(
       hand,

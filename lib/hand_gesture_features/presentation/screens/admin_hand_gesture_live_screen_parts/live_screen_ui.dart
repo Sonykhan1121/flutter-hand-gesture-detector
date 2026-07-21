@@ -8,11 +8,8 @@ extension on _AdminHandGestureLiveScreenState {
     required double rotationProgress,
   }) {
     final rotatedSize = Size(cardSize.height, cardSize.width);
-    final cameraSize = Size.lerp(
-      cardSize,
-      rotatedSize,
-      rotationProgress.clamp(0.0, 1.0),
-    )!;
+    final cameraSize =
+        Size.lerp(cardSize, rotatedSize, rotationProgress.clamp(0.0, 1.0))!;
 
     return ClipRect(
       child: Center(
@@ -114,27 +111,91 @@ extension on _AdminHandGestureLiveScreenState {
     );
   }
 
+  /// Top-right setting that enables or hides the complete direction overlay.
+  Widget _buildDirectionDebugSettingsButton() {
+    final showDrawing = _showDirectionDebugOverlay;
+
+    return PopupMenuButton<bool>(
+      key: const Key('directionDebugSettingsButton'),
+      tooltip: 'Direction drawing settings',
+      color: const Color(0xEE171717),
+      elevation: 8,
+      offset: const Offset(0, 48),
+      onSelected: (show) {
+        _setScreenState(() {
+          _showDirectionDebugOverlay = show;
+        });
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<bool>(
+          key: const Key('directionDebugDrawingSwitch'),
+          value: !showDrawing,
+          child: SizedBox(
+            width: 230,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.draw_outlined,
+                  color: showDrawing ? const Color(0xFF69F0AE) : Colors.white60,
+                  size: 21,
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Full direction drawing',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  child: Switch.adaptive(
+                    value: showDrawing,
+                    onChanged: (_) {},
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+      child: CircleAvatar(
+        radius: 20,
+        backgroundColor: Colors.black45,
+        child: Icon(
+          Icons.settings_outlined,
+          color: showDrawing ? const Color(0xFF69F0AE) : Colors.white,
+          size: 20,
+        ),
+      ),
+    );
+  }
+
   /// Builds the live camera screen, overlays, status panel, and loading state.
   Widget _buildLiveScreen(BuildContext context) {
     final controller = _controller;
     final showClosedFistTargetCandidate =
         _followTargetProgress.phase == FollowTargetTrackingPhase.selecting;
-    final nearestClosedFistTarget = showClosedFistTargetCandidate
-        ? _predictedFollowTarget
-        : null;
-    final otherClosedFistFaceTargets = showClosedFistTargetCandidate
-        ? _followObjectCandidateFaces
-              .where((target) => !identical(target, nearestClosedFistTarget))
-              .toList(growable: false)
-        : const <FollowTarget>[];
-    final otherClosedFistObjectTargets = showClosedFistTargetCandidate
-        ? _followObjectCandidateObjects
-              .where((target) => !identical(target, nearestClosedFistTarget))
-              .toList(growable: false)
-        : const <FollowTarget>[];
-    final closedFistTargetCandidates = nearestClosedFistTarget != null
-        ? <FollowTarget>[nearestClosedFistTarget]
-        : const <FollowTarget>[];
+    final nearestClosedFistTarget =
+        showClosedFistTargetCandidate ? _predictedFollowTarget : null;
+    final otherClosedFistFaceTargets =
+        showClosedFistTargetCandidate
+            ? _followObjectCandidateFaces
+                .where((target) => !identical(target, nearestClosedFistTarget))
+                .toList(growable: false)
+            : const <FollowTarget>[];
+    final otherClosedFistObjectTargets =
+        showClosedFistTargetCandidate
+            ? _followObjectCandidateObjects
+                .where((target) => !identical(target, nearestClosedFistTarget))
+                .toList(growable: false)
+            : const <FollowTarget>[];
+    final closedFistTargetCandidates =
+        nearestClosedFistTarget != null
+            ? <FollowTarget>[nearestClosedFistTarget]
+            : const <FollowTarget>[];
     final closedFistFaceCandidates = closedFistTargetCandidates
         .where((target) => target.type == FollowTargetType.face)
         .toList(growable: false);
@@ -142,414 +203,429 @@ extension on _AdminHandGestureLiveScreenState {
         .where((target) => target.type == FollowTargetType.object)
         .toList(growable: false);
     const selectionCandidateColor = followTargetSelectionGreen;
-    final selectionCandidateLabelPrefix = _followTargetSelectionCandidateHidden
-        ? 'Last seen: '
-        : 'Release → ';
+    final selectionCandidateLabelPrefix =
+        _followTargetSelectionCandidateHidden ? 'Last seen: ' : 'Release → ';
     final showFollowTargetDebugOverlay =
         _showFollowTargetDebugOverlay &&
         !showClosedFistTargetCandidate &&
         _lockedFollowTarget == null &&
         _followTargetIdentity == null;
-    final followTargetDebugFaceTargets = showFollowTargetDebugOverlay
-        ? _followObjectCandidateFaces
-        : const <FollowTarget>[];
-    final followTargetDebugObjectTargets = showFollowTargetDebugOverlay
-        ? _visualObjectTargets
-        : const <FollowTarget>[];
+    final followTargetDebugFaceTargets =
+        showFollowTargetDebugOverlay
+            ? _followObjectCandidateFaces
+            : const <FollowTarget>[];
+    final followTargetDebugObjectTargets =
+        showFollowTargetDebugOverlay
+            ? _visualObjectTargets
+            : const <FollowTarget>[];
 
     return Scaffold(
       backgroundColor: Colors.black,
       body:
           _isCameraInitialized &&
-              controller != null &&
-              controller.value.isInitialized
-          ? Stack(
-              fit: StackFit.expand,
-              children: [
-                Positioned.fill(
-                  child: AnimatedBuilder(
-                    animation: _cameraPreviewRotationController,
-                    builder: (context, _) {
-                      final animationProgress =
-                          _cameraPreviewRotationController.value;
-                      final visualRotationProgress =
-                          _cameraVisualRotationProgress(controller);
-                      final overlayQuarterTurns =
-                          _previewQuarterTurnsForOverlays(controller);
-                      final overlayOpacity = cameraOverlayOpacity(
-                        animationProgress,
-                      );
+                  controller != null &&
+                  controller.value.isInitialized
+              ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned.fill(
+                    child: AnimatedBuilder(
+                      animation: _cameraPreviewRotationController,
+                      builder: (context, _) {
+                        final animationProgress =
+                            _cameraPreviewRotationController.value;
+                        final visualRotationProgress =
+                            _cameraVisualRotationProgress(controller);
+                        final overlayQuarterTurns =
+                            _previewQuarterTurnsForOverlays(controller);
+                        final overlayOpacity = cameraOverlayOpacity(
+                          animationProgress,
+                        );
 
-                      return LayoutBuilder(
-                        builder: (context, constraints) {
-                          final viewportSize = constraints.biggest;
-                          final cardSize = interpolatedCameraPreviewSize(
-                            viewportSize: viewportSize,
-                            rawPreviewSize: controller.value.previewSize,
-                            progress: animationProgress,
-                          );
+                        return LayoutBuilder(
+                          builder: (context, constraints) {
+                            final viewportSize = constraints.biggest;
+                            final cardSize = interpolatedCameraPreviewSize(
+                              viewportSize: viewportSize,
+                              rawPreviewSize: controller.value.previewSize,
+                              progress: animationProgress,
+                            );
 
-                          return Center(
-                            child: SizedBox(
-                              key: const Key('cameraPreviewCard'),
-                              width: cardSize.width,
-                              height: cardSize.height,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.white24),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      _buildCameraPreview(
-                                        controller,
-                                        cardSize: cardSize,
-                                        rotationProgress:
-                                            visualRotationProgress,
-                                      ),
-                                      Opacity(
-                                        opacity: overlayOpacity,
-                                        child: Stack(
-                                          fit: StackFit.expand,
-                                          children: [
-                                            if (_detectionImageSize != null)
-                                              CustomPaint(
-                                                painter:
-                                                    _handLandmarkPainterForCurrentMode(
-                                                      controller,
-                                                    ),
-                                              ),
-                                            if (_showDirectionDebugOverlay &&
-                                                _detectionImageSize != null)
-                                              CustomPaint(
-                                                painter:
-                                                    _directionDebugPainterForCurrentMode(
-                                                      controller,
-                                                    ),
-                                              ),
-                                            if (_showZoomInDebugOverlay &&
-                                                _zoomGestureDetector
-                                                    .hasZoomInDebugPose &&
-                                                _detectionImageSize != null)
-                                              CustomPaint(
-                                                painter:
-                                                    _zoomInDebugPainterForCurrentMode(
-                                                      controller,
-                                                    ),
-                                              ),
-                                            if (_focusedHandBox != null &&
-                                                _focusImageSize != null)
-                                              CustomPaint(
-                                                painter: HandFocusOverlayPainter(
-                                                  handBox: _focusedHandBox!,
-                                                  imageSize: _focusImageSize!,
-                                                  mirrorHorizontally:
-                                                      _shouldMirrorPreviewCoordinates(
+                            return Center(
+                              child: SizedBox(
+                                key: const Key('cameraPreviewCard'),
+                                width: cardSize.width,
+                                height: cardSize.height,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.white24),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        _buildCameraPreview(
+                                          controller,
+                                          cardSize: cardSize,
+                                          rotationProgress:
+                                              visualRotationProgress,
+                                        ),
+                                        Opacity(
+                                          opacity: overlayOpacity,
+                                          child: Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              if (_detectionImageSize != null)
+                                                CustomPaint(
+                                                  painter:
+                                                      _handLandmarkPainterForCurrentMode(
                                                         controller,
                                                       ),
-                                                  previewQuarterTurns:
-                                                      overlayQuarterTurns,
                                                 ),
-                                              ),
-                                            if (_lockedFollowTarget != null)
-                                              CustomPaint(
-                                                painter: FollowTargetOverlayPainter(
-                                                  target: _lockedFollowTarget!,
-                                                  previewQuarterTurns:
-                                                      overlayQuarterTurns,
-                                                  colorOverride:
-                                                      _followTargetIdentity !=
-                                                          null
-                                                      ? followTargetSelectionGreen
-                                                      : null,
+                                              if (_showDirectionDebugOverlay &&
+                                                  _detectionImageSize != null)
+                                                CustomPaint(
+                                                  painter:
+                                                      _directionDebugPainterForCurrentMode(
+                                                        controller,
+                                                      ),
                                                 ),
-                                              ),
-                                            if (_showObjectOpticalFlowDebugOverlay &&
-                                                _objectOpticalFlowResult !=
-                                                    null)
-                                              CustomPaint(
-                                                painter:
-                                                    ObjectOpticalFlowDebugPainter(
-                                                      result:
-                                                          _objectOpticalFlowResult!,
-                                                      previewQuarterTurns:
-                                                          overlayQuarterTurns,
-                                                    ),
-                                              ),
-                                            if (otherClosedFistFaceTargets
-                                                .isNotEmpty)
-                                              CustomPaint(
-                                                painter:
-                                                    ObjectDetectionDebugPainter(
-                                                      targets:
-                                                          otherClosedFistFaceTargets,
-                                                      showLabels: true,
-                                                      previewQuarterTurns:
-                                                          overlayQuarterTurns,
-                                                    ),
-                                              ),
-                                            if (otherClosedFistObjectTargets
-                                                .isNotEmpty)
-                                              CustomPaint(
-                                                painter: ObjectDetectionDebugPainterFactory.create(
-                                                  backend: widget
-                                                      .objectDetectionBackend,
-                                                  targets:
-                                                      otherClosedFistObjectTargets,
-                                                  showLabels: true,
-                                                  previewQuarterTurns:
-                                                      overlayQuarterTurns,
+                                              if (_showZoomInDebugOverlay &&
+                                                  _zoomGestureDetector
+                                                      .hasZoomInDebugPose &&
+                                                  _detectionImageSize != null)
+                                                CustomPaint(
+                                                  painter:
+                                                      _zoomInDebugPainterForCurrentMode(
+                                                        controller,
+                                                      ),
                                                 ),
-                                              ),
-                                            if (closedFistFaceCandidates
-                                                .isNotEmpty)
-                                              CustomPaint(
-                                                painter: ObjectDetectionDebugPainter(
-                                                  targets:
-                                                      closedFistFaceCandidates,
-                                                  showLabels: true,
-                                                  color:
-                                                      selectionCandidateColor,
-                                                  labelPrefix:
-                                                      selectionCandidateLabelPrefix,
-                                                  previewQuarterTurns:
-                                                      overlayQuarterTurns,
+                                              if (_focusedHandBox != null &&
+                                                  _focusImageSize != null)
+                                                CustomPaint(
+                                                  painter: HandFocusOverlayPainter(
+                                                    handBox: _focusedHandBox!,
+                                                    imageSize: _focusImageSize!,
+                                                    mirrorHorizontally:
+                                                        _shouldMirrorPreviewCoordinates(
+                                                          controller,
+                                                        ),
+                                                    previewQuarterTurns:
+                                                        overlayQuarterTurns,
+                                                  ),
                                                 ),
-                                              ),
-                                            if (closedFistObjectCandidates
-                                                .isNotEmpty)
-                                              CustomPaint(
-                                                painter: ObjectDetectionDebugPainterFactory.create(
-                                                  backend: widget
-                                                      .objectDetectionBackend,
-                                                  targets:
-                                                      closedFistObjectCandidates,
-                                                  showLabels: true,
-                                                  color:
-                                                      selectionCandidateColor,
-                                                  labelPrefix:
-                                                      selectionCandidateLabelPrefix,
-                                                  previewQuarterTurns:
-                                                      overlayQuarterTurns,
+                                              if (_lockedFollowTarget != null)
+                                                CustomPaint(
+                                                  painter: FollowTargetOverlayPainter(
+                                                    target:
+                                                        _lockedFollowTarget!,
+                                                    previewQuarterTurns:
+                                                        overlayQuarterTurns,
+                                                    colorOverride:
+                                                        _followTargetIdentity !=
+                                                                null
+                                                            ? followTargetSelectionGreen
+                                                            : null,
+                                                  ),
                                                 ),
-                                              ),
-                                            if (followTargetDebugFaceTargets
-                                                .isNotEmpty)
-                                              CustomPaint(
-                                                painter:
-                                                    ObjectDetectionDebugPainter(
-                                                      targets:
-                                                          followTargetDebugFaceTargets,
-                                                      showLabels: false,
-                                                      previewQuarterTurns:
-                                                          overlayQuarterTurns,
-                                                    ),
-                                              ),
-                                            if (followTargetDebugObjectTargets
-                                                .isNotEmpty)
-                                              CustomPaint(
-                                                painter: ObjectDetectionDebugPainterFactory.create(
-                                                  backend: widget
-                                                      .objectDetectionBackend,
-                                                  targets:
-                                                      followTargetDebugObjectTargets,
-                                                  showLabels: false,
-                                                  previewQuarterTurns:
-                                                      overlayQuarterTurns,
+                                              if (_showObjectOpticalFlowDebugOverlay &&
+                                                  _objectOpticalFlowResult !=
+                                                      null)
+                                                CustomPaint(
+                                                  painter:
+                                                      ObjectOpticalFlowDebugPainter(
+                                                        result:
+                                                            _objectOpticalFlowResult!,
+                                                        previewQuarterTurns:
+                                                            overlayQuarterTurns,
+                                                      ),
                                                 ),
-                                              ),
-                                          ],
+                                              if (otherClosedFistFaceTargets
+                                                  .isNotEmpty)
+                                                CustomPaint(
+                                                  painter:
+                                                      ObjectDetectionDebugPainter(
+                                                        targets:
+                                                            otherClosedFistFaceTargets,
+                                                        showLabels: true,
+                                                        previewQuarterTurns:
+                                                            overlayQuarterTurns,
+                                                      ),
+                                                ),
+                                              if (otherClosedFistObjectTargets
+                                                  .isNotEmpty)
+                                                CustomPaint(
+                                                  painter: ObjectDetectionDebugPainterFactory.create(
+                                                    backend:
+                                                        widget
+                                                            .objectDetectionBackend,
+                                                    targets:
+                                                        otherClosedFistObjectTargets,
+                                                    showLabels: true,
+                                                    previewQuarterTurns:
+                                                        overlayQuarterTurns,
+                                                  ),
+                                                ),
+                                              if (closedFistFaceCandidates
+                                                  .isNotEmpty)
+                                                CustomPaint(
+                                                  painter: ObjectDetectionDebugPainter(
+                                                    targets:
+                                                        closedFistFaceCandidates,
+                                                    showLabels: true,
+                                                    color:
+                                                        selectionCandidateColor,
+                                                    labelPrefix:
+                                                        selectionCandidateLabelPrefix,
+                                                    previewQuarterTurns:
+                                                        overlayQuarterTurns,
+                                                  ),
+                                                ),
+                                              if (closedFistObjectCandidates
+                                                  .isNotEmpty)
+                                                CustomPaint(
+                                                  painter: ObjectDetectionDebugPainterFactory.create(
+                                                    backend:
+                                                        widget
+                                                            .objectDetectionBackend,
+                                                    targets:
+                                                        closedFistObjectCandidates,
+                                                    showLabels: true,
+                                                    color:
+                                                        selectionCandidateColor,
+                                                    labelPrefix:
+                                                        selectionCandidateLabelPrefix,
+                                                    previewQuarterTurns:
+                                                        overlayQuarterTurns,
+                                                  ),
+                                                ),
+                                              if (followTargetDebugFaceTargets
+                                                  .isNotEmpty)
+                                                CustomPaint(
+                                                  painter:
+                                                      ObjectDetectionDebugPainter(
+                                                        targets:
+                                                            followTargetDebugFaceTargets,
+                                                        showLabels: false,
+                                                        previewQuarterTurns:
+                                                            overlayQuarterTurns,
+                                                      ),
+                                                ),
+                                              if (followTargetDebugObjectTargets
+                                                  .isNotEmpty)
+                                                CustomPaint(
+                                                  painter: ObjectDetectionDebugPainterFactory.create(
+                                                    backend:
+                                                        widget
+                                                            .objectDetectionBackend,
+                                                    targets:
+                                                        followTargetDebugObjectTargets,
+                                                    showLabels: false,
+                                                    previewQuarterTurns:
+                                                        overlayQuarterTurns,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-                if (_shouldShowTouchZoomGuideOverlay)
-                  Positioned.fill(
-                    child: TouchZoomGuideOverlay(
-                      currentZoomLevel: _currentZoomLevel,
-                      minZoomLevel: _minZoomLevel,
-                      maxZoomLevel: _maxZoomLevel,
-                      onZoomChanged: _handleTouchZoomChanged,
-                      onInteractionStart: _beginTouchZoomInteraction,
-                      onInteractionEnd: _endTouchZoomInteraction,
+                            );
+                          },
+                        );
+                      },
                     ),
                   ),
-                SafeArea(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.max,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          RoundIconButton(
-                            icon: Icons.arrow_back,
-                            tooltip: 'Back',
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                          const Expanded(
-                            child: Center(
-                              child: Text(
-                                'Show Your Hand',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                          RoundIconButton(
-                            key: const Key('rotateCameraPreviewButton'),
-                            icon: Icons.screen_rotation,
-                            tooltip: _cameraPreviewMode.isLandscape
-                                ? 'Use portrait 9:16'
-                                : 'Use landscape 16:9',
-                            onPressed: _canRotateCameraPreview
-                                ? _toggleCameraPreviewOrientation
-                                : null,
-                          ),
-                          const SizedBox(width: 8),
-                          _availableCameras.length > 1
-                              ? RoundIconButton(
-                                  icon: Icons.flip_camera_ios,
-                                  tooltip: 'Switch camera',
-                                  onPressed: _canSwitchCamera
-                                      ? () => unawaited(
-                                          _switchCamera(
-                                            restartRecordingAfterSwitch:
-                                                controller
-                                                    .value
-                                                    .isRecordingVideo,
-                                          ),
-                                        )
-                                      : null,
-                                )
-                              : const SizedBox(width: 40),
-                        ],
+                  if (_shouldShowTouchZoomGuideOverlay)
+                    Positioned.fill(
+                      child: TouchZoomGuideOverlay(
+                        currentZoomLevel: _currentZoomLevel,
+                        minZoomLevel: _minZoomLevel,
+                        maxZoomLevel: _maxZoomLevel,
+                        onZoomChanged: _handleTouchZoomChanged,
+                        onInteractionStart: _beginTouchZoomInteraction,
+                        onInteractionEnd: _endTouchZoomInteraction,
                       ),
                     ),
-                  ),
-                ),
-                if (_followTargetIdentity != null)
                   SafeArea(
                     child: Align(
                       alignment: Alignment.topCenter,
                       child: Padding(
-                        padding: const EdgeInsets.only(top: 76),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                          mainAxisSize: MainAxisSize.max,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            FilledButton.tonalIcon(
-                              onPressed: () =>
-                                  _cancelFollowTarget(promptReselect: false),
-                              icon: const Icon(Icons.close, size: 18),
-                              label: const Text('Cancel'),
-                              style: FilledButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                backgroundColor: Colors.black54,
-                                visualDensity: VisualDensity.compact,
+                            RoundIconButton(
+                              icon: Icons.arrow_back,
+                              tooltip: 'Back',
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                            const Expanded(
+                              child: Center(
+                                child: Text(
+                                  'Show Your Hand',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
+                            ),
+                            RoundIconButton(
+                              key: const Key('rotateCameraPreviewButton'),
+                              icon: Icons.screen_rotation,
+                              tooltip:
+                                  _cameraPreviewMode.isLandscape
+                                      ? 'Use portrait 9:16'
+                                      : 'Use landscape 16:9',
+                              onPressed:
+                                  _canRotateCameraPreview
+                                      ? _toggleCameraPreviewOrientation
+                                      : null,
                             ),
                             const SizedBox(width: 8),
-                            FilledButton.tonalIcon(
-                              onPressed: () =>
-                                  _cancelFollowTarget(promptReselect: true),
-                              icon: const Icon(Icons.refresh, size: 18),
-                              label: const Text('Reselect'),
-                              style: FilledButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                backgroundColor: Colors.black54,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
+                            _availableCameras.length > 1
+                                ? RoundIconButton(
+                                  icon: Icons.flip_camera_ios,
+                                  tooltip: 'Switch camera',
+                                  onPressed:
+                                      _canSwitchCamera
+                                          ? () => unawaited(
+                                            _switchCamera(
+                                              restartRecordingAfterSwitch:
+                                                  controller
+                                                      .value
+                                                      .isRecordingVideo,
+                                            ),
+                                          )
+                                          : null,
+                                  )
+                                : const SizedBox(width: 40),
+                            const SizedBox(width: 8),
+                            _buildDirectionDebugSettingsButton(),
                           ],
                         ),
                       ),
                     ),
                   ),
-                if (controller.value.isRecordingVideo)
-                  SafeArea(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 72, 16, 0),
-                        child: _buildRecordingControls(controller),
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [Colors.black87, Colors.transparent],
-                      ),
-                    ),
-                    child: GestureStatusPanel(
-                      gestureText: _gestureText,
-                      handText: _handText,
-                      gestureConfidence: _gestureConfidence,
-                      detectedHandsCount: _detectedHandsCount,
-                    ),
-                  ),
-                ),
-                if (_shouldShowZoomControlOverlay)
-                  SafeArea(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 14),
-                        child: ZoomControlOverlay(
-                          currentZoomLevel: _currentZoomLevel,
-                          minZoomLevel: _minZoomLevel,
-                          maxZoomLevel: _maxZoomLevel,
-                          onZoomChanged: _handleManualZoomChanged,
-                          onZoomIncrease: _handleManualZoomIncrease,
-                          onZoomDecrease: _handleManualZoomDecrease,
-                          onZoomReset: _resetManualZoom,
-                          onInteractionStart: _beginManualZoomInteraction,
-                          onInteractionEnd: _endManualZoomInteraction,
-                          onClose: _hideZoomControlOverlay,
+                  if (_followTargetIdentity != null)
+                    SafeArea(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 76),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FilledButton.tonalIcon(
+                                onPressed:
+                                    () => _cancelFollowTarget(
+                                      promptReselect: false,
+                                    ),
+                                icon: const Icon(Icons.close, size: 18),
+                                label: const Text('Cancel'),
+                                style: FilledButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  backgroundColor: Colors.black54,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              FilledButton.tonalIcon(
+                                onPressed:
+                                    () => _cancelFollowTarget(
+                                      promptReselect: true,
+                                    ),
+                                icon: const Icon(Icons.refresh, size: 18),
+                                label: const Text('Reselect'),
+                                style: FilledButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  backgroundColor: Colors.black54,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                if (_isStartingVideoRecording || _isStoppingVideoRecording)
-                  Positioned.fill(
-                    child: _buildRecordingTransitionScrim(
-                      message: _isStoppingVideoRecording
-                          ? 'Stopping video recording...'
-                          : 'Starting video recording...',
+                  if (controller.value.isRecordingVideo)
+                    SafeArea(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 72, 16, 0),
+                          child: _buildRecordingControls(controller),
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [Colors.black87, Colors.transparent],
+                        ),
+                      ),
+                      child: GestureStatusPanel(
+                        gestureText: _gestureText,
+                        handText: _handText,
+                        gestureConfidence: _gestureConfidence,
+                        detectedHandsCount: _detectedHandsCount,
+                      ),
                     ),
                   ),
-              ],
-            )
-          : HandCameraLoadingView(
-              title: _cameraStatusTitle,
-              message: _cameraStatusMessage,
-              actionLabel: _cameraActionLabel,
-              isBusy: !_hasCameraFailure,
-              onRetry: _handleCameraRetry,
-            ),
+                  if (_shouldShowZoomControlOverlay)
+                    SafeArea(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 14),
+                          child: ZoomControlOverlay(
+                            currentZoomLevel: _currentZoomLevel,
+                            minZoomLevel: _minZoomLevel,
+                            maxZoomLevel: _maxZoomLevel,
+                            onZoomChanged: _handleManualZoomChanged,
+                            onZoomIncrease: _handleManualZoomIncrease,
+                            onZoomDecrease: _handleManualZoomDecrease,
+                            onZoomReset: _resetManualZoom,
+                            onInteractionStart: _beginManualZoomInteraction,
+                            onInteractionEnd: _endManualZoomInteraction,
+                            onClose: _hideZoomControlOverlay,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (_isStartingVideoRecording || _isStoppingVideoRecording)
+                    Positioned.fill(
+                      child: _buildRecordingTransitionScrim(
+                        message:
+                            _isStoppingVideoRecording
+                                ? 'Stopping video recording...'
+                                : 'Starting video recording...',
+                      ),
+                    ),
+                ],
+              )
+              : HandCameraLoadingView(
+                title: _cameraStatusTitle,
+                message: _cameraStatusMessage,
+                actionLabel: _cameraActionLabel,
+                isBusy: !_hasCameraFailure,
+                onRetry: _handleCameraRetry,
+              ),
     );
   }
 
@@ -594,6 +670,7 @@ extension on _AdminHandGestureLiveScreenState {
       candidateDirection: _directionGestureDetector.debugCandidateDirection,
       acceptedDirection: _directionGestureDetector.debugAcceptedDirection,
       debugSummary: _directionGestureDetector.debugSummary,
+      showPalmCircle: _showDirectionPalmCircleDebug,
       previewQuarterTurns: _previewQuarterTurnsForOverlays(controller),
       useRecordingPreviewMapping: isRecordingPreview,
     );
