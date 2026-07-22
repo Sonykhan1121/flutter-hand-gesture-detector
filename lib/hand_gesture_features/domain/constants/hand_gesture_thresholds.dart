@@ -303,8 +303,8 @@ abstract final class HandGestureThresholds {
   static const double movingDownActiveMinDirectionAngleDegrees = 235.0;
   static const double movingDownActiveMaxDirectionAngleDegrees = 305.0;
 
-  /// One confirmed folded middle/ring/pinky is enough for a direction.
-  /// The other two may be open, uncertain, or unavailable.
+  /// One confirmed folded middle/ring/pinky finger is enough for the normal
+  /// direction path. The compact palm-circle alternative remains independent.
   static const int directionMinConfirmedFoldedFingerCount = 1;
 
   /// Alternative compact-palm direction shape. Point 5 and points 9-20 must
@@ -381,12 +381,19 @@ abstract final class HandGestureThresholds {
 
   static const double okTouchMaxDistanceRatio = 0.11;
 
-  /// Maximum thumb-tip distance from any index landmark for a punch.
-  static const double punchThumbMaxIndexDistanceRatio = 0.18;
-  static const double punchFingerMaxJointAngleDegrees = 120.0;
+  /// Normal Punch-circle radius relative to detected hand size.
+  static const double punchCircleRadiusHandSizeRatio = 0.30;
 
-  /// Requires the index PIP itself to bend, not only its fingertip to curl in.
-  static const double punchIndexPipMaxJointAngleDegrees = 120.0;
+  /// When points 5 and 13 are available, their distance is the minimum radius.
+  static const List<HandLandmarkType> punchCircleMinimumRadiusAnchorTypes = [
+    HandLandmarkType.indexFingerMCP,
+    HandLandmarkType.ringFingerMCP,
+  ];
+
+  /// A hand becomes Punch only when all 21 hand landmarks fit inside
+  /// the point 9/10-centered circle and point 0 (wrist) is inside. Package
+  /// gesture type and confidence do not participate in this decision.
+  static const int punchCircleMinInsideLandmarkCount = 21;
 
   /// Normal-preview punch feedback needs a steady three-frame confirmation.
   /// Recording mode still uses raw punch detection plus its one-second hold.
@@ -432,7 +439,7 @@ abstract final class HandGestureThresholds {
   /// Camera-frame cadence, manual zoom step, and recording hold timings.
   static const Duration minFrameProcessInterval = Duration(milliseconds: 50);
   static const double zoomStep = 0.2;
-  static const double gestureZoomStep = 0.10;
+  static const double gestureZoomStep = 0.20;
   static const Duration recordStartHoldDuration = Duration(seconds: 1);
   static const Duration recordPauseHoldDuration = Duration(seconds: 1);
   static const Duration recordStopHoldDuration = Duration(seconds: 2);

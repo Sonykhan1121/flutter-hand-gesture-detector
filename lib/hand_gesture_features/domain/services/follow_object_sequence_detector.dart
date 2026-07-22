@@ -37,6 +37,30 @@ class FollowObjectSequenceDetector {
   bool? _lastOpenPalmDebugValue;
   bool? _lastClosedFistDebugValue;
 
+  FollowObjectSequencePhase get debugPhase => _phase;
+
+  bool? get debugOpenPalm => _lastOpenPalmDebugValue;
+
+  bool? get debugClosedFist => _lastClosedFistDebugValue;
+
+  int get debugRelaxedReleaseFrames => _relaxedReleasePositiveFrames;
+
+  /// Progress of the first open-palm hold used to arm target selection.
+  double debugFirstOpenHoldProgress(DateTime now) {
+    final startedAt = _firstOpenPalmStartedAt;
+    if (startedAt == null || now.isBefore(startedAt)) return 0;
+    final duration = HandGestureThresholds
+        .followObjectFirstOpenPalmHoldDuration
+        .inMilliseconds;
+    if (duration <= 0) return 1;
+    return (now.difference(startedAt).inMilliseconds / duration)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
+  /// Progress of the grace timer after a selecting hand leaves the frame.
+  double debugHandReturnProgress(DateTime now) => _handReturnProgress(now);
+
   /// V1.0.3 behavior:
   ///
   /// 1. User first shows open palm and holds it for 1 second.
@@ -379,6 +403,14 @@ class FollowObjectSequenceDetector {
     final gesture = hand.gesture;
     if (gesture == null ||
         !_geometry.isReliablePackageGesture(gesture, type: type)) {
+      return false;
+    }
+
+    if (type == GestureType.closedFist &&
+        _geometry.matchesPunchMiddleFingerCircle(hand)) {
+      _currentPackageGestureType = null;
+      _currentGestureConfidence = 0;
+      _debug('package $debugLabel belongs to compact Punch circle');
       return false;
     }
 

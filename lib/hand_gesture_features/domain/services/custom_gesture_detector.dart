@@ -18,6 +18,22 @@ class CustomGestureDetector {
   Offset? _punchSteadyHandCenter;
   double? _punchSteadyHandSize;
   int _punchSteadyFrameCount = 0;
+  CustomGestureDetectionResult _debugLastResult =
+      CustomGestureDetectionResult.empty;
+
+  /// Current normal-preview Punch confirmation progress for debug drawing.
+  int get punchSteadyFrameCount => _punchSteadyFrameCount;
+
+  CustomGestureDetectionResult get debugLastResult => _debugLastResult;
+
+  double returnToMainHoldProgress(DateTime now) {
+    final startedAt = _returnToMainDownStartedAt;
+    if (startedAt == null || now.isBefore(startedAt)) return 0;
+    return (now.difference(startedAt).inMilliseconds /
+            HandGestureThresholds.returnToMainDownHoldDuration.inMilliseconds)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
 
   /// Evaluates all custom gestures for the current hand frame.
   CustomGestureDetectionResult detect({
@@ -33,12 +49,13 @@ class CustomGestureDetector {
         imageSize.width <= 0 ||
         imageSize.height <= 0) {
       clearState();
+      _debugLastResult = CustomGestureDetectionResult.empty;
       return CustomGestureDetectionResult.empty;
     }
 
     final frameTime = now ?? DateTime.now();
 
-    return CustomGestureDetectionResult(
+    final result = CustomGestureDetectionResult(
       isCancelEverything: _detectCancelEverythingGesture(
         hand: hand,
         imageSize: imageSize,
@@ -52,6 +69,8 @@ class CustomGestureDetector {
         requireConfirmation: requirePunchConfirmation,
       ),
     );
+    _debugLastResult = result;
+    return result;
   }
 
   /// Clears gesture history after an invalid frame or external reset.
@@ -59,6 +78,7 @@ class CustomGestureDetector {
     _returnToMainDownStartedAt = null;
     _lastCancelEverythingDetectedAt = null;
     _clearPunchConfirmationState();
+    _debugLastResult = CustomGestureDetectionResult.empty;
   }
 
   /// Detects return-to-main after all four long fingers point down for 1 second.
@@ -369,61 +389,12 @@ class CustomGestureDetector {
         ringIsClosed;
   }
 
-  /// Detects a rotation-independent fist used to pause or resume recording.
+  /// Detects Punch from the compact landmark circle alone.
+  ///
+  /// Package gesture type and confidence are deliberately ignored: the
+  /// All-21-points circle and wrist-inside checks are the gesture gate.
   bool _isPunchGesture(Hand hand) {
-    if (!hand.hasLandmarks) return false;
-
-    final palmCenter = geometry.palmCenter3D(hand);
-    if (palmCenter == null) return false;
-
-    final handSize = _handSize(hand);
-    if (handSize <= 0) return false;
-
-    List<HandLandmark>? indexChain;
-    for (
-      var fingerIndex = 0;
-      fingerIndex < HandGestureThresholds.directionFingerChainTypes.length;
-      fingerIndex += 1
-    ) {
-      final chainTypes =
-          HandGestureThresholds.directionFingerChainTypes[fingerIndex];
-      final chain = geometry.visibleFingerChain(hand, chainTypes);
-      if (chain == null ||
-          geometry.fingerJointAngleDegrees3D(
-                mcp: chain[0],
-                pip: chain[1],
-                tip: chain[3],
-              ) >
-              HandGestureThresholds.punchFingerMaxJointAngleDegrees ||
-          (fingerIndex == 0 &&
-              geometry.fingerJointAngleDegrees3D(
-                    mcp: chain[0],
-                    pip: chain[1],
-                    tip: chain[2],
-                  ) >
-                  HandGestureThresholds.punchIndexPipMaxJointAngleDegrees) ||
-          !geometry.isFingerChainFolded3D(
-            chain: chain,
-            palmCenter: palmCenter,
-            handSize: handSize,
-          )) {
-        return false;
-      }
-
-      indexChain ??= chain;
-    }
-
-    final thumbTip = geometry.visibleLandmark(hand, HandLandmarkType.thumbTip);
-    if (thumbTip == null || indexChain == null) return false;
-
-    final closestIndexDistance = indexChain
-        .map(
-          (landmark) => geometry.distanceBetweenLandmarks3D(thumbTip, landmark),
-        )
-        .reduce(math.min);
-
-    return closestIndexDistance <=
-        handSize * HandGestureThresholds.punchThumbMaxIndexDistanceRatio;
+    return geometry.matchesPunchMiddleFingerCircle(hand);
   }
 
   /// Keeps raw one-frame punch recognition for recording controls, while the

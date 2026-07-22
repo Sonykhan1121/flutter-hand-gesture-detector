@@ -82,6 +82,37 @@ class PalmLandmarkCircleEvaluation {
       insideByType.values.every((inside) => inside);
 }
 
+/// Point 9/10-centered circle used to separate Punch from Closed Fist.
+class PunchMiddleFingerCircleEvaluation {
+  const PunchMiddleFingerCircleEvaluation({
+    required this.center,
+    required this.handSizeRadius,
+    required this.minimumRadius,
+    required this.radius,
+    required this.minimumRadiusApplied,
+    required this.insideByType,
+    required this.missingTypes,
+  });
+
+  final Offset center;
+  final double handSizeRadius;
+  final double minimumRadius;
+  final double radius;
+  final bool minimumRadiusApplied;
+  final Map<HandLandmarkType, bool> insideByType;
+  final Set<HandLandmarkType> missingTypes;
+
+  int get insideCount => insideByType.values.where((inside) => inside).length;
+
+  int get landmarkCount => HandLandmarkType.values.length;
+
+  bool get wristInside => insideByType[HandLandmarkType.wrist] ?? false;
+
+  bool get matchesPunch =>
+      wristInside &&
+      insideCount >= HandGestureThresholds.punchCircleMinInsideLandmarkCount;
+}
+
 /// Shared landmark geometry utilities used by all gesture detectors.
 class HandGeometryService {
   const HandGeometryService();
@@ -330,6 +361,88 @@ class HandGeometryService {
       insideByType: Map.unmodifiable(insideByType),
       missingTypes: Set.unmodifiable(missingTypes),
     );
+  }
+
+  /// Evaluates the point 9/10-centered circle for Punch/Closed Fist.
+  ///
+  /// The center is the midpoint of middle MCP (9) and middle PIP (10). When
+  /// point 9 is unavailable, point 10 alone becomes the center. The radius is
+  /// normally 30% of hand size, but cannot be smaller than the point 5-to-13
+  /// distance when both anchors are available. Point 12 is not required. All
+  /// landmarks 0-20 participate in the count; missing/unreliable landmarks
+  /// count as outside.
+  PunchMiddleFingerCircleEvaluation? evaluatePunchMiddleFingerCircle(
+    Hand hand,
+  ) {
+    final middlePip = visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerPIP,
+    );
+    if (middlePip == null) return null;
+
+    final middleMcp = visibleLandmark(
+      hand,
+      HandLandmarkType.middleFingerMCP,
+    );
+    final center = middleMcp == null
+        ? Offset(middlePip.x, middlePip.y)
+        : Offset(
+            (middleMcp.x + middlePip.x) / 2,
+            (middleMcp.y + middlePip.y) / 2,
+          );
+    final handSizeRadius =
+        handSizeFromBoundingBox(hand.boundingBox) *
+        HandGestureThresholds.punchCircleRadiusHandSizeRatio;
+    final minimumRadiusAnchors =
+        HandGestureThresholds.punchCircleMinimumRadiusAnchorTypes
+            .map((type) => visibleLandmark(hand, type))
+            .toList(growable: false);
+    final minimumRadius = minimumRadiusAnchors.any((anchor) => anchor == null)
+        ? 0.0
+        : distanceBetweenLandmarks(
+            minimumRadiusAnchors[0]!,
+            minimumRadiusAnchors[1]!,
+          );
+    final minimumRadiusApplied = minimumRadius > handSizeRadius;
+    final radius = math.max(handSizeRadius, minimumRadius);
+    if (!center.dx.isFinite ||
+        !center.dy.isFinite ||
+        !handSizeRadius.isFinite ||
+        !minimumRadius.isFinite ||
+        !radius.isFinite ||
+        radius <= _ratioBoundaryTolerance) {
+      return null;
+    }
+
+    final insideByType = <HandLandmarkType, bool>{};
+    final missingTypes = <HandLandmarkType>{};
+    for (final type in HandLandmarkType.values) {
+      final landmark = visibleLandmark(hand, type);
+      if (landmark == null) {
+        missingTypes.add(type);
+        continue;
+      }
+      insideByType[type] =
+          distance(landmark, center) <= radius + _ratioBoundaryTolerance;
+    }
+
+    return PunchMiddleFingerCircleEvaluation(
+      center: center,
+      handSizeRadius: handSizeRadius,
+      minimumRadius: minimumRadius,
+      radius: radius,
+      minimumRadiusApplied: minimumRadiusApplied,
+      insideByType: Map.unmodifiable(insideByType),
+      missingTypes: Set.unmodifiable(missingTypes),
+    );
+  }
+
+  /// Separates Punch from Closed Fist with the point 9/10-centered circle.
+  ///
+  /// Wrist point 0 must be inside and at least the configured number of all
+  /// landmarks 0-20 must be inside the circle.
+  bool matchesPunchMiddleFingerCircle(Hand hand) {
+    return evaluatePunchMiddleFingerCircle(hand)?.matchesPunch ?? false;
   }
 
   /// Averages visible wrist and knuckle points into a 3D palm center.

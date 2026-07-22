@@ -91,6 +91,29 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('renders the isolated Punch circle with direction paint off', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      CustomPaint(
+        size: const Size(320, 480),
+        painter: DirectionDebugOverlayPainter(
+          hand: _directionHand(),
+          imageSize: const Size(200, 300),
+          mirrorHorizontally: false,
+          candidateDirection: HandMoveDirection.none,
+          acceptedDirection: HandMoveDirection.none,
+          debugSummary: '',
+          showPalmCircle: false,
+          showPunchCircle: true,
+          showDirectionDrawing: false,
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('passes the frame-scaled minimum into the painted circle', (
     tester,
   ) async {
@@ -193,6 +216,66 @@ void main() {
           acceptedDirection: painter.acceptedDirection,
           debugSummary: painter.debugSummary,
           showPalmCircle: false,
+        ),
+      ),
+      isTrue,
+    );
+  });
+
+  test('repaints when Punch-only drawing mode changes', () {
+    final painter = DirectionDebugOverlayPainter(
+      hand: _directionHand(),
+      imageSize: const Size(200, 300),
+      mirrorHorizontally: false,
+      candidateDirection: HandMoveDirection.none,
+      acceptedDirection: HandMoveDirection.none,
+      debugSummary: '',
+      showPunchCircle: true,
+      showDirectionDrawing: false,
+    );
+
+    expect(
+      painter.shouldRepaint(
+        DirectionDebugOverlayPainter(
+          hand: painter.hand,
+          imageSize: painter.imageSize,
+          mirrorHorizontally: painter.mirrorHorizontally,
+          candidateDirection: painter.candidateDirection,
+          acceptedDirection: painter.acceptedDirection,
+          debugSummary: painter.debugSummary,
+          showPunchCircle: true,
+          showDirectionDrawing: true,
+        ),
+      ),
+      isTrue,
+    );
+  });
+
+  test('repaints when Punch confirmation progress changes', () {
+    final painter = DirectionDebugOverlayPainter(
+      hand: _directionHand(),
+      imageSize: const Size(200, 300),
+      mirrorHorizontally: false,
+      candidateDirection: HandMoveDirection.none,
+      acceptedDirection: HandMoveDirection.none,
+      debugSummary: '',
+      showPunchCircle: true,
+      showDirectionDrawing: false,
+      punchConfirmationFrameCount: 1,
+    );
+
+    expect(
+      painter.shouldRepaint(
+        DirectionDebugOverlayPainter(
+          hand: painter.hand,
+          imageSize: painter.imageSize,
+          mirrorHorizontally: painter.mirrorHorizontally,
+          candidateDirection: painter.candidateDirection,
+          acceptedDirection: painter.acceptedDirection,
+          debugSummary: painter.debugSummary,
+          showPunchCircle: true,
+          showDirectionDrawing: false,
+          punchConfirmationFrameCount: 2,
         ),
       ),
       isTrue,

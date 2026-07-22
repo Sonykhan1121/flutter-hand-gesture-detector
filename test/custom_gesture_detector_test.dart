@@ -536,7 +536,14 @@ void main() {
       expect(
         detector
             .detect(
-              hand: _punchHand(openFingerIndexes: const {0}),
+              hand: _punchHand(
+                missingTypes: const {
+                  HandLandmarkType.thumbTip,
+                  HandLandmarkType.indexFingerTip,
+                  HandLandmarkType.ringFingerTip,
+                  HandLandmarkType.pinkyTip,
+                },
+              ),
               imageSize: _imageSize,
               mirrorHorizontally: false,
               requirePunchConfirmation: true,
@@ -647,11 +654,75 @@ void main() {
       expect(result.hasAny, isFalse);
     });
 
-    test('one extended index pointing down is not punch', () {
-      final detector = CustomGestureDetector();
+    test('ignores package gesture type for Punch', () {
+      for (final hand in [
+        _punchHand(gesture: null),
+        _punchHand(
+          gesture: const GestureResult(
+            type: GestureType.unknown,
+            confidence: 0,
+          ),
+        ),
+        _punchHand(
+          gesture: const GestureResult(
+            type: GestureType.thumbDown,
+            confidence: 1,
+          ),
+        ),
+        _punchHand(
+          gesture: const GestureResult(
+            type: GestureType.victory,
+            confidence: 1,
+          ),
+        ),
+      ]) {
+        final detector = CustomGestureDetector();
+        expect(
+          detector
+              .detect(
+                hand: hand,
+                imageSize: _imageSize,
+                mirrorHorizontally: false,
+              )
+              .isPunch,
+          isTrue,
+        );
+      }
+    });
 
+    test('ignores package confidence for Punch', () {
+      for (final confidence in const [0.0, 0.49, double.nan]) {
+        final detector = CustomGestureDetector();
+        final result = detector.detect(
+          hand: _punchHand(
+            gesture: GestureResult(
+              type: GestureType.closedFist,
+              confidence: confidence,
+            ),
+          ),
+          imageSize: _imageSize,
+          mirrorHorizontally: false,
+        );
+
+        expect(result.isPunch, isTrue, reason: 'confidence=$confidence');
+      }
+    });
+
+    test('accepts all 21 visible points inside including point 0', () {
+      final detector = CustomGestureDetector();
       final result = detector.detect(
-        hand: _indexOnlyHand(indexTip: const Offset(200, 310)),
+        hand: _punchHand(),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isTrue);
+    });
+
+    test('keeps the package pose as Closed Fist when only 20 points count', () {
+      final detector = CustomGestureDetector();
+      final result = detector.detect(
+        hand: _punchHand(missingTypes: const {HandLandmarkType.thumbTip}),
         imageSize: _imageSize,
         mirrorHorizontally: false,
       );
@@ -659,24 +730,96 @@ void main() {
       expect(result.isPunch, isFalse);
     });
 
-    for (final testCase in const [
-      (Offset(168, 205), 'MCP'),
-      (Offset(168, 242), 'PIP'),
-      (Offset(190, 252), 'DIP'),
-      (Offset(210, 260), 'tip'),
-    ]) {
-      test('accepts thumb close to the index ${testCase.$2}', () {
-        final detector = CustomGestureDetector();
+    test('requires point 0 even when the other 20 points are compact', () {
+      final detector = CustomGestureDetector();
+      final result = detector.detect(
+        hand: _punchHand(missingTypes: const {HandLandmarkType.wrist}),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
 
+      expect(result.isPunch, isFalse);
+    });
+
+    test('requires point 10 for the circle center', () {
+      final detector = CustomGestureDetector();
+      final result = detector.detect(
+        hand: _punchHand(
+          missingTypes: const {HandLandmarkType.middleFingerPIP},
+        ),
+        imageSize: _imageSize,
+        mirrorHorizontally: false,
+      );
+
+      expect(result.isPunch, isFalse);
+    });
+
+    test('rejects a missing point 9 or point 12 despite center fallback', () {
+      for (final missingType in const [
+        HandLandmarkType.middleFingerMCP,
+        HandLandmarkType.middleFingerTip,
+      ]) {
+        final detector = CustomGestureDetector();
         final result = detector.detect(
-          hand: _punchHand(thumbTip: testCase.$1),
+          hand: _punchHand(missingTypes: {missingType}),
           imageSize: _imageSize,
           mirrorHorizontally: false,
         );
 
-        expect(result.isPunch, isTrue);
-      });
-    }
+        expect(result.isPunch, isFalse, reason: missingType.name);
+      }
+    });
+
+    test('accepts zero outside points but rejects one outside point', () {
+      final detector = CustomGestureDetector();
+      const outside = Offset(20, 20);
+      final zeroOutside = _punchHand();
+      final oneOutside = _punchHand(
+        landmarkOverrides: const {HandLandmarkType.thumbTip: outside},
+      );
+
+      expect(
+        detector
+            .detect(
+              hand: zeroOutside,
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+            )
+            .isPunch,
+        isTrue,
+      );
+      expect(
+        detector
+            .detect(
+              hand: oneOutside,
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+            )
+            .isPunch,
+        isFalse,
+      );
+    });
+
+    test('old finger-angle rule no longer gates an all-inside punch', () {
+      final detector = CustomGestureDetector();
+
+      expect(
+        detector
+            .detect(
+              hand: _punchHand(
+                landmarkOverrides: const {
+                  HandLandmarkType.indexFingerPIP: Offset(180, 220),
+                  HandLandmarkType.indexFingerDIP: Offset(200, 240),
+                  HandLandmarkType.indexFingerTip: Offset(220, 260),
+                },
+              ),
+              imageSize: _imageSize,
+              mirrorHorizontally: false,
+            )
+            .isPunch,
+        isTrue,
+      );
+    });
 
     for (final rotation in const [0.0, 90.0, 180.0, 270.0]) {
       test('accepts a punch rotated ${rotation.toInt()} degrees', () {
@@ -712,132 +855,6 @@ void main() {
             .isPunch,
         isTrue,
       );
-    });
-
-    test('rejects a distant thumb', () {
-      final detector = CustomGestureDetector();
-
-      final result = detector.detect(
-        hand: _punchHand(thumbTip: const Offset(300, 235)),
-        imageSize: _imageSize,
-        mirrorHorizontally: false,
-      );
-
-      expect(result.isPunch, isFalse);
-    });
-
-    test('rejects a missing or unreliable thumb tip', () {
-      final detector = CustomGestureDetector();
-
-      expect(
-        detector
-            .detect(
-              hand: _punchHand(includeThumbTip: false),
-              imageSize: _imageSize,
-              mirrorHorizontally: false,
-            )
-            .isPunch,
-        isFalse,
-      );
-      expect(
-        detector
-            .detect(
-              hand: _punchHand(lowVisibilityThumbTip: true),
-              imageSize: _imageSize,
-              mirrorHorizontally: false,
-            )
-            .isPunch,
-        isFalse,
-      );
-    });
-
-    for (var fingerIndex = 0; fingerIndex < 4; fingerIndex++) {
-      test('rejects punch when long finger $fingerIndex is open', () {
-        final detector = CustomGestureDetector();
-
-        final result = detector.detect(
-          hand: _punchHand(openFingerIndexes: {fingerIndex}),
-          imageSize: _imageSize,
-          mirrorHorizontally: false,
-        );
-
-        expect(result.isPunch, isFalse);
-      });
-    }
-
-    test('package thumb down with open fingers is not punch', () {
-      final detector = CustomGestureDetector();
-
-      final result = detector.detect(
-        hand: _punchHand(
-          openFingerIndexes: const {0, 1, 2, 3},
-          thumbTip: const Offset(300, 235),
-          gesture: const GestureResult(
-            type: GestureType.thumbDown,
-            confidence: 1,
-          ),
-        ),
-        imageSize: _imageSize,
-        mirrorHorizontally: false,
-      );
-
-      expect(result.isPunch, isFalse);
-    });
-
-    test('does not punch for ambiguous half-folded pose', () {
-      final detector = CustomGestureDetector();
-
-      final result = detector.detect(
-        hand: _halfFoldedHand(
-          gesture: const GestureResult(
-            type: GestureType.closedFist,
-            confidence: 1,
-          ),
-        ),
-        imageSize: _imageSize,
-        mirrorHorizontally: false,
-      );
-
-      expect(result.isPunch, isFalse);
-    });
-
-    test('rejects a partially folded index that can still be pointing', () {
-      final detector = CustomGestureDetector();
-
-      final result = detector.detect(
-        hand: _punchHand(fingerTipOverrides: const {0: Offset(186, 276)}),
-        imageSize: _imageSize,
-        mirrorHorizontally: false,
-      );
-
-      expect(result.isPunch, isFalse);
-    });
-
-    test('rejects a curled index tip when the index PIP is straight', () {
-      final detector = CustomGestureDetector();
-
-      final result = detector.detect(
-        hand: _punchHand(
-          fingerDipOverrides: const {0: Offset(160, 270)},
-          fingerTipOverrides: const {0: Offset(205, 230)},
-        ),
-        imageSize: _imageSize,
-        mirrorHorizontally: false,
-      );
-
-      expect(result.isPunch, isFalse);
-    });
-
-    test('missing an index-chain landmark rejects punch', () {
-      final detector = CustomGestureDetector();
-
-      final result = detector.detect(
-        hand: _punchHand(missingTypes: const {HandLandmarkType.indexFingerDIP}),
-        imageSize: _imageSize,
-        mirrorHorizontally: false,
-      );
-
-      expect(result.isPunch, isFalse);
     });
   });
 }
@@ -968,18 +985,18 @@ Hand _indexOnlyHand({required Offset indexTip, double score = 1}) {
 
 Hand _punchHand({
   Set<int> openFingerIndexes = const {},
-  Map<int, Offset> fingerDipOverrides = const {},
-  Map<int, Offset> fingerTipOverrides = const {},
   Offset thumbTip = const Offset(205, 232),
-  bool includeThumbTip = true,
-  bool lowVisibilityThumbTip = false,
   Set<HandLandmarkType> missingTypes = const {},
+  Map<HandLandmarkType, Offset> landmarkOverrides = const {},
   double rotationDegrees = 0,
   bool mirrorPose = false,
   double scale = 1,
   Offset palmOffset = Offset.zero,
   Offset wrist = const Offset(215, 225),
-  GestureResult? gesture,
+  GestureResult? gesture = const GestureResult(
+    type: GestureType.closedFist,
+    confidence: 1,
+  ),
   double score = 1,
 }) {
   const basePalmCenter = Offset(204, 220);
@@ -1005,9 +1022,16 @@ Hand _punchHand({
 
   void add(HandLandmarkType type, Offset base, {double visibility = 1}) {
     if (missingTypes.contains(type)) return;
-    landmarks.add(_landmark(type, point(base), visibility: visibility));
+    landmarks.add(
+      _landmark(
+        type,
+        point(landmarkOverrides[type] ?? base),
+        visibility: visibility,
+      ),
+    );
   }
 
+  const thumbCmc = Offset(230, 220);
   const thumbMcp = Offset(230, 230);
   const thumbIp = Offset(210, 238);
   const chainTypes = [
@@ -1038,7 +1062,7 @@ Hand _punchHand({
   ];
   const foldedChains = [
     [Offset(160, 200), Offset(160, 245), Offset(182.5, 255), Offset(205, 265)],
-    [Offset(190, 200), Offset(190, 245), Offset(210, 252.5), Offset(230, 260)],
+    [Offset(160, 200), Offset(190, 245), Offset(220, 252.5), Offset(245, 255)],
     [Offset(220, 200), Offset(220, 245), Offset(200, 252.5), Offset(180, 260)],
     [
       Offset(250, 200),
@@ -1061,15 +1085,10 @@ Hand _punchHand({
   ];
 
   add(HandLandmarkType.wrist, wrist);
+  add(HandLandmarkType.thumbCMC, thumbCmc);
   add(HandLandmarkType.thumbMCP, thumbMcp);
   add(HandLandmarkType.thumbIP, thumbIp);
-  if (includeThumbTip) {
-    add(
-      HandLandmarkType.thumbTip,
-      thumbTip,
-      visibility: lowVisibilityThumbTip ? 0.2 : 1,
-    );
-  }
+  add(HandLandmarkType.thumbTip, thumbTip);
 
   for (var fingerIndex = 0; fingerIndex < chainTypes.length; fingerIndex++) {
     final points = openFingerIndexes.contains(fingerIndex)
@@ -1080,11 +1099,6 @@ Hand _punchHand({
             openTips[fingerIndex],
           ]
         : [...foldedChains[fingerIndex]];
-    final dipOverride = fingerDipOverrides[fingerIndex];
-    if (dipOverride != null) points[2] = dipOverride;
-    final tipOverride = fingerTipOverrides[fingerIndex];
-    if (tipOverride != null) points[3] = tipOverride;
-
     for (var pointIndex = 0; pointIndex < points.length; pointIndex++) {
       add(chainTypes[fingerIndex][pointIndex], points[pointIndex]);
     }
@@ -1104,104 +1118,6 @@ Hand _punchHand({
     handedness: Handedness.right,
     gesture: gesture,
   );
-}
-
-Hand _halfFoldedHand({GestureResult? gesture}) {
-  return _handFromLongFingerChains(
-    chains: [
-      _foldedChain(const Offset(160, 180), const Offset(45, 70)),
-      _foldedChain(const Offset(190, 180), const Offset(40, 70)),
-      _straightChain(const Offset(220, 180), const Offset(0, 95)),
-      _straightChain(const Offset(250, 180), const Offset(0, 95)),
-    ],
-    gesture: gesture,
-  );
-}
-
-Hand _handFromLongFingerChains({
-  required List<List<Offset>> chains,
-  GestureResult? gesture,
-}) {
-  final landmarks = <HandLandmark>[
-    _landmark(HandLandmarkType.wrist, const Offset(200, 300)),
-    _landmark(HandLandmarkType.thumbMCP, const Offset(230, 210)),
-    _landmark(HandLandmarkType.thumbIP, const Offset(212, 222)),
-    _landmark(HandLandmarkType.thumbTip, const Offset(202, 216)),
-  ];
-
-  const chainTypes = [
-    [
-      HandLandmarkType.indexFingerMCP,
-      HandLandmarkType.indexFingerPIP,
-      HandLandmarkType.indexFingerDIP,
-      HandLandmarkType.indexFingerTip,
-    ],
-    [
-      HandLandmarkType.middleFingerMCP,
-      HandLandmarkType.middleFingerPIP,
-      HandLandmarkType.middleFingerDIP,
-      HandLandmarkType.middleFingerTip,
-    ],
-    [
-      HandLandmarkType.ringFingerMCP,
-      HandLandmarkType.ringFingerPIP,
-      HandLandmarkType.ringFingerDIP,
-      HandLandmarkType.ringFingerTip,
-    ],
-    [
-      HandLandmarkType.pinkyMCP,
-      HandLandmarkType.pinkyPIP,
-      HandLandmarkType.pinkyDIP,
-      HandLandmarkType.pinkyTip,
-    ],
-  ];
-
-  for (var fingerIndex = 0; fingerIndex < chainTypes.length; fingerIndex++) {
-    for (
-      var pointIndex = 0;
-      pointIndex < chainTypes[fingerIndex].length;
-      pointIndex++
-    ) {
-      landmarks.add(
-        _landmark(
-          chainTypes[fingerIndex][pointIndex],
-          chains[fingerIndex][pointIndex],
-        ),
-      );
-    }
-  }
-
-  return Hand(
-    boundingBox: BoundingBox.ltrb(40, 40, 360, 360),
-    score: 1,
-    landmarks: landmarks,
-    imageWidth: _imageSize.width.toInt(),
-    imageHeight: _imageSize.height.toInt(),
-    handedness: Handedness.right,
-    gesture: gesture,
-  );
-}
-
-List<Offset> _straightChain(Offset base, Offset vector) {
-  return List.generate(
-    4,
-    (pointIndex) => Offset(
-      base.dx + vector.dx * pointIndex / 3,
-      base.dy + vector.dy * pointIndex / 3,
-    ),
-  );
-}
-
-List<Offset> _foldedChain(Offset base, Offset vector) {
-  final tip = base + vector;
-  final vectorLength = vector.distance;
-  final bendOffset = vectorLength == 0
-      ? Offset.zero
-      : Offset(-vector.dy / vectorLength, vector.dx / vectorLength) * 35;
-  final pip = Offset.lerp(base, tip, 0.5)! + bendOffset;
-  final dip = Offset.lerp(pip, tip, 0.5)!;
-
-  return [base, pip, dip, tip];
 }
 
 HandLandmark _landmark(

@@ -198,10 +198,9 @@ void main() {
           },
         );
 
-        final result =
-            testCase.$2 == HandMoveDirection.left
-                ? _confirmMovingLeft(detector, hand)
-                : _confirmMovingRight(detector, hand);
+        final result = testCase.$2 == HandMoveDirection.left
+            ? _confirmMovingLeft(detector, hand)
+            : _confirmMovingRight(detector, hand);
         expect(result, testCase.$2);
         detector.clearState();
       });
@@ -1649,9 +1648,8 @@ void main() {
     });
 
     test('zero folded fingers fail when one point leaves the palm circle', () {
-      final overrides =
-          _compactOtherFingerOverrides()
-            ..[HandLandmarkType.pinkyTip] = const Offset(240, 125);
+      final overrides = _compactOtherFingerOverrides()
+        ..[HandLandmarkType.pinkyTip] = const Offset(240, 125);
 
       expect(
         _confirmMovingRight(
@@ -1778,6 +1776,49 @@ void main() {
       expect(detector.debugSummary, isNot(contains('package pointingUp')));
     });
 
+    test('reliable Victory blocks an otherwise valid moving up pose', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, -90),
+        openOtherFingerIndexes: const {1, 2},
+        gesture: const GestureResult(type: GestureType.victory, confidence: 1),
+      );
+
+      for (var frame = 0; frame < 4; frame += 1) {
+        expect(_detect(detector, hand), HandMoveDirection.none);
+      }
+      expect(detector.debugSummary, contains('victory gesture'));
+    });
+
+    test('Victory clears active up and requires fresh steady frames', () {
+      final movingUp = _pointingHand(indexVector: const Offset(0, -90));
+      final victory = _pointingHand(
+        indexVector: const Offset(0, -90),
+        openOtherFingerIndexes: const {1, 2},
+        gesture: const GestureResult(type: GestureType.victory, confidence: 1),
+      );
+
+      expect(_confirmMovingUp(detector, movingUp), HandMoveDirection.up);
+      expect(_detect(detector, victory), HandMoveDirection.none);
+      expect(detector.debugSummary, contains('victory gesture'));
+      expect(_detect(detector, movingUp), HandMoveDirection.none);
+      expect(_detect(detector, movingUp), HandMoveDirection.none);
+      expect(_detect(detector, movingUp), HandMoveDirection.up);
+    });
+
+    test('low-confidence Victory does not block a valid direction', () {
+      final hand = _pointingHand(
+        indexVector: const Offset(0, -90),
+        openOtherFingerIndexes: const {1, 2},
+        gesture: const GestureResult(
+          type: GestureType.victory,
+          confidence: 0.49,
+        ),
+      );
+
+      expect(_confirmMovingUp(detector, hand), HandMoveDirection.up);
+      expect(detector.debugSummary, isNot(contains('victory gesture')));
+    });
+
     test('allows a package thumbDown result to produce moving down', () {
       final hand = _pointingHand(
         indexVector: const Offset(0, 90),
@@ -1821,13 +1862,12 @@ void main() {
 
     for (final angle in const [0.0, 5.0, 44.0]) {
       test('reserves a $angle degree forward opening for zoom in', () {
-        final landmarks =
-            angle <= 5
-                ? _quadrant4ParallelZoomConflictLandmarks(angle)
-                : _horizontalZoomConflictLandmarks(
-                  180 - angle,
-                  intersection: const Offset(320, 205),
-                );
+        final landmarks = angle <= 5
+            ? _quadrant4ParallelZoomConflictLandmarks(angle)
+            : _horizontalZoomConflictLandmarks(
+                180 - angle,
+                intersection: const Offset(320, 205),
+              );
         final hand = _pointingHand(
           indexVector: angle <= 5 ? const Offset(0, -90) : const Offset(-90, 0),
           includeThumb: true,
@@ -2543,13 +2583,9 @@ Hand _pointingHand({
 
   for (var fingerIndex = 1; fingerIndex < _fingerChains.length; fingerIndex++) {
     final base = otherFingerBases[fingerIndex - 1];
-    final points =
-        openOtherFingerIndexes.contains(fingerIndex)
-            ? _straightChainPoints(base, const Offset(0, -75))
-            : _foldedChainPoints(
-              base,
-              rotationDegrees: otherFingerRotationDegrees,
-            );
+    final points = openOtherFingerIndexes.contains(fingerIndex)
+        ? _straightChainPoints(base, const Offset(0, -75))
+        : _foldedChainPoints(base, rotationDegrees: otherFingerRotationDegrees);
 
     for (var pointIndex = 0; pointIndex < points.length; pointIndex++) {
       addLandmark(_fingerChains[fingerIndex][pointIndex], points[pointIndex]);

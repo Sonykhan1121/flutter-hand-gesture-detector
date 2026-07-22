@@ -303,6 +303,53 @@ void main() {
     });
   });
 
+  group('HandGeometryService Punch circle', () {
+    const geometry = HandGeometryService();
+
+    test('uses the 5/13 distance when it exceeds 30% hand size', () {
+      final result = geometry.evaluatePunchMiddleFingerCircle(
+        _compactCircleHand(),
+      );
+
+      expect(result, isNotNull);
+      expect(result!.center, const Offset(130, 185));
+      expect(result.handSizeRadius, 45);
+      expect(result.minimumRadius, 60);
+      expect(result.radius, 60);
+      expect(result.minimumRadiusApplied, isTrue);
+      expect(
+        HandGestureThresholds.punchCircleRadiusHandSizeRatio,
+        0.30,
+      );
+    });
+
+    test('uses point 10 alone when point 9 is unavailable', () {
+      final result = geometry.evaluatePunchMiddleFingerCircle(
+        _compactCircleHand(
+          missingTypes: const {HandLandmarkType.middleFingerMCP},
+        ),
+      );
+
+      expect(result, isNotNull);
+      expect(result!.center, const Offset(130, 170));
+      expect(result.radius, 60);
+    });
+
+    test('uses the normal 30% radius when a 5/13 anchor is unavailable', () {
+      final result = geometry.evaluatePunchMiddleFingerCircle(
+        _compactCircleHand(
+          missingTypes: const {HandLandmarkType.indexFingerMCP},
+        ),
+      );
+
+      expect(result, isNotNull);
+      expect(result!.handSizeRadius, 45);
+      expect(result.minimumRadius, 0);
+      expect(result.radius, 45);
+      expect(result.minimumRadiusApplied, isFalse);
+    });
+  });
+
   group('HandGeometryService isReliablePackageGesture', () {
     const geometry = HandGeometryService();
 

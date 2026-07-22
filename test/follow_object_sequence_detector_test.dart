@@ -7,6 +7,32 @@ import 'package:hand_detection/hand_detection.dart';
 
 void main() {
   group('FollowObjectSequenceDetector', () {
+    test('19-point package fist is restricted from Punch', () {
+      final openPalm = _FakeOpenPalmGestureDetector();
+      final detector = FollowObjectSequenceDetector(
+        openPalmGestureDetector: openPalm,
+      );
+      final now = DateTime(2026);
+
+      openPalm.isDetected = true;
+      detector.update(_hand(), now, mirrorHorizontally: false);
+      detector.update(
+        _hand(),
+        now.add(const Duration(seconds: 1)),
+        mirrorHorizontally: false,
+      );
+
+      openPalm.isDetected = false;
+      final punch = detector.update(
+        _nineteenPointPackageFistHand(),
+        now.add(const Duration(milliseconds: 1200)),
+        mirrorHorizontally: false,
+      );
+      expect(punch.isActive, isTrue);
+      expect(punch.isTargetSelectionActive, isTrue);
+      expect(punch.packageGestureType, GestureType.closedFist);
+    });
+
     test(
       'waits two seconds before releasing from the last visible hand center',
       () {
@@ -597,6 +623,51 @@ Hand _hand({
     gesture: gestureType == null
         ? null
         : GestureResult(type: gestureType, confidence: gestureConfidence),
+  );
+}
+
+Hand _nineteenPointPackageFistHand() {
+  const points = <(double, double)>[
+    (200, 240),
+    (180, 225),
+    (175, 215),
+    (180, 205),
+    (50, 50),
+    (170, 200),
+    (170, 220),
+    (180, 225),
+    (190, 220),
+    (160, 200),
+    (190, 220),
+    (200, 225),
+    (240, 240),
+    (210, 200),
+    (50, 50),
+    (200, 225),
+    (190, 220),
+    (230, 200),
+    (230, 220),
+    (220, 225),
+    (210, 220),
+  ];
+
+  return Hand(
+    boundingBox: BoundingBox.ltrb(100, 80, 300, 280),
+    score: 1,
+    landmarks: [
+      for (var index = 0; index < points.length; index += 1)
+        HandLandmark(
+          type: HandLandmarkType.values[index],
+          x: points[index].$1,
+          y: points[index].$2,
+          z: 0,
+          visibility: 1,
+        ),
+    ],
+    imageWidth: 400,
+    imageHeight: 400,
+    handedness: Handedness.right,
+    gesture: const GestureResult(type: GestureType.closedFist, confidence: 1),
   );
 }
 

@@ -17,6 +17,7 @@ import '../../domain/enums/camera_preview_mode.dart';
 import '../../domain/enums/follow_object_release_reason.dart';
 import '../../domain/enums/follow_target_type.dart';
 import '../../domain/enums/follow_target_tracking_phase.dart';
+import '../../domain/enums/gesture_debug_mode.dart';
 import '../../domain/enums/hand_move_direction.dart';
 import '../../domain/enums/object_detection_backend.dart';
 import '../../domain/enums/zoom_direction.dart';
@@ -35,6 +36,8 @@ import '../../domain/services/direction_gesture_detector.dart';
 import '../../domain/services/follow_object_sequence_detector.dart';
 import '../../domain/services/follow_target_selector.dart';
 import '../../domain/services/follow_target_tracking_progress.dart';
+import '../../domain/services/gesture_debug_evaluator.dart';
+import '../../domain/services/gesture_debug_menu_trigger.dart';
 import '../../domain/services/hand_geometry_service.dart';
 import '../../domain/services/object_detection_request_controller.dart';
 import '../../domain/services/object_detection_result_stabilizer.dart';
@@ -48,6 +51,7 @@ import '../../domain/utils/camera_preview_geometry.dart';
 import '../painters/object_detection_debug_painter.dart';
 import '../painters/direction_debug_overlay_painter.dart';
 import '../painters/follow_target_overlay_painter.dart';
+import '../painters/gesture_family_debug_overlay_painter.dart';
 import '../painters/hand_focus_overlay_painter.dart';
 import '../painters/hand_landmark_overlay_painter.dart';
 import '../painters/object_detection_debug_painter_factory.dart';
@@ -59,6 +63,7 @@ import '../utils/camera_orientation_preferences.dart';
 import '../utils/palm_orientation_coordinate_policy.dart';
 import '../utils/ml_kit_preview_mapper.dart';
 import '../widgets/gesture_status_panel.dart';
+import '../widgets/gesture_debug_selector_overlay.dart';
 import '../widgets/hand_camera_loading_view.dart';
 import '../widgets/round_icon_button.dart';
 import '../widgets/touch_zoom_guide_overlay.dart';
@@ -103,6 +108,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final _zoomGestureDetector = ZoomGestureDetector();
   final _followTargetSelector = const FollowTargetSelector();
   final _followTargetProgress = FollowTargetTrackingProgress();
+  final _gestureDebugEvaluator = const GestureDebugEvaluator();
+  final _gestureDebugMenuTrigger = GestureDebugMenuTrigger();
   final _appearanceSignatureExtractor = const AppearanceSignatureExtractor();
   final _handGeometry = const HandGeometryService();
   final _objectTrackingFrameFactory = const ObjectTrackingFrameFactory();
@@ -141,16 +148,10 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final bool _showFollowTargetDebugOverlay = false;
   // Set true to inspect optical-flow points, raw boxes, and confidence.
   final bool _showObjectOpticalFlowDebugOverlay = false;
-  // Set false to hide the Zoom In rays, angle, and intersection point.
-  final bool _showZoomInDebugOverlay = true;
-  // Runtime master switch for every four-way direction debug drawing.
-  bool _showDirectionDebugOverlay = true;
-  static const int _directionDebugToggleConfirmationFrames = 3;
-  int _loveYouDebugToggleMatchFrames = 0;
-  int _loveYouDebugToggleReleaseFrames = 0;
-  bool _loveYouDebugToggleLatched = false;
-  // Set false to hide the white compact-palm circle and point colors.
-  final bool _showDirectionPalmCircleDebug = true;
+  // Exactly one diagnostic gesture-family painter may be active. The normal
+  // 21-point hand overlay remains visible except while its selector is open.
+  GestureDebugMode _gestureDebugMode = GestureDebugMode.off;
+  bool _isGestureDebugMenuOpen = false;
 
   String _gestureText = 'Show your hand';
   String _handText = '';

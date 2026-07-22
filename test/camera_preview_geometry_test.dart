@@ -115,6 +115,30 @@ void main() {
       expect(cameraPreviewQuarterTurns(0.5), 1);
     });
 
+    test('corrects only the Android recording preview counterclockwise', () {
+      expect(
+        recordingCameraPreviewQuarterTurns(
+          isAndroid: true,
+          isRecordingPreview: true,
+        ),
+        3,
+      );
+      expect(
+        recordingCameraPreviewQuarterTurns(
+          isAndroid: true,
+          isRecordingPreview: false,
+        ),
+        0,
+      );
+      expect(
+        recordingCameraPreviewQuarterTurns(
+          isAndroid: false,
+          isRecordingPreview: true,
+        ),
+        0,
+      );
+    });
+
     test('mirrors a front-camera point before rotating it clockwise', () {
       const detectorPoint = Offset(0.2, 0.3);
       const mirroredPoint = Offset(0.8, 0.3);
@@ -124,6 +148,72 @@ void main() {
         const Offset(0.7, 0.8),
       );
       expect(detectorPoint, const Offset(0.2, 0.3));
+    });
+  });
+
+  group('detectionPointToPreviewCanvas', () {
+    test('maps normal, mirrored, and rotated preview coordinates', () {
+      expect(
+        detectionPointToPreviewCanvas(
+          sourcePoint: const Offset(20, 30),
+          detectionImageSize: const Size(100, 100),
+          canvasSize: const Size(300, 500),
+          mirrorHorizontally: false,
+          previewQuarterTurns: 0,
+          useRecordingPreviewMapping: false,
+        ),
+        const Offset(60, 150),
+      );
+      expect(
+        detectionPointToPreviewCanvas(
+          sourcePoint: const Offset(20, 30),
+          detectionImageSize: const Size(100, 100),
+          canvasSize: const Size(300, 500),
+          mirrorHorizontally: true,
+          previewQuarterTurns: 1,
+          useRecordingPreviewMapping: false,
+        ),
+        const Offset(210, 400),
+      );
+    });
+
+    test('uses rotate then mirror and cover-fit for recording preview', () {
+      final point = detectionPointToPreviewCanvas(
+        sourcePoint: const Offset(20, 30),
+        detectionImageSize: const Size(100, 200),
+        canvasSize: const Size(400, 200),
+        mirrorHorizontally: true,
+        previewQuarterTurns: 1,
+        useRecordingPreviewMapping: true,
+      );
+
+      expect(point?.dx, closeTo(60, 0.000001));
+      expect(point?.dy, closeTo(40, 0.000001));
+    });
+
+    test('fails closed for invalid source or canvas geometry', () {
+      expect(
+        detectionPointToPreviewCanvas(
+          sourcePoint: const Offset(double.nan, 10),
+          detectionImageSize: const Size(100, 100),
+          canvasSize: const Size(300, 500),
+          mirrorHorizontally: false,
+          previewQuarterTurns: 0,
+          useRecordingPreviewMapping: false,
+        ),
+        isNull,
+      );
+      expect(
+        detectionPointToPreviewCanvas(
+          sourcePoint: const Offset(10, 10),
+          detectionImageSize: Size.zero,
+          canvasSize: const Size(300, 500),
+          mirrorHorizontally: false,
+          previewQuarterTurns: 0,
+          useRecordingPreviewMapping: false,
+        ),
+        isNull,
+      );
     });
   });
 }

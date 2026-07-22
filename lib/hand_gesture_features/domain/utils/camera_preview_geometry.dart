@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 /// Returns the camera preview size with its long edge aligned to the screen.
@@ -30,9 +31,9 @@ Size fittedCameraPreviewSize({
 
   final scale =
       (viewportSize.width / previewSize.width) <
-          (viewportSize.height / previewSize.height)
-      ? viewportSize.width / previewSize.width
-      : viewportSize.height / previewSize.height;
+              (viewportSize.height / previewSize.height)
+          ? viewportSize.width / previewSize.width
+          : viewportSize.height / previewSize.height;
   return Size(previewSize.width * scale, previewSize.height * scale);
 }
 
@@ -68,6 +69,16 @@ double cameraOverlayOpacity(double progress) {
 /// Switches painter coordinates only while the overlay is fully hidden.
 int cameraPreviewQuarterTurns(double progress) => progress >= 0.5 ? 1 : 0;
 
+/// Restores the Android recording texture to upright screen coordinates.
+///
+/// On the affected Android camera path, switching from the image stream to
+/// video recording exposes the sensor texture one quarter-turn clockwise.
+/// iOS and the normal Android preview do not need this correction.
+int recordingCameraPreviewQuarterTurns({
+  required bool isAndroid,
+  required bool isRecordingPreview,
+}) => isAndroid && isRecordingPreview ? 3 : 0;
+
 /// Rotates a normalized preview point clockwise without touching detector data.
 Offset rotateNormalizedDisplayPoint(Offset point, int quarterTurns) {
   switch (quarterTurns % 4) {
@@ -80,6 +91,97 @@ Offset rotateNormalizedDisplayPoint(Offset point, int quarterTurns) {
     default:
       return point;
   }
+}
+
+/// Maps one detector-space point onto the exact live-preview canvas.
+///
+/// Normal preview mirrors before rotation. Recording preview follows the
+/// cover-fitted painter and rotates before mirroring.
+Offset? detectionPointToPreviewCanvas({
+  required Offset sourcePoint,
+  required Size detectionImageSize,
+  required Size canvasSize,
+  required bool mirrorHorizontally,
+  required int previewQuarterTurns,
+  required bool useRecordingPreviewMapping,
+}) {
+  if (!sourcePoint.dx.isFinite ||
+      !sourcePoint.dy.isFinite ||
+      !detectionImageSize.width.isFinite ||
+      !detectionImageSize.height.isFinite ||
+      detectionImageSize.width <= 0 ||
+      detectionImageSize.height <= 0 ||
+      !canvasSize.width.isFinite ||
+      !canvasSize.height.isFinite ||
+      canvasSize.width <= 0 ||
+      canvasSize.height <= 0) {
+    return null;
+  }
+
+  final requestedTurns = previewQuarterTurns % 4;
+  final effectiveTurns =
+      useRecordingPreviewMapping
+          ? _bestPreviewQuarterTurns(
+            imageSize: detectionImageSize,
+            canvasSize: canvasSize,
+            requestedTurns: requestedTurns,
+          )
+          : requestedTurns;
+  final normalized = Offset(
+    sourcePoint.dx / detectionImageSize.width,
+    sourcePoint.dy / detectionImageSize.height,
+  );
+
+  if (!useRecordingPreviewMapping) {
+    final mirrored =
+        mirrorHorizontally
+            ? Offset(1 - normalized.dx, normalized.dy)
+            : normalized;
+    final rotated = rotateNormalizedDisplayPoint(mirrored, effectiveTurns);
+    return Offset(
+      rotated.dx * canvasSize.width,
+      rotated.dy * canvasSize.height,
+    );
+  }
+
+  final rotated = rotateNormalizedDisplayPoint(normalized, effectiveTurns);
+  final mirrored =
+      mirrorHorizontally ? Offset(1 - rotated.dx, rotated.dy) : rotated;
+  final sourceSize =
+      effectiveTurns.isOdd
+          ? Size(detectionImageSize.height, detectionImageSize.width)
+          : detectionImageSize;
+  final scale = math.max(
+    canvasSize.width / sourceSize.width,
+    canvasSize.height / sourceSize.height,
+  );
+  final fittedSize = sourceSize * scale;
+  return Offset(
+    (canvasSize.width - fittedSize.width) / 2 +
+        mirrored.dx * sourceSize.width * scale,
+    (canvasSize.height - fittedSize.height) / 2 +
+        mirrored.dy * sourceSize.height * scale,
+  );
+}
+
+int _bestPreviewQuarterTurns({
+  required Size imageSize,
+  required Size canvasSize,
+  required int requestedTurns,
+}) {
+  final normalDifference =
+      ((imageSize.width / imageSize.height) -
+              (canvasSize.width / canvasSize.height))
+          .abs();
+  final rotatedSize =
+      requestedTurns.isOdd
+          ? Size(imageSize.height, imageSize.width)
+          : imageSize;
+  final rotatedDifference =
+      ((rotatedSize.width / rotatedSize.height) -
+              (canvasSize.width / canvasSize.height))
+          .abs();
+  return rotatedDifference < normalDifference ? requestedTurns : 0;
 }
 
 /// Rotates a normalized preview rectangle clockwise around the preview.

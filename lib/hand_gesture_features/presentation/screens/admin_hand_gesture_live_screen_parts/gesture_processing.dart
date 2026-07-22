@@ -35,22 +35,20 @@ extension on _AdminHandGestureLiveScreenState {
           _followTargetProgress.phase == FollowTargetTrackingPhase.selecting ||
           _lockedFollowTarget?.type == FollowTargetType.object ||
           _followTargetIdentity?.type == FollowTargetType.object;
-      final ObjectTrackingFrame? objectTrackingFrame =
-          needsObjectTrackingFrame
-              ? _objectTrackingFrameFactory.create(
-                image: image,
-                frameId: frameId,
-                capturedAt: now,
-                rotation: rotation,
-                mirrorHorizontally: _shouldMirrorPreviewCoordinates(controller),
-                isBgra: Platform.isIOS || Platform.isMacOS,
-                maxDimension:
-                    Platform.isIOS
-                        ? HandGestureThresholds.iosObjectTrackingMaxDimension
-                        : HandGestureThresholds.objectTrackingMaxDimension,
-                useFastBgraLuma: Platform.isIOS,
-              )
-              : null;
+      final ObjectTrackingFrame? objectTrackingFrame = needsObjectTrackingFrame
+          ? _objectTrackingFrameFactory.create(
+              image: image,
+              frameId: frameId,
+              capturedAt: now,
+              rotation: rotation,
+              mirrorHorizontally: _shouldMirrorPreviewCoordinates(controller),
+              isBgra: Platform.isIOS || Platform.isMacOS,
+              maxDimension: Platform.isIOS
+                  ? HandGestureThresholds.iosObjectTrackingMaxDimension
+                  : HandGestureThresholds.objectTrackingMaxDimension,
+              useFastBgraLuma: Platform.isIOS,
+            )
+          : null;
 
       final detectionImageSize = detectionSize(
         width: image.width,
@@ -169,6 +167,14 @@ extension on _AdminHandGestureLiveScreenState {
     required ObjectTrackingFrame? objectTrackingFrame,
   }) async {
     final now = DateTime.now();
+    if (_isGestureDebugMenuOpen) {
+      _updateOpenGestureDebugMenuFrame(
+        hands: hands,
+        detectionImageSize: detectionImageSize,
+      );
+      return;
+    }
+
     final trackedFollowTarget = await _refreshLockedFollowTarget(
       image: image,
       rotation: rotation,
@@ -218,10 +224,9 @@ extension on _AdminHandGestureLiveScreenState {
         _clearFrameInterruptedGestureState(keepFollowObjectSequence: true);
 
         _setScreenState(() {
-          _gestureText =
-              selectedTarget == null
-                  ? 'No face or object selected'
-                  : _followTargetText(selectedTarget);
+          _gestureText = selectedTarget == null
+              ? 'No face or object selected'
+              : _followTargetText(selectedTarget);
           _handText = '';
           _gestureConfidence = selectedTarget == null ? 0 : 1;
           _detectedHandsCount = 0;
@@ -304,10 +309,9 @@ extension on _AdminHandGestureLiveScreenState {
           _detectionImageSize = detectionImageSize;
           _detectedHandsCount = hands.length;
           _handText = '';
-          _gestureText =
-              selectedTarget == null
-                  ? 'No face or object selected'
-                  : _followTargetText(selectedTarget);
+          _gestureText = selectedTarget == null
+              ? 'No face or object selected'
+              : _followTargetText(selectedTarget);
           _gestureConfidence = selectedTarget == null ? 0 : 1;
           _isFollowingHand = false;
           _focusedHandBox = null;
@@ -338,28 +342,37 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final bestHand =
-        _handGeometry.bestReliableHand(
-          reliableHands,
-          focusedHandBox:
-              _isFollowingHand &&
-                      trackedFollowTarget == null &&
-                      _followTargetIdentity == null
-                  ? _focusedHandBox
-                  : null,
-        )!;
+    final bestHand = _handGeometry.bestReliableHand(
+      reliableHands,
+      focusedHandBox:
+          _isFollowingHand &&
+              trackedFollowTarget == null &&
+              _followTargetIdentity == null
+          ? _focusedHandBox
+          : null,
+    )!;
     final gesture = bestHand.gesture;
     final reliablePackageGesture =
         _handGeometry.isReliablePackageGesture(gesture) ? gesture : null;
-    _updateDirectionDebugToggleGesture(
+    _updateGestureDebugMenuTrigger(
       isLoveYou: reliablePackageGesture?.type == GestureType.iLoveYou,
     );
+    if (_isGestureDebugMenuOpen) {
+      _updateOpenGestureDebugMenuFrame(
+        hands: hands,
+        detectionImageSize: detectionImageSize,
+      );
+      return;
+    }
 
     final rawCustomGestureResult = _customGestureDetector.detect(
       hand: bestHand,
       imageSize: detectionImageSize,
       mirrorHorizontally: mirrorDirectionalGestureCoordinates,
       requirePunchConfirmation: !_isVideoRecording,
+    );
+    final punchCircleCandidate = _handGeometry.matchesPunchMiddleFingerCircle(
+      bestHand,
     );
 
     if (rawCustomGestureResult.isOnlyCancelEverything) {
@@ -437,10 +450,9 @@ extension on _AdminHandGestureLiveScreenState {
         _lockedFollowTarget = faceTarget;
         _detectedHandsCount = hands.length;
         _handText = bestHand.handedness.displayLabel;
-        _gestureText =
-            faceTarget == null
-                ? 'No face detected'
-                : _followTargetText(faceTarget);
+        _gestureText = faceTarget == null
+            ? 'No face detected'
+            : _followTargetText(faceTarget);
         _gestureConfidence = faceTarget == null ? 0 : 1;
       });
       return;
@@ -458,11 +470,8 @@ extension on _AdminHandGestureLiveScreenState {
     if (followObjectSequence.isWaitingForHandReturn) {
       final savedHandPoint = followObjectSequence.savedHandPoint;
       if (savedHandPoint != null) {
-        final savedDisplayPoint =
-            _handReturnGraceReleasePoint ??= _handPointToDisplayPoint(
-              savedHandPoint,
-              detectionImageSize,
-            );
+        final savedDisplayPoint = _handReturnGraceReleasePoint ??=
+            _handPointToDisplayPoint(savedHandPoint, detectionImageSize);
         await _refreshHandReturnGraceCandidates(
           image: image,
           rotation: rotation,
@@ -511,8 +520,8 @@ extension on _AdminHandGestureLiveScreenState {
       // normalized display space used by face/object candidates.
       final releaseDisplayPoint =
           isHandLostTimeout && _handReturnGraceReleasePoint != null
-              ? _handReturnGraceReleasePoint!
-              : _handPointToDisplayPoint(releasePoint, detectionImageSize);
+          ? _handReturnGraceReleasePoint!
+          : _handPointToDisplayPoint(releasePoint, detectionImageSize);
       final releaseSelection = await _selectFollowTargetAtReleasePoint(
         releaseDisplayPoint,
         image: image,
@@ -593,16 +602,17 @@ extension on _AdminHandGestureLiveScreenState {
 
     final knownPackageGesture =
         !followTrackingActive &&
-                reliablePackageGesture != null &&
-                reliablePackageGesture.type != GestureType.unknown &&
-                reliablePackageGesture.type != GestureType.openPalm
-            ? reliablePackageGesture
-            : null;
+            reliablePackageGesture != null &&
+            reliablePackageGesture.type != GestureType.unknown &&
+            reliablePackageGesture.type != GestureType.openPalm &&
+            !punchCircleCandidate
+        ? reliablePackageGesture
+        : null;
     final rawCustomGestureHasOverlap = rawCustomGestureResult.hasOverlap;
     final customGestureResult =
         followTrackingActive || rawCustomGestureHasOverlap
-            ? CustomGestureDetectionResult.empty
-            : rawCustomGestureResult;
+        ? CustomGestureDetectionResult.empty
+        : rawCustomGestureResult;
 
     final customGestureLabels = customGestureResult.labels;
     final hasSingleCustomGesture = customGestureResult.hasSingle;
@@ -646,24 +656,28 @@ extension on _AdminHandGestureLiveScreenState {
     final recordingGestureActive = recordingGestureFeedback != null;
 
     final packageGestureBlocksZoom =
-        knownPackageGesture != null &&
-        knownPackageGesture.type != GestureType.pointingUp;
+        punchCircleCandidate ||
+        (knownPackageGesture != null &&
+            knownPackageGesture.type != GestureType.pointingUp);
     final zoomOpeningTransitionReserved =
         _zoomGestureDetector.reservesZoomInOpeningTransition;
 
     var moveDirection = HandMoveDirection.none;
-    final directionBlockReason =
-        followTrackingActive
-            ? 'blocked: follow active'
-            : customGestureLabels.isNotEmpty
-            ? 'blocked: custom ${customGestureLabels.join(', ')}'
-            : hasOverlappingCustomGestures
-            ? 'blocked: overlapping custom'
-            : recordingGestureActive
-            ? 'blocked: recording gesture'
-            : zoomOpeningTransitionReserved
-            ? 'blocked: zoom opening transition'
-            : null;
+    final directionBlockReason = followTrackingActive
+        ? 'blocked: follow active'
+        : hasVictoryGesture
+        ? 'blocked: victory gesture'
+        : customGestureLabels.isNotEmpty
+        ? 'blocked: custom ${customGestureLabels.join(', ')}'
+        : hasOverlappingCustomGestures
+        ? 'blocked: overlapping custom'
+        : recordingGestureActive
+        ? 'blocked: recording gesture'
+        : punchCircleCandidate
+        ? 'blocked: punch circle candidate'
+        : zoomOpeningTransitionReserved
+        ? 'blocked: zoom opening transition'
+        : null;
 
     if (directionBlockReason == null) {
       // Landmark geometry is authoritative for directions. Package labels can
@@ -733,10 +747,9 @@ extension on _AdminHandGestureLiveScreenState {
         hasOverlappingCustomGestures ||
         zoomHoldActive;
 
-    final displayMoveDirection =
-        directionDisplayBlockedByPriority
-            ? HandMoveDirection.none
-            : moveDirection;
+    final displayMoveDirection = directionDisplayBlockedByPriority
+        ? HandMoveDirection.none
+        : moveDirection;
 
     _setScreenState(() {
       _hands = hands;
@@ -770,10 +783,9 @@ extension on _AdminHandGestureLiveScreenState {
         _gestureConfidence = 1;
       } else if (followObjectSequenceActive) {
         _gestureText = followObjectSequenceMessage ?? 'Hand detected';
-        _gestureConfidence =
-            followObjectSequenceMessage == null
-                ? 0
-                : followObjectSequence.gestureConfidence;
+        _gestureConfidence = followObjectSequenceMessage == null
+            ? 0
+            : followObjectSequence.gestureConfidence;
       } else if (recordingGestureFeedback != null) {
         _gestureText = recordingGestureFeedback.text;
         _gestureConfidence = recordingGestureFeedback.confidence;
@@ -882,10 +894,9 @@ extension on _AdminHandGestureLiveScreenState {
     return _FollowTargetReleaseSelection(
       target: nearest,
       requiresPostReleaseConfirmation: false,
-      evaluatedDetectionCycleAt:
-          nearest.type == FollowTargetType.face
-              ? detections.facesDetectedAt
-              : detections.objectsDetectedAt,
+      evaluatedDetectionCycleAt: nearest.type == FollowTargetType.face
+          ? detections.facesDetectedAt
+          : detections.objectsDetectedAt,
     );
   }
 
@@ -917,10 +928,9 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final detectionCycleAt =
-        nearest.type == FollowTargetType.face
-            ? detections.facesDetectedAt
-            : detections.objectsDetectedAt;
+    final detectionCycleAt = nearest.type == FollowTargetType.face
+        ? detections.facesDetectedAt
+        : detections.objectsDetectedAt;
     _followTargetSelectionMemory = FollowTargetSelectionMemory(
       candidate: nearest,
       lastDetectionCycle: detectionCycleAt ?? nearest.detectedAt,
@@ -1041,8 +1051,8 @@ extension on _AdminHandGestureLiveScreenState {
 
     _handReturnGraceFrozenTarget ??=
         _followTargetSelectionMemory?.isReleasable == true
-            ? _followTargetSelectionMemory!.candidate
-            : null;
+        ? _followTargetSelectionMemory!.candidate
+        : null;
     final frozen = _handReturnGraceFrozenTarget;
     if (frozen == null) {
       _updateFollowTargetSelectionMemory(
@@ -1057,10 +1067,9 @@ extension on _AdminHandGestureLiveScreenState {
       return;
     }
 
-    final freshCandidates =
-        frozen.type == FollowTargetType.face
-            ? _freshFollowTargets(detections.faces, now)
-            : _freshFollowTargets(detections.objects, now);
+    final freshCandidates = frozen.type == FollowTargetType.face
+        ? _freshFollowTargets(detections.faces, now)
+        : _freshFollowTargets(detections.objects, now);
     final latest = _followTargetSelector.uniqueSelectionConfirmation(
       remembered: frozen,
       candidates: freshCandidates,
@@ -1108,11 +1117,8 @@ extension on _AdminHandGestureLiveScreenState {
         _clearFollowObjectTargetCandidates();
         return null;
       }
-      final savedDisplayPoint =
-          _handReturnGraceReleasePoint ??= _handPointToDisplayPoint(
-            savedHandPoint,
-            detectionImageSize,
-          );
+      final savedDisplayPoint = _handReturnGraceReleasePoint ??=
+          _handPointToDisplayPoint(savedHandPoint, detectionImageSize);
       await _refreshHandReturnGraceCandidates(
         image: image,
         rotation: rotation,
@@ -1207,13 +1213,12 @@ extension on _AdminHandGestureLiveScreenState {
         targetType == FollowTargetType.object &&
         previous != null &&
         objectTrackingFrame != null) {
-      final opticalResult =
-          _objectOpticalFlowTracker.isActive
-              ? _objectOpticalFlowTracker.update(objectTrackingFrame)
-              : _objectOpticalFlowTracker.seed(
-                objectTrackingFrame,
-                previous.displayBox,
-              );
+      final opticalResult = _objectOpticalFlowTracker.isActive
+          ? _objectOpticalFlowTracker.update(objectTrackingFrame)
+          : _objectOpticalFlowTracker.seed(
+              objectTrackingFrame,
+              previous.displayBox,
+            );
       _objectOpticalFlowResult = opticalResult;
       if (opticalResult.isUsable) {
         visiblePrevious = _copyFollowTargetWithDisplayBox(
@@ -1242,14 +1247,12 @@ extension on _AdminHandGestureLiveScreenState {
           : visiblePrevious;
     }
 
-    final candidates =
-        targetType == FollowTargetType.face
-            ? detections.faces
-            : detections.objects;
-    final detectionCycleAt =
-        targetType == FollowTargetType.face
-            ? detections.facesDetectedAt
-            : detections.objectsDetectedAt;
+    final candidates = targetType == FollowTargetType.face
+        ? detections.faces
+        : detections.objects;
+    final detectionCycleAt = targetType == FollowTargetType.face
+        ? detections.facesDetectedAt
+        : detections.objectsDetectedAt;
 
     if (isConfirmingSelection) {
       final confirmationNow = DateTime.now();
@@ -1263,13 +1266,12 @@ extension on _AdminHandGestureLiveScreenState {
             (candidate) => _isFreshFollowTarget(candidate, confirmationNow),
           )
           .toList(growable: false);
-      final confirmed =
-          visiblePrevious == null
-              ? null
-              : _followTargetSelector.uniqueSelectionConfirmation(
-                remembered: visiblePrevious,
-                candidates: freshCandidates,
-              );
+      final confirmed = visiblePrevious == null
+          ? null
+          : _followTargetSelector.uniqueSelectionConfirmation(
+              remembered: visiblePrevious,
+              candidates: freshCandidates,
+            );
       if (confirmed == null) {
         return _keepConfirmingSelectionOrFail(confirmationNow, visiblePrevious);
       }
@@ -1308,10 +1310,9 @@ extension on _AdminHandGestureLiveScreenState {
       var detectorPrevious = visiblePrevious;
       if (targetType == FollowTargetType.object && freshCandidates.isNotEmpty) {
         final sourceFrameId = freshCandidates.first.sourceFrameId;
-        final historicalBox =
-            sourceFrameId == null
-                ? null
-                : _objectOpticalFlowTracker.displayBoxForFrame(sourceFrameId);
+        final historicalBox = sourceFrameId == null
+            ? null
+            : _objectOpticalFlowTracker.displayBoxForFrame(sourceFrameId);
         if (historicalBox != null) {
           detectorPrevious = _copyFollowTargetWithDisplayBox(
             visiblePrevious,
@@ -1402,10 +1403,9 @@ extension on _AdminHandGestureLiveScreenState {
             isAndroid: Platform.isAndroid,
             isIOS: Platform.isIOS,
           );
-          final detectedFaces =
-              inputImage == null
-                  ? const <ml_face.Face>[]
-                  : await faceDetector.processImage(inputImage);
+          final detectedFaces = inputImage == null
+              ? const <ml_face.Face>[]
+              : await faceDetector.processImage(inputImage);
           faces = [
             for (final face in detectedFaces)
               _faceFollowTarget(
@@ -1437,8 +1437,9 @@ extension on _AdminHandGestureLiveScreenState {
       faces: faces,
       objects: objects,
       facesDetectedAt: facesDetectedAt,
-      objectsDetectedAt:
-          includeObjects ? _cachedObjectDetectionBatch?.completedAt : null,
+      objectsDetectedAt: includeObjects
+          ? _cachedObjectDetectionBatch?.completedAt
+          : null,
     );
   }
 
@@ -1465,12 +1466,11 @@ extension on _AdminHandGestureLiveScreenState {
       request = _objectDetectionRequests.submit(
         now: now,
         detectorBusy: objectDetector.isBusy,
-        detect:
-            () => objectDetector.detect(
-              image,
-              rotation: frameRotation,
-              lensDirection: _currentLensDirection,
-            ),
+        detect: () => objectDetector.detect(
+          image,
+          rotation: frameRotation,
+          lensDirection: _currentLensDirection,
+        ),
       );
     } catch (error, stackTrace) {
       debugPrint('Object detection ignored: $error\n$stackTrace');
@@ -1504,8 +1504,9 @@ extension on _AdminHandGestureLiveScreenState {
                 // detector. Use completion time only for cache freshness so a
                 // valid result is not discarded immediately on slower devices;
                 // sourceFrameId still preserves optical-flow alignment.
-                detectedAt:
-                    Platform.isIOS ? batch.completedAt : batch.sourceCapturedAt,
+                detectedAt: Platform.isIOS
+                    ? batch.completedAt
+                    : batch.sourceCapturedAt,
                 sourceFrameId: batch.sourceFrameId,
               );
               _cachedObjectTargets = objects;
@@ -1744,10 +1745,9 @@ extension on _AdminHandGestureLiveScreenState {
       (point.dy / imageSize.height).clamp(0.0, 1.0),
     );
     final controller = _controller;
-    final displayPoint =
-        _shouldMirrorPreviewCoordinates(controller)
-            ? Offset(1.0 - normalizedPoint.dx, normalizedPoint.dy)
-            : normalizedPoint;
+    final displayPoint = _shouldMirrorPreviewCoordinates(controller)
+        ? Offset(1.0 - normalizedPoint.dx, normalizedPoint.dy)
+        : normalizedPoint;
 
     return Offset(
       displayPoint.dx.clamp(0.0, 1.0),
@@ -1968,10 +1968,9 @@ extension on _AdminHandGestureLiveScreenState {
     unawaited(_updateCameraFocusAtNormalizedPoint(const Offset(0.5, 0.5)));
 
     _setScreenState(() {
-      _gestureText =
-          promptReselect
-              ? 'Show open palm to select a new target'
-              : 'Follow target cancelled';
+      _gestureText = promptReselect
+          ? 'Show open palm to select a new target'
+          : 'Follow target cancelled';
       _gestureConfidence = 0;
     });
   }
@@ -1981,42 +1980,94 @@ extension on _AdminHandGestureLiveScreenState {
     _faceDetectGestureStartedAt = null;
   }
 
-  /// Toggles all direction debug drawing once per confirmed I-Love-You pose.
-  void _updateDirectionDebugToggleGesture({required bool isLoveYou}) {
-    if (isLoveYou) {
-      _loveYouDebugToggleReleaseFrames = 0;
-      if (_loveYouDebugToggleLatched) return;
+  /// Opens the debug selector once per confirmed I-Love-You pose.
+  void _updateGestureDebugMenuTrigger({required bool isLoveYou}) {
+    final shouldOpen = _gestureDebugMenuTrigger.update(isLoveYou: isLoveYou);
+    if (!shouldOpen || _isGestureDebugMenuOpen) return;
+    _isGestureDebugMenuOpen = true;
+    _clearGestureActionsForDebugMenu();
+  }
 
-      _loveYouDebugToggleMatchFrames += 1;
-      if (_loveYouDebugToggleMatchFrames <
-          _AdminHandGestureLiveScreenState
-              ._directionDebugToggleConfirmationFrames) {
-        return;
-      }
+  /// While choosing, updates only the hand cursor and Love-You release latch.
+  void _updateOpenGestureDebugMenuFrame({
+    required List<Hand> hands,
+    required Size detectionImageSize,
+  }) {
+    final reliableHands = _handGeometry.reliableHands(hands);
+    final bestHand = _handGeometry.bestReliableHand(reliableHands);
+    final gesture = bestHand?.gesture;
+    _updateGestureDebugMenuTrigger(
+      isLoveYou: _handGeometry.isReliablePackageGesture(
+        gesture,
+        type: GestureType.iLoveYou,
+      ),
+    );
 
-      _loveYouDebugToggleMatchFrames = 0;
-      _loveYouDebugToggleLatched = true;
-      _showDirectionDebugOverlay = !_showDirectionDebugOverlay;
-      _showSnackBar(
-        _showDirectionDebugOverlay
-            ? 'Direction debug drawing ON'
-            : 'Direction debug drawing OFF',
-      );
-      return;
-    }
+    _setScreenState(() {
+      _hands = hands;
+      _detectionImageSize = detectionImageSize;
+      _detectedHandsCount = hands.length;
+      _handText = bestHand?.handedness.displayLabel ?? '';
+      _gestureText = bestHand == null
+          ? 'Show point 8 to choose debug drawing'
+          : 'Point at one debug box for 2 seconds';
+      _gestureConfidence = 0;
+    });
+  }
 
-    _loveYouDebugToggleMatchFrames = 0;
-    if (!_loveYouDebugToggleLatched) {
-      _loveYouDebugToggleReleaseFrames = 0;
-      return;
-    }
+  void _selectGestureDebugMode(GestureDebugMode mode) {
+    _clearGestureActionsForDebugMenu();
+    _setScreenState(() {
+      _gestureDebugMode = mode;
+      _isGestureDebugMenuOpen = false;
+      _gestureText = mode == GestureDebugMode.off
+          ? 'Debug drawing off'
+          : '${_gestureDebugModeLabel(mode)} debug selected';
+      _gestureConfidence = 0;
+    });
+  }
 
-    _loveYouDebugToggleReleaseFrames += 1;
-    if (_loveYouDebugToggleReleaseFrames >=
-        _AdminHandGestureLiveScreenState
-            ._directionDebugToggleConfirmationFrames) {
-      _loveYouDebugToggleReleaseFrames = 0;
-      _loveYouDebugToggleLatched = false;
+  void _cancelGestureDebugMenu() {
+    _clearGestureActionsForDebugMenu();
+    _setScreenState(() {
+      _isGestureDebugMenuOpen = false;
+      _gestureText = _gestureDebugMode == GestureDebugMode.off
+          ? 'Debug drawing off'
+          : '${_gestureDebugModeLabel(_gestureDebugMode)} debug selected';
+      _gestureConfidence = 0;
+    });
+  }
+
+  void _clearGestureActionsForDebugMenu() {
+    _customGestureDetector.clearState();
+    _zoomGestureDetector.clearState();
+    _directionGestureDetector.clearState(reason: 'debug selector open');
+    _followObjectSequenceDetector.clear();
+    _clearRecordingGestureHold();
+    _clearFaceDetectGestureHold();
+    _clearFollowObjectTargetCandidates();
+  }
+
+  String _gestureDebugModeLabel(GestureDebugMode mode) {
+    switch (mode) {
+      case GestureDebugMode.off:
+        return 'Off';
+      case GestureDebugMode.direction:
+        return 'Direction';
+      case GestureDebugMode.punch:
+        return 'Punch';
+      case GestureDebugMode.zoomIn:
+        return 'Zoom In';
+      case GestureDebugMode.zoomOut:
+        return 'Zoom Out';
+      case GestureDebugMode.returnMain:
+        return 'Return Main';
+      case GestureDebugMode.recording:
+        return 'Recording';
+      case GestureDebugMode.callMe:
+        return 'Call Me';
+      case GestureDebugMode.followObject:
+        return 'Follow Object';
     }
   }
 
@@ -2024,7 +2075,7 @@ extension on _AdminHandGestureLiveScreenState {
   void _clearFrameInterruptedGestureState({
     bool keepFollowObjectSequence = false,
   }) {
-    _updateDirectionDebugToggleGesture(isLoveYou: false);
+    _updateGestureDebugMenuTrigger(isLoveYou: false);
     _customGestureDetector.clearState();
     _zoomGestureDetector.clearState();
     _directionGestureDetector.clearState();

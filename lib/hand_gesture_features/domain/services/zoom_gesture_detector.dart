@@ -26,6 +26,8 @@ class ZoomGestureDetector {
   Map<HandLandmarkType, HandPoint3D>? _startStableFingerOffsets;
   _ZoomInOpeningPhase _zoomInOpeningPhase = _ZoomInOpeningPhase.idle;
   bool _hasZoomInDebugPose = false;
+  bool _debugPalmStable = false;
+  bool _debugStableFingers = false;
 
   static const List<HandLandmarkType> _stableFingerTypes = [
     HandLandmarkType.middleFingerTip,
@@ -49,6 +51,19 @@ class ZoomGestureDetector {
 
   /// True when the current non-closed pose is being evaluated as Zoom In.
   bool get hasZoomInDebugPose => _hasZoomInDebugPose;
+
+  bool get debugPalmStable => _debugPalmStable;
+
+  bool get debugStableFingers => _debugStableFingers;
+
+  double debugHoldProgress(DateTime now) {
+    final startedAt = _holdStartedAt;
+    if (startedAt == null || now.isBefore(startedAt)) return 0;
+    return (now.difference(startedAt).inMilliseconds /
+            HandGestureThresholds.zoomStaticHoldDuration.inMilliseconds)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
 
   /// Returns static directions after 1s, or Zoom In immediately after a
   /// recognized Zoom Out pinch opens through the candidate stage.
@@ -135,11 +150,12 @@ class ZoomGestureDetector {
       return ZoomDirection.none;
     }
 
-    if (!_isPalmStable(pose) ||
-        !_areStableFingersStable(
-          currentStableFingerOffsets: pose.stableFingerOffsets,
-          currentHandSize: pose.handSize,
-        )) {
+    _debugPalmStable = _isPalmStable(pose);
+    _debugStableFingers = _areStableFingersStable(
+      currentStableFingerOffsets: pose.stableFingerOffsets,
+      currentHandSize: pose.handSize,
+    );
+    if (!_debugPalmStable || !_debugStableFingers) {
       _startPendingPose(pose, direction, now);
       return ZoomDirection.none;
     }
@@ -161,6 +177,8 @@ class ZoomGestureDetector {
     _startStableFingerOffsets = null;
     _zoomInOpeningPhase = _ZoomInOpeningPhase.idle;
     _hasZoomInDebugPose = false;
+    _debugPalmStable = false;
+    _debugStableFingers = false;
   }
 
   bool _isFiniteImageSize(Size imageSize) {
@@ -180,6 +198,8 @@ class ZoomGestureDetector {
     _startPalmCenter = pose.palmCenter;
     _startHandSize = pose.handSize;
     _startStableFingerOffsets = pose.stableFingerOffsets;
+    _debugPalmStable = true;
+    _debugStableFingers = true;
   }
 
   /// Classifies a closed pinch, released-pinch candidate, or open Zoom In.
