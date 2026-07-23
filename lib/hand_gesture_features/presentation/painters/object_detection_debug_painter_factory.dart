@@ -10,6 +10,7 @@ abstract final class ObjectDetectionDebugPainterFactory {
     required ObjectDetectionBackend backend,
     required List<FollowTarget> targets,
     bool showLabels = true,
+    bool showCenters = false,
     Color? color,
     String labelPrefix = '',
     int previewQuarterTurns = 0,
@@ -17,6 +18,7 @@ abstract final class ObjectDetectionDebugPainterFactory {
     return ObjectDetectionDebugPainter(
       targets: targets,
       showLabels: showLabels,
+      showCenters: showCenters,
       color: color ?? _defaultColor(backend),
       labelPrefix: labelPrefix,
       previewQuarterTurns: previewQuarterTurns,

@@ -267,3 +267,13 @@ class _GestureDetectorAppState extends State<GestureDetectorApp> {
     );
   }
 }
+// import 'package:flutter/widgets.dart';
+// import 'package:gesture_detector/temp/attendance_app.dart';
+//
+// /// Live punch submission is enabled. Failed requests remain pending locally.
+// const bool enableLiveApi = true;
+//
+// void main() {
+//   WidgetsFlutterBinding.ensureInitialized();
+//   runApp(const AttendanceApp(enableLiveApi: enableLiveApi));
+// }

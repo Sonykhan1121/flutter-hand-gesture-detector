@@ -24,19 +24,19 @@ void main() {
       expect(controller.consecutiveFreshMisses, 2);
       expect(
         controller.remaining(startedAt.add(const Duration(milliseconds: 100))),
-        const Duration(milliseconds: 1400),
+        const Duration(milliseconds: 2400),
       );
     });
 
-    test('allows the exact 1.5 second boundary and expires after it', () {
+    test('allows the exact 2.5 second boundary and expires after it', () {
       final controller = DetectMyFaceReacquisitionController()..start();
       controller.observeFreshMiss(startedAt);
 
-      final exactBoundary = startedAt.add(const Duration(milliseconds: 1500));
+      final exactBoundary = startedAt.add(const Duration(milliseconds: 2500));
       expect(controller.hasExpired(exactBoundary), isFalse);
       expect(controller.remaining(exactBoundary), Duration.zero);
 
-      final afterBoundary = startedAt.add(const Duration(milliseconds: 1501));
+      final afterBoundary = startedAt.add(const Duration(milliseconds: 2501));
       expect(controller.hasExpired(afterBoundary), isTrue);
       expect(controller.remaining(afterBoundary), Duration.zero);
     });
@@ -52,14 +52,14 @@ void main() {
       expect(controller.consecutiveFreshMisses, 0);
       expect(
         controller.remaining(startedAt),
-        const Duration(milliseconds: 1500),
+        const Duration(milliseconds: 2500),
       );
     });
 
     test('expired notice is temporary and clear removes all state', () {
       final controller = DetectMyFaceReacquisitionController()..start();
       controller.observeFreshMiss(startedAt);
-      final expiredAt = startedAt.add(const Duration(milliseconds: 1501));
+      final expiredAt = startedAt.add(const Duration(milliseconds: 2501));
 
       controller.markExpired(expiredAt);
 

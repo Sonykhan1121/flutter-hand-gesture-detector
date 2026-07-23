@@ -75,6 +75,54 @@ void main() {
       expect(openZoomOutRedPixels, 0);
     },
   );
+
+  test('Follow Object draws the selector hand bounding-box center', () async {
+    final followObjectCenter = await _pixelAt(
+      GestureDebugMode.followObject,
+      const Offset(100, 155),
+    );
+    final callMeCenter = await _pixelAt(
+      GestureDebugMode.callMe,
+      const Offset(100, 155),
+    );
+
+    expect(followObjectCenter.alpha, greaterThan(0));
+    expect(followObjectCenter.red, greaterThan(200));
+    expect(followObjectCenter.green, greaterThan(150));
+    expect(callMeCenter.alpha, 0);
+  });
+}
+
+Future<({int red, int green, int blue, int alpha})> _pixelAt(
+  GestureDebugMode mode,
+  Offset point,
+) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  final painter = GestureFamilyDebugOverlayPainter(
+    mode: mode,
+    hand: _debugHand(),
+    imageSize: const Size(200, 300),
+    mirrorHorizontally: false,
+    evaluation: GestureDebugEvaluation(
+      title: mode.name,
+      matches: true,
+      requirements: const [],
+      landmarkTypes: const {},
+    ),
+  );
+  painter.paint(canvas, const Size(200, 300));
+  final image = await recorder.endRecording().toImage(200, 300);
+  final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+  image.dispose();
+  if (data == null) return (red: 0, green: 0, blue: 0, alpha: 0);
+  final offset = ((point.dy.toInt() * 200) + point.dx.toInt()) * 4;
+  return (
+    red: data.getUint8(offset),
+    green: data.getUint8(offset + 1),
+    blue: data.getUint8(offset + 2),
+    alpha: data.getUint8(offset + 3),
+  );
 }
 
 Future<int> _redPixelCount(

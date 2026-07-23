@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:camera/camera.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart'
     as ml_object;
@@ -13,6 +14,7 @@ import 'package:gesture_detector/hand_gesture_features/domain/services/object_de
 import 'package:gesture_detector/hand_gesture_features/domain/services/opencv_sdk_object_detection_service.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/object_detection_service_factory.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/ultralytics_yolo_object_detection_service.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/utils/camera_frame_box_mapper.dart';
 import 'package:object_detection/object_detection.dart';
 
 void main() {
@@ -480,10 +482,70 @@ void main() {
           rawImageSize: const Size(640, 480),
           rotation: testCase.rotation,
           isIOS: false,
+          lensDirection: CameraLensDirection.back,
         );
 
         expect(results.single.imageSize, testCase.imageSize);
         expect(results.single.boundingBox, testCase.box);
+      }
+    });
+
+    test('applies exactly one mirror to Android front-camera cw270 boxes', () {
+      final object = ml_object.DetectedObject(
+        boundingBox: const Rect.fromLTRB(320, 60, 440, 240),
+        labels: [
+          ml_object.Label(confidence: 0.91, index: 2, text: 'Home good'),
+        ],
+        trackingId: 7,
+      );
+
+      final results = GoogleMlKitObjectDetectionService.mapDetections(
+        [object],
+        rawImageSize: const Size(640, 480),
+        rotation: CameraFrameRotation.cw270,
+        isIOS: false,
+        lensDirection: CameraLensDirection.front,
+      );
+
+      final result = results.single;
+      expect(result.imageSize, const Size(480, 640));
+      expect(result.boundingBox, const Rect.fromLTRB(320, 60, 440, 240));
+
+      final displayBox = imageRectToDisplayBox(
+        rect: result.boundingBox,
+        imageSize: result.imageSize,
+        mirrorHorizontally: true,
+      );
+      expect(displayBox.left, closeTo(40 / 480, 0.0001));
+      expect(displayBox.right, closeTo(160 / 480, 0.0001));
+    });
+
+    test('keeps other Android front-camera rotations unchanged', () {
+      final object = ml_object.DetectedObject(
+        boundingBox: const Rect.fromLTRB(40, 60, 160, 240),
+        labels: [
+          ml_object.Label(confidence: 0.91, index: 2, text: 'Home good'),
+        ],
+        trackingId: 7,
+      );
+
+      for (final rotation in <CameraFrameRotation?>[
+        null,
+        CameraFrameRotation.cw90,
+        CameraFrameRotation.cw180,
+      ]) {
+        final results = GoogleMlKitObjectDetectionService.mapDetections(
+          [object],
+          rawImageSize: const Size(640, 480),
+          rotation: rotation,
+          isIOS: false,
+          lensDirection: CameraLensDirection.front,
+        );
+
+        expect(
+          results.single.boundingBox,
+          const Rect.fromLTRB(40, 60, 160, 240),
+        );
       }
     });
 
@@ -516,6 +578,7 @@ void main() {
           rawImageSize: const Size(200, 100),
           rotation: testCase.rotation,
           isIOS: true,
+          lensDirection: CameraLensDirection.front,
         );
 
         expect(results.single.imageSize, const Size(200, 100));

@@ -96,6 +96,7 @@ final class GoogleMlKitObjectDetectionService
       rawImageSize: Size(image.width.toDouble(), image.height.toDouble()),
       rotation: rotation,
       isIOS: Platform.isIOS,
+      lensDirection: lensDirection,
     );
   }
 
@@ -105,6 +106,7 @@ final class GoogleMlKitObjectDetectionService
     required Size rawImageSize,
     required od.CameraFrameRotation? rotation,
     required bool isIOS,
+    CameraLensDirection? lensDirection,
   }) {
     final imageSize = _uprightImageSize(
       rawImageSize,
@@ -139,6 +141,8 @@ final class GoogleMlKitObjectDetectionService
         object.boundingBox,
         imageSize: imageSize,
         rotation: rotation,
+        isIOS: isIOS,
+        lensDirection: lensDirection,
       );
       if (boundingBox.isEmpty) continue;
       results.add(
@@ -194,12 +198,18 @@ final class GoogleMlKitObjectDetectionService
     Rect rect, {
     required Size imageSize,
     required od.CameraFrameRotation? rotation,
+    required bool isIOS,
+    required CameraLensDirection? lensDirection,
   }) {
     // The ML Kit Flutter coordinate translator reverses X for a 270-degree
-    // input. For 90 degrees the native box is already in the upright axes.
-    // Mirroring for a front-camera preview still happens later in the common
-    // display mapper, not in this detector-space conversion.
-    final uprightRect = rotation == od.CameraFrameRotation.cw270
+    // input. Android front-camera frames already arrive in the orientation
+    // needed by the later shared preview mirror, so reversing X here would
+    // mirror those boxes twice. Back-camera and iOS behavior remains unchanged.
+    final isAndroidFrontCamera =
+        !isIOS && lensDirection == CameraLensDirection.front;
+    final shouldReverseX =
+        rotation == od.CameraFrameRotation.cw270 && !isAndroidFrontCamera;
+    final uprightRect = shouldReverseX
         ? Rect.fromLTRB(
             imageSize.width - rect.right,
             rect.top,

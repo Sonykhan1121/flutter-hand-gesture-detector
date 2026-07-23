@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/enums/follow_target_type.dart';
@@ -75,6 +77,12 @@ void main() {
       );
       expect(
         painter.shouldRepaint(
+          ObjectDetectionDebugPainter(targets: targets, showCenters: true),
+        ),
+        isTrue,
+      );
+      expect(
+        painter.shouldRepaint(
           ObjectDetectionDebugPainter(targets: targets, color: Colors.green),
         ),
         isTrue,
@@ -86,7 +94,65 @@ void main() {
         isTrue,
       );
     });
+
+    test('draws an opt-in marker at the target rectangle center', () async {
+      final target = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.20, 0.20, 0.40, 0.40),
+        label: 'Object',
+      );
+      const size = Size(200, 200);
+
+      final marked = await _pixelAt(
+        ObjectDetectionDebugPainter(
+          targets: [target],
+          showLabels: false,
+          showCenters: true,
+          color: Colors.green,
+        ),
+        size: size,
+        point: const Offset(80, 80),
+      );
+      final unmarked = await _pixelAt(
+        ObjectDetectionDebugPainter(
+          targets: [target],
+          showLabels: false,
+          color: Colors.green,
+        ),
+        size: size,
+        point: const Offset(80, 80),
+      );
+
+      expect(marked.alpha, greaterThan(0));
+      expect(marked.green, greaterThan(marked.red));
+      expect(unmarked.alpha, 0);
+    });
   });
+}
+
+Future<({int red, int green, int blue, int alpha})> _pixelAt(
+  CustomPainter painter, {
+  required Size size,
+  required Offset point,
+}) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  painter.paint(canvas, size);
+  final image = await recorder.endRecording().toImage(
+    size.width.toInt(),
+    size.height.toInt(),
+  );
+  final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+  image.dispose();
+  if (data == null) return (red: 0, green: 0, blue: 0, alpha: 0);
+  final offset =
+      ((point.dy.toInt() * size.width.toInt()) + point.dx.toInt()) * 4;
+  return (
+    red: data.getUint8(offset),
+    green: data.getUint8(offset + 1),
+    blue: data.getUint8(offset + 2),
+    alpha: data.getUint8(offset + 3),
+  );
 }
 
 FollowTarget _target({

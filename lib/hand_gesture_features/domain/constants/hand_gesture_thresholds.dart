@@ -57,7 +57,7 @@ abstract final class HandGestureThresholds {
     milliseconds: 900,
   );
   static const Duration detectMyFaceReacquisitionDuration = Duration(
-    milliseconds: 1500,
+    milliseconds: 2500,
   );
   static const Duration followTargetDetectionFreshness = Duration(
     milliseconds: 700,

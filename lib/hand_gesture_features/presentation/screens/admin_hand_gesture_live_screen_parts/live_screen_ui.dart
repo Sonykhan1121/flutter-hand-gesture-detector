@@ -199,6 +199,9 @@ extension on _AdminHandGestureLiveScreenState {
         ? _visualObjectTargets
         : const <FollowTarget>[];
     final showSelectedDebugPainter = !_isGestureDebugMenuOpen;
+    final showFollowObjectCenters =
+        showSelectedDebugPainter &&
+        _gestureDebugMode == GestureDebugMode.followObject;
     final punchCircleDebugHand =
         showSelectedDebugPainter && _gestureDebugMode == GestureDebugMode.punch
         ? _reliableHandWithPoint10ForCircleDebug()
@@ -345,6 +348,8 @@ extension on _AdminHandGestureLiveScreenState {
                                                           null
                                                       ? followTargetSelectionGreen
                                                       : null,
+                                                  showCenter:
+                                                      showFollowObjectCenters,
                                                 ),
                                               ),
                                             if (_showObjectOpticalFlowDebugOverlay &&
@@ -362,14 +367,15 @@ extension on _AdminHandGestureLiveScreenState {
                                             if (otherClosedFistFaceTargets
                                                 .isNotEmpty)
                                               CustomPaint(
-                                                painter:
-                                                    ObjectDetectionDebugPainter(
-                                                      targets:
-                                                          otherClosedFistFaceTargets,
-                                                      showLabels: true,
-                                                      previewQuarterTurns:
-                                                          overlayQuarterTurns,
-                                                    ),
+                                                painter: ObjectDetectionDebugPainter(
+                                                  targets:
+                                                      otherClosedFistFaceTargets,
+                                                  showLabels: true,
+                                                  showCenters:
+                                                      showFollowObjectCenters,
+                                                  previewQuarterTurns:
+                                                      overlayQuarterTurns,
+                                                ),
                                               ),
                                             if (otherClosedFistObjectTargets
                                                 .isNotEmpty)
@@ -380,6 +386,8 @@ extension on _AdminHandGestureLiveScreenState {
                                                   targets:
                                                       otherClosedFistObjectTargets,
                                                   showLabels: true,
+                                                  showCenters:
+                                                      showFollowObjectCenters,
                                                   previewQuarterTurns:
                                                       overlayQuarterTurns,
                                                 ),
@@ -391,6 +399,8 @@ extension on _AdminHandGestureLiveScreenState {
                                                   targets:
                                                       closedFistFaceCandidates,
                                                   showLabels: true,
+                                                  showCenters:
+                                                      showFollowObjectCenters,
                                                   color:
                                                       selectionCandidateColor,
                                                   labelPrefix:
@@ -408,6 +418,8 @@ extension on _AdminHandGestureLiveScreenState {
                                                   targets:
                                                       closedFistObjectCandidates,
                                                   showLabels: true,
+                                                  showCenters:
+                                                      showFollowObjectCenters,
                                                   color:
                                                       selectionCandidateColor,
                                                   labelPrefix:
@@ -419,14 +431,15 @@ extension on _AdminHandGestureLiveScreenState {
                                             if (followTargetDebugFaceTargets
                                                 .isNotEmpty)
                                               CustomPaint(
-                                                painter:
-                                                    ObjectDetectionDebugPainter(
-                                                      targets:
-                                                          followTargetDebugFaceTargets,
-                                                      showLabels: false,
-                                                      previewQuarterTurns:
-                                                          overlayQuarterTurns,
-                                                    ),
+                                                painter: ObjectDetectionDebugPainter(
+                                                  targets:
+                                                      followTargetDebugFaceTargets,
+                                                  showLabels: false,
+                                                  showCenters:
+                                                      showFollowObjectCenters,
+                                                  previewQuarterTurns:
+                                                      overlayQuarterTurns,
+                                                ),
                                               ),
                                             if (followTargetDebugObjectTargets
                                                 .isNotEmpty)
@@ -437,6 +450,8 @@ extension on _AdminHandGestureLiveScreenState {
                                                   targets:
                                                       followTargetDebugObjectTargets,
                                                   showLabels: false,
+                                                  showCenters:
+                                                      showFollowObjectCenters,
                                                   previewQuarterTurns:
                                                       overlayQuarterTurns,
                                                 ),

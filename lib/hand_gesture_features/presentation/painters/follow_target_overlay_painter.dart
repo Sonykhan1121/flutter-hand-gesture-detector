@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../domain/enums/follow_target_type.dart';
 import '../../domain/models/follow_target.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
+import 'debug_center_marker.dart';
 
 /// Shared highlight color for the nearest and locked gesture-selected target.
 const followTargetSelectionGreen = Color(0xFF00FB46);
@@ -13,11 +14,13 @@ class FollowTargetOverlayPainter extends CustomPainter {
     required this.target,
     this.previewQuarterTurns = 0,
     this.colorOverride,
+    this.showCenter = false,
   });
 
   final FollowTarget target;
   final int previewQuarterTurns;
   final Color? colorOverride;
+  final bool showCenter;
 
   @override
   /// Dims the rest of the preview and highlights the selected target box.
@@ -69,6 +72,13 @@ class FollowTargetOverlayPainter extends CustomPainter {
     canvas.drawRRect(rrect, glowPaint);
     canvas.drawRRect(rrect, borderPaint);
     _drawCorners(canvas, targetRect, cornerPaint);
+    if (showCenter) {
+      paintDebugCenterMarker(
+        canvas: canvas,
+        center: targetRect.center,
+        color: color,
+      );
+    }
   }
 
   /// Converts the normalized target box into canvas coordinates.
@@ -134,6 +144,7 @@ class FollowTargetOverlayPainter extends CustomPainter {
   bool shouldRepaint(covariant FollowTargetOverlayPainter oldDelegate) {
     return oldDelegate.target != target ||
         oldDelegate.previewQuarterTurns != previewQuarterTurns ||
-        oldDelegate.colorOverride != colorOverride;
+        oldDelegate.colorOverride != colorOverride ||
+        oldDelegate.showCenter != showCenter;
   }
 }

@@ -7,6 +7,7 @@ import '../../domain/enums/gesture_debug_mode.dart';
 import '../../domain/models/gesture_debug_evaluation.dart';
 import '../../domain/services/hand_geometry_service.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
+import 'debug_center_marker.dart';
 
 /// Draws the selected non-Direction/non-Punch gesture-family diagnostics.
 class GestureFamilyDebugOverlayPainter extends CustomPainter {
@@ -48,6 +49,9 @@ class GestureFamilyDebugOverlayPainter extends CustomPainter {
       }
       _drawRequiredLandmarks(canvas, size, currentHand);
       _drawEmphasisGeometry(canvas, size, currentHand);
+      if (mode == GestureDebugMode.followObject) {
+        _drawFollowObjectHandCenter(canvas, size, currentHand);
+      }
     }
     _drawEvaluationPanel(canvas, size);
     canvas.restore();
@@ -213,6 +217,22 @@ class GestureFamilyDebugOverlayPainter extends CustomPainter {
       if (mappedFirst == null || mappedSecond == null) continue;
       canvas.drawLine(mappedFirst, mappedSecond, paint);
     }
+  }
+
+  /// Draws the same hand bounding-box center used for target selection.
+  void _drawFollowObjectHandCenter(Canvas canvas, Size size, Hand hand) {
+    final box = hand.boundingBox;
+    final center = _mapPoint(
+      size,
+      Offset((box.left + box.right) / 2, (box.top + box.bottom) / 2),
+    );
+    if (center == null) return;
+    paintDebugCenterMarker(
+      canvas: canvas,
+      center: center,
+      color: _yellow,
+      label: 'HAND CENTER',
+    );
   }
 
   void _drawEvaluationPanel(Canvas canvas, Size size) {

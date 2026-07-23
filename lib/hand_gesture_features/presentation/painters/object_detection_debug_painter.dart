@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models/follow_target.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
+import 'debug_center_marker.dart';
 
 /// Draws normalized object-detection targets for every detector backend.
 class ObjectDetectionDebugPainter extends CustomPainter {
@@ -9,12 +10,14 @@ class ObjectDetectionDebugPainter extends CustomPainter {
     required this.targets,
     this.color = Colors.red,
     this.showLabels = true,
+    this.showCenters = false,
     this.labelPrefix = '',
     this.previewQuarterTurns = 0,
   });
 
   final List<FollowTarget> targets;
   final bool showLabels;
+  final bool showCenters;
   final Color color;
   final String labelPrefix;
   final int previewQuarterTurns;
@@ -40,6 +43,13 @@ class ObjectDetectionDebugPainter extends CustomPainter {
       if (rect.isEmpty) continue;
 
       canvas.drawRect(rect, borderPaint);
+      if (showCenters) {
+        paintDebugCenterMarker(
+          canvas: canvas,
+          center: rect.center,
+          color: color,
+        );
+      }
       if (showLabels) {
         _drawLabel(
           canvas: canvas,
@@ -101,6 +111,7 @@ class ObjectDetectionDebugPainter extends CustomPainter {
   bool shouldRepaint(covariant ObjectDetectionDebugPainter oldDelegate) {
     return oldDelegate.targets != targets ||
         oldDelegate.showLabels != showLabels ||
+        oldDelegate.showCenters != showCenters ||
         oldDelegate.color != color ||
         oldDelegate.labelPrefix != labelPrefix ||
         oldDelegate.previewQuarterTurns != previewQuarterTurns;

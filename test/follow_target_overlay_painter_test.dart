@@ -19,9 +19,15 @@ void main() {
       target: target,
       colorOverride: followTargetSelectionGreen,
     );
+    final debugCenter = FollowTargetOverlayPainter(
+      target: target,
+      colorOverride: followTargetSelectionGreen,
+      showCenter: true,
+    );
 
     expect(followTargetSelectionGreen, const Color(0xFF00FB46));
     expect(confirming.shouldRepaint(normal), isTrue);
     expect(confirming.shouldRepaint(confirming), isFalse);
+    expect(debugCenter.shouldRepaint(confirming), isTrue);
   });
 }

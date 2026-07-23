@@ -11,7 +11,7 @@ void main() {
         home: Scaffold(
           body: Center(
             child: FaceReacquisitionStatusOverlay.waiting(
-              remaining: Duration(milliseconds: 1499),
+              remaining: Duration(milliseconds: 2499),
             ),
           ),
         ),
@@ -22,7 +22,7 @@ void main() {
       find.byKey(const Key('faceReacquisitionStatusOverlay')),
       findsOneWidget,
     );
-    expect(find.text('Face lost - waiting (1.5s)'), findsOneWidget);
+    expect(find.text('Face lost - waiting (2.5s)'), findsOneWidget);
   });
 
   testWidgets('tells the user to run Detect My Face after timeout', (
