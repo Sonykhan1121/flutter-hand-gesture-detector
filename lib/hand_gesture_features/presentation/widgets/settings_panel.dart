@@ -111,10 +111,11 @@ class SettingsPanel extends StatelessWidget {
   /// Builds the settings title and the control-mode card list.
   Widget build(BuildContext context) {
     return Container(
+      key: const Key('controlSettingsPanel'),
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
       decoration: const BoxDecoration(
-        color: Color(0xFFF6F8FC),
+        color: Colors.transparent,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(

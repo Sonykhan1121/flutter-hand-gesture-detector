@@ -319,6 +319,102 @@ void main() {
 
       expect(selected, isNull);
     });
+
+    test('face reacquisition prefers the original tracking ID', () {
+      final original = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 7,
+      );
+      final exactId = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.80, 0.20, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 7,
+        appearanceSignature: _differentSignature(),
+      );
+
+      final selected = selector.reacquireFace(
+        identity: FollowTargetIdentity.fromTarget(original),
+        candidates: [exactId],
+      );
+
+      expect(selected, exactId);
+    });
+
+    test('face reacquisition accepts one appearance match with a new ID', () {
+      final original = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 7,
+      );
+      final reacquired = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.75, 0.25, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 8,
+      );
+
+      final selected = selector.reacquireFace(
+        identity: FollowTargetIdentity.fromTarget(original),
+        candidates: [reacquired],
+      );
+
+      expect(selected, reacquired);
+    });
+
+    test('face reacquisition rejects a visually different face', () {
+      final original = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 7,
+      );
+      final bystander = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.42, 0.40, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 8,
+        appearanceSignature: _differentSignature(),
+      );
+
+      final selected = selector.reacquireFace(
+        identity: FollowTargetIdentity.fromTarget(original),
+        candidates: [bystander],
+      );
+
+      expect(selected, isNull);
+    });
+
+    test('face reacquisition rejects ambiguous appearance matches', () {
+      final original = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.40, 0.40, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 7,
+      );
+      final firstMatch = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.20, 0.30, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 8,
+      );
+      final secondMatch = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.70, 0.30, 0.10, 0.10),
+        label: 'Face',
+        trackingId: 9,
+      );
+
+      final selected = selector.reacquireFace(
+        identity: FollowTargetIdentity.fromTarget(original),
+        candidates: [firstMatch, secondMatch],
+      );
+
+      expect(selected, isNull);
+    });
   });
 
   group('FollowTargetSelector selection confirmation', () {
@@ -546,5 +642,13 @@ AppearanceSignature _signature() {
     hsvHistogram: [1, ...List<double>.filled(31, 0)],
     grayscaleHash: List<bool>.filled(64, true),
     aspectRatio: 1,
+  );
+}
+
+AppearanceSignature _differentSignature() {
+  return AppearanceSignature(
+    hsvHistogram: [0, 1, ...List<double>.filled(30, 0)],
+    grayscaleHash: List<bool>.filled(64, false),
+    aspectRatio: 2,
   );
 }

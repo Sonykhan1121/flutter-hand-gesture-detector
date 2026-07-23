@@ -21,6 +21,11 @@ class FollowTargetTrackingProgress {
     missedDetectionCount = 0;
   }
 
+  void markTemporarilyLost() {
+    phase = FollowTargetTrackingPhase.temporarilyLost;
+    missedDetectionCount = 0;
+  }
+
   bool recordVisibleMiss() {
     missedDetectionCount++;
     return missedDetectionCount >=

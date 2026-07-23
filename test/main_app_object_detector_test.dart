@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/enums/object_detection_backend.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/object_detection_backend_preference_service.dart';
+import 'package:gesture_detector/hand_gesture_features/presentation/widgets/home_hand_pointer_layer.dart';
 import 'package:gesture_detector/main.dart';
 
 class _FailingPreferenceService
@@ -21,6 +22,20 @@ class _FailingPreferenceService
 }
 
 void main() {
+  testWidgets('automation off removes the home point-8 pointer layer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const GestureDetectorApp(
+        showFloatingCameraDetectionButton: false,
+        showMovingDownTrainingListItem: false,
+        enableHomeGesturePointer: false,
+      ),
+    );
+
+    expect(find.byType(HomeHandPointerLayer), findsNothing);
+  });
+
   testWidgets('failed persistence keeps the session choice and warns', (
     tester,
   ) async {
@@ -34,6 +49,8 @@ void main() {
         objectDetectionBackendPreferenceService: _FailingPreferenceService(),
       ),
     );
+
+    expect(find.byType(HomeHandPointerLayer), findsOneWidget);
 
     final settingsCard = find.byKey(const Key('objectDetectorSettingsCard'));
     await tester.ensureVisible(settingsCard);

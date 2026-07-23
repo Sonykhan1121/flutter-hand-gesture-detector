@@ -11,6 +11,7 @@ import '../../data/factories/hand_detector_factory.dart';
 import '../../domain/constants/hand_gesture_thresholds.dart';
 import '../../domain/models/moving_down_capture_contract.dart';
 import '../../domain/services/appearance_signature_extractor.dart';
+import '../../domain/services/hand_geometry_service.dart';
 import '../../domain/services/yolo_camera_frame_encoder.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
 import '../../domain/utils/moving_down_capture_metadata.dart';
@@ -18,10 +19,13 @@ import '../painters/hand_landmark_overlay_painter.dart';
 import '../utils/camera_orientation_preferences.dart';
 import '../widgets/moving_down_jsonl_review_dialog.dart';
 import '../widgets/moving_down_safe_area_overlay.dart';
+import '../widgets/home_hand_pointer_layer.dart';
 
 /// Captures one raw, two-second MOVE_DOWN training sequence.
 class MovingDownCaptureScreen extends StatefulWidget {
-  const MovingDownCaptureScreen({super.key});
+  const MovingDownCaptureScreen({super.key, this.appPointerController});
+
+  final HomeHandPointerController? appPointerController;
 
   @override
   State<MovingDownCaptureScreen> createState() =>
@@ -36,6 +40,7 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
     maxDimension: 360,
     jpegQuality: 72,
   );
+  static const _handGeometry = HandGeometryService();
 
   CameraController? _controller;
   HandDetector? _detector;
@@ -45,6 +50,7 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
   DateTime? _cameraStreamStartedAt;
   final List<Map<String, dynamic>> _frames = [];
   final Map<int, Uint8List> _frameImages = {};
+  final Object _appPointerOwner = Object();
 
   bool _loading = true;
   bool _processing = false;
@@ -201,6 +207,7 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
         _hands = hands;
         _detectorImageSize = detectorImageSize;
       });
+      _publishAppPointer(hands, detectorImageSize);
 
       if (_capturing) {
         final hand = hands.isEmpty ? null : hands.first;
@@ -223,9 +230,27 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
       }
     } catch (error) {
       debugPrint('Moving-down frame detection failed: $error');
+      widget.appPointerController?.clearExternalPointer(_appPointerOwner);
     } finally {
       _processing = false;
     }
+  }
+
+  void _publishAppPointer(List<Hand> hands, Size detectionImageSize) {
+    final appPointerController = widget.appPointerController;
+    final controller = _controller;
+    if (appPointerController == null || controller == null) return;
+
+    final hand = _handGeometry.bestReliableHand(hands);
+    final tip = hand == null
+        ? null
+        : _handGeometry.visibleLandmark(hand, HandLandmarkType.indexFingerTip);
+    appPointerController.updateExternalPointer(
+      owner: _appPointerOwner,
+      indexTip: tip == null ? null : Offset(tip.x, tip.y),
+      detectionImageSize: detectionImageSize,
+      mirrorHorizontally: _shouldMirrorPreviewCoordinates(controller),
+    );
   }
 
   void _startCapture() {
@@ -504,6 +529,7 @@ class _MovingDownCaptureScreenState extends State<MovingDownCaptureScreen> {
   @override
   void dispose() {
     _captureTimer?.cancel();
+    widget.appPointerController?.clearExternalPointer(_appPointerOwner);
     final controller = _controller;
     _controller = null;
     if (controller != null) {

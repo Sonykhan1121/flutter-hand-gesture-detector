@@ -41,4 +41,14 @@ void main() {
     progress.markVisible();
     expect(progress.phase, FollowTargetTrackingPhase.visible);
   });
+
+  test('temporarily lost is distinct and clears the miss count', () {
+    final progress = FollowTargetTrackingProgress()..markVisible();
+    progress.recordVisibleMiss();
+
+    progress.markTemporarilyLost();
+
+    expect(progress.phase, FollowTargetTrackingPhase.temporarilyLost);
+    expect(progress.missedDetectionCount, 0);
+  });
 }

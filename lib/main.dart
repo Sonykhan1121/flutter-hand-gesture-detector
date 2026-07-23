@@ -12,12 +12,14 @@ import 'hand_gesture_features/domain/services/ultralytics_yolo_model_preloader.d
 import 'hand_gesture_features/presentation/screens/admin_hand_gesture_live_screen.dart';
 import 'hand_gesture_features/presentation/screens/face_object_debug_camera_screen.dart';
 import 'hand_gesture_features/presentation/screens/moving_down_capture_screen.dart';
+import 'hand_gesture_features/presentation/widgets/home_hand_pointer_layer.dart';
 import 'hand_gesture_features/stand_control_home_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // App feature handlers: change only these two values when needed.
+  // App feature handlers: change only these three values when needed.
+  const automation = true;
   const showFloatingCameraDetectionButton = true;
   const showMovingDownTrainingListItem = false;
   final supportsNativeMethodChannel = Platform.isAndroid;
@@ -41,6 +43,7 @@ Future<void> main() async {
       supportsOpenCvSdk: supportsOpenCvSdk,
       supportsUltralyticsYolo: supportsUltralyticsYolo,
       supportsGoogleMlKit: supportsGoogleMlKit,
+      enableHomeGesturePointer: automation,
       objectDetectionBackendPreferenceService: preferenceService,
     ),
   );
@@ -62,6 +65,7 @@ class GestureDetectorApp extends StatefulWidget {
   final bool supportsOpenCvSdk;
   final bool supportsUltralyticsYolo;
   final bool supportsGoogleMlKit;
+  final bool enableHomeGesturePointer;
   final ObjectDetectionBackendPreferenceService
   objectDetectionBackendPreferenceService;
 
@@ -74,6 +78,7 @@ class GestureDetectorApp extends StatefulWidget {
     this.supportsOpenCvSdk = false,
     this.supportsUltralyticsYolo = true,
     this.supportsGoogleMlKit = true,
+    this.enableHomeGesturePointer = true,
     this.objectDetectionBackendPreferenceService =
         const ObjectDetectionBackendPreferenceService(),
   });
@@ -84,6 +89,8 @@ class GestureDetectorApp extends StatefulWidget {
 
 class _GestureDetectorAppState extends State<GestureDetectorApp> {
   late ObjectDetectionBackend _selectedObjectDetectionBackend;
+  final _homeHandPointerController = HomeHandPointerController();
+  bool _cameraNavigationInProgress = false;
 
   @override
   void initState() {
@@ -143,6 +150,34 @@ class _GestureDetectorAppState extends State<GestureDetectorApp> {
     }
   }
 
+  /// Releases the transparent home camera while another camera page is open.
+  Future<void> _openCameraPage(
+    BuildContext context,
+    WidgetBuilder builder,
+  ) async {
+    if (_cameraNavigationInProgress) return;
+    _cameraNavigationInProgress = true;
+    if (widget.enableHomeGesturePointer) {
+      await _homeHandPointerController.suspend();
+    }
+    if (!mounted || !context.mounted) {
+      _cameraNavigationInProgress = false;
+      return;
+    }
+
+    try {
+      await Navigator.push(context, MaterialPageRoute(builder: builder));
+    } finally {
+      _cameraNavigationInProgress = false;
+      if (mounted && widget.enableHomeGesturePointer) {
+        await _homeHandPointerController.resume();
+      }
+    }
+  }
+
+  HomeHandPointerController? get _activeHomeHandPointerController =>
+      widget.enableHomeGesturePointer ? _homeHandPointerController : null;
+
   @override
   /// Builds the Material app and wires home-screen actions to navigation.
   Widget build(BuildContext context) {
@@ -153,6 +188,16 @@ class _GestureDetectorAppState extends State<GestureDetectorApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E90FA)),
         useMaterial3: true,
       ),
+      builder: (context, child) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            child ?? const SizedBox.shrink(),
+            if (widget.enableHomeGesturePointer)
+              HomeHandPointerLayer(controller: _homeHandPointerController),
+          ],
+        );
+      },
       home: Builder(
         builder: (context) {
           return StandControlHomePage(
@@ -171,11 +216,13 @@ class _GestureDetectorAppState extends State<GestureDetectorApp> {
               debugPrint('New mode : $mode');
             },
             onDebugCameraTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => FaceObjectDebugCameraScreen(
+              unawaited(
+                _openCameraPage(
+                  context,
+                  (_) => FaceObjectDebugCameraScreen(
                     objectDetectionBackend: _selectedObjectDetectionBackend,
+                    initialLensDirection: CameraLensDirection.front,
+                    appPointerController: _activeHomeHandPointerController,
                   ),
                 ),
               );
@@ -187,21 +234,24 @@ class _GestureDetectorAppState extends State<GestureDetectorApp> {
               );
             },
             onHandGestureTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AdminHandGestureLiveScreen(
+              unawaited(
+                _openCameraPage(
+                  context,
+                  (_) => AdminHandGestureLiveScreen(
                     initialLensDirection: CameraLensDirection.front,
                     objectDetectionBackend: _selectedObjectDetectionBackend,
+                    appPointerController: _activeHomeHandPointerController,
                   ),
                 ),
               );
             },
             onMovingDownTrainingTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const MovingDownCaptureScreen(),
+              unawaited(
+                _openCameraPage(
+                  context,
+                  (_) => MovingDownCaptureScreen(
+                    appPointerController: _activeHomeHandPointerController,
+                  ),
                 ),
               );
             },

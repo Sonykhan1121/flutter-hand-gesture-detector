@@ -32,6 +32,7 @@ import '../../domain/models/object_optical_flow_track_result.dart';
 import '../../domain/models/object_tracking_frame.dart';
 import '../../domain/services/custom_gesture_detector.dart';
 import '../../domain/services/appearance_signature_extractor.dart';
+import '../../domain/services/detect_my_face_reacquisition_controller.dart';
 import '../../domain/services/direction_gesture_detector.dart';
 import '../../domain/services/follow_object_sequence_detector.dart';
 import '../../domain/services/follow_target_selector.dart';
@@ -64,7 +65,9 @@ import '../utils/palm_orientation_coordinate_policy.dart';
 import '../utils/ml_kit_preview_mapper.dart';
 import '../widgets/gesture_status_panel.dart';
 import '../widgets/gesture_debug_selector_overlay.dart';
+import '../widgets/face_reacquisition_status_overlay.dart';
 import '../widgets/hand_camera_loading_view.dart';
+import '../widgets/home_hand_pointer_layer.dart';
 import '../widgets/round_icon_button.dart';
 import '../widgets/touch_zoom_guide_overlay.dart';
 import '../widgets/zoom_control_overlay.dart';
@@ -81,10 +84,12 @@ class AdminHandGestureLiveScreen extends StatefulWidget {
     super.key,
     this.initialLensDirection = CameraLensDirection.front,
     this.objectDetectionBackend = ObjectDetectionBackend.ultralyticsYolo,
+    this.appPointerController,
   });
 
   final CameraLensDirection initialLensDirection;
   final ObjectDetectionBackend objectDetectionBackend;
+  final HomeHandPointerController? appPointerController;
 
   /// Creates the state object that owns camera, detectors, and live UI state.
   @override
@@ -108,12 +113,14 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   final _zoomGestureDetector = ZoomGestureDetector();
   final _followTargetSelector = const FollowTargetSelector();
   final _followTargetProgress = FollowTargetTrackingProgress();
+  final _detectMyFaceReacquisition = DetectMyFaceReacquisitionController();
   final _gestureDebugEvaluator = const GestureDebugEvaluator();
   final _gestureDebugMenuTrigger = GestureDebugMenuTrigger();
   final _appearanceSignatureExtractor = const AppearanceSignatureExtractor();
   final _handGeometry = const HandGeometryService();
   final _objectTrackingFrameFactory = const ObjectTrackingFrameFactory();
   final _objectOpticalFlowTracker = ObjectOpticalFlowTracker();
+  final Object _appPointerOwner = Object();
   late final ObjectDetectionRequestController _objectDetectionRequests;
   late final ObjectDetectionResultStabilizer _objectDetectionResultStabilizer;
   late final ObjectDetectionTargetSmoother _objectDetectionTargetSmoother;
@@ -250,6 +257,8 @@ class _AdminHandGestureLiveScreenState extends State<AdminHandGestureLiveScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.appPointerController?.clearExternalPointer(_appPointerOwner);
+    _detectMyFaceReacquisition.clear();
     _resetRecordingTimer();
     _zoomControlAutoHideTimer?.cancel();
     final controller = _controller;

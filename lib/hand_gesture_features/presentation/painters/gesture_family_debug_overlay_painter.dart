@@ -43,11 +43,93 @@ class GestureFamilyDebugOverlayPainter extends CustomPainter {
 
     final currentHand = hand;
     if (currentHand != null && imageSize.width > 0 && imageSize.height > 0) {
+      if (mode == GestureDebugMode.zoomOut && _zoomTipsTouch) {
+        _drawZoomOutEnclosedTouchSpace(canvas, size, currentHand);
+      }
       _drawRequiredLandmarks(canvas, size, currentHand);
       _drawEmphasisGeometry(canvas, size, currentHand);
     }
     _drawEvaluationPanel(canvas, size);
     canvas.restore();
+  }
+
+  bool get _zoomTipsTouch => evaluation.requirements.any(
+    (requirement) =>
+        requirement.id == GestureDebugRequirementId.zoomTipGap &&
+        requirement.matches,
+  );
+
+  /// Fills the complete loop 2→3→4→8→7→6→5 when the fingertips touch.
+  void _drawZoomOutEnclosedTouchSpace(Canvas canvas, Size size, Hand hand) {
+    final thumbMcp = geometry.visibleLandmark(hand, HandLandmarkType.thumbMCP);
+    final thumbIp = geometry.visibleLandmark(hand, HandLandmarkType.thumbIP);
+    final thumbTip = geometry.visibleLandmark(hand, HandLandmarkType.thumbTip);
+    final indexMcp = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerMCP,
+    );
+    final indexPip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerPIP,
+    );
+    final indexDip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerDIP,
+    );
+    final indexTip = geometry.visibleLandmark(
+      hand,
+      HandLandmarkType.indexFingerTip,
+    );
+    if (thumbMcp == null ||
+        thumbIp == null ||
+        thumbTip == null ||
+        indexMcp == null ||
+        indexPip == null ||
+        indexDip == null ||
+        indexTip == null) {
+      return;
+    }
+
+    final mappedThumbMcp = _mapPoint(size, Offset(thumbMcp.x, thumbMcp.y));
+    final mappedThumbIp = _mapPoint(size, Offset(thumbIp.x, thumbIp.y));
+    final mappedThumbTip = _mapPoint(size, Offset(thumbTip.x, thumbTip.y));
+    final mappedIndexMcp = _mapPoint(size, Offset(indexMcp.x, indexMcp.y));
+    final mappedIndexPip = _mapPoint(size, Offset(indexPip.x, indexPip.y));
+    final mappedIndexDip = _mapPoint(size, Offset(indexDip.x, indexDip.y));
+    final mappedIndexTip = _mapPoint(size, Offset(indexTip.x, indexTip.y));
+    if (mappedThumbMcp == null ||
+        mappedThumbIp == null ||
+        mappedThumbTip == null ||
+        mappedIndexMcp == null ||
+        mappedIndexPip == null ||
+        mappedIndexDip == null ||
+        mappedIndexTip == null) {
+      return;
+    }
+
+    final gapPath = Path()
+      ..moveTo(mappedThumbMcp.dx, mappedThumbMcp.dy)
+      ..lineTo(mappedThumbIp.dx, mappedThumbIp.dy)
+      ..lineTo(mappedThumbTip.dx, mappedThumbTip.dy)
+      ..lineTo(mappedIndexTip.dx, mappedIndexTip.dy)
+      ..lineTo(mappedIndexDip.dx, mappedIndexDip.dy)
+      ..lineTo(mappedIndexPip.dx, mappedIndexPip.dy)
+      ..lineTo(mappedIndexMcp.dx, mappedIndexMcp.dy)
+      ..close();
+    canvas.drawPath(
+      gapPath,
+      Paint()
+        ..style = PaintingStyle.fill
+        ..color = _red.withValues(alpha: 0.36),
+    );
+    canvas.drawPath(
+      gapPath,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeJoin = StrokeJoin.round
+        ..color = _red,
+    );
   }
 
   void _drawRequiredLandmarks(Canvas canvas, Size size, Hand hand) {

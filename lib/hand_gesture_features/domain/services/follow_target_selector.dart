@@ -133,6 +133,34 @@ class FollowTargetSelector {
     return bestCandidate;
   }
 
+  /// Reacquires one temporarily lost face without transferring to a bystander.
+  ///
+  /// An exact detector tracking ID wins. If the detector assigned a new ID
+  /// after the face left the frame, exactly one appearance match is required.
+  FollowTarget? reacquireFace({
+    required FollowTargetIdentity identity,
+    required List<FollowTarget> candidates,
+  }) {
+    if (identity.type != FollowTargetType.face) return null;
+
+    final faces = candidates
+        .where((candidate) => candidate.type == FollowTargetType.face)
+        .toList(growable: false);
+    final trackingId = identity.trackingId;
+    if (trackingId != null) {
+      final exactIdMatches = faces
+          .where((candidate) => candidate.trackingId == trackingId)
+          .toList(growable: false);
+      if (exactIdMatches.length == 1) return exactIdMatches.single;
+      if (exactIdMatches.length > 1) return null;
+    }
+
+    final appearanceMatches = faces
+        .where((candidate) => _visibleAppearanceMatches(identity, candidate))
+        .toList(growable: false);
+    return appearanceMatches.length == 1 ? appearanceMatches.single : null;
+  }
+
   /// Ensures repeated detector updates refer to one moving box.
   bool isSpatiallyContinuous(FollowTarget previous, FollowTarget candidate) {
     final overlap = _intersectionOverUnion(

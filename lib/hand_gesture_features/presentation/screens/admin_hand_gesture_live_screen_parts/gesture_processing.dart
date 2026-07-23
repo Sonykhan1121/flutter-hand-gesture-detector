@@ -72,11 +72,33 @@ extension on _AdminHandGestureLiveScreenState {
         rotation: rotation,
         objectTrackingFrame: objectTrackingFrame,
       );
+      _publishAppPointer(hands, detectionImageSize);
     } catch (error, stackTrace) {
       debugPrint('Hand gesture detection error: $error\n$stackTrace');
+      widget.appPointerController?.clearExternalPointer(_appPointerOwner);
     } finally {
       _isProcessing = false;
     }
+  }
+
+  /// Publishes index fingertip point 8 to the app-wide dwell cursor.
+  void _publishAppPointer(List<Hand> hands, Size detectionImageSize) {
+    final appPointerController = widget.appPointerController;
+    final cameraController = _controller;
+    if (appPointerController == null || cameraController == null) return;
+
+    final hand = _handGeometry.bestReliableHand(hands);
+    final tip = _isGestureDebugMenuOpen || hand == null
+        ? null
+        : _handGeometry.visibleLandmark(hand, HandLandmarkType.indexFingerTip);
+    appPointerController.updateExternalPointer(
+      owner: _appPointerOwner,
+      indexTip: tip == null ? null : Offset(tip.x, tip.y),
+      detectionImageSize: detectionImageSize,
+      mirrorHorizontally: _shouldMirrorPreviewCoordinates(cameraController),
+      previewQuarterTurns: _previewQuarterTurnsForOverlays(cameraController),
+      showCursor: _gestureDebugMode != GestureDebugMode.off,
+    );
   }
 
   /// Runs the hand detector with the platform-specific camera frame format.
@@ -437,7 +459,8 @@ extension on _AdminHandGestureLiveScreenState {
       _clearAllActiveGestureTasks(resetCameraZoom: false);
 
       if (faceTarget != null) {
-        _setLockedFollowTarget(faceTarget, captureIdentity: false);
+        _setLockedFollowTarget(faceTarget, captureIdentity: true);
+        _detectMyFaceReacquisition.start();
         unawaited(_updateCameraFocusPointForTarget(faceTarget));
       }
 
@@ -1207,6 +1230,9 @@ extension on _AdminHandGestureLiveScreenState {
     final isConfirmingSelection =
         _followTargetProgress.phase ==
         FollowTargetTrackingPhase.confirmingSelection;
+    final isTemporarilyLost =
+        _followTargetProgress.phase ==
+        FollowTargetTrackingPhase.temporarilyLost;
 
     var visiblePrevious = previous;
     if (!isConfirmingSelection &&
@@ -1241,6 +1267,10 @@ extension on _AdminHandGestureLiveScreenState {
     if (detections == null) {
       if (isConfirmingSelection) {
         return _keepConfirmingSelectionOrFail(DateTime.now(), visiblePrevious);
+      }
+      if (isTemporarilyLost) {
+        _expireDetectMyFaceReacquisitionIfNeeded(DateTime.now());
+        return null;
       }
       return identity == null
           ? _keepOrClearLostFollowTarget(now)
@@ -1282,6 +1312,29 @@ extension on _AdminHandGestureLiveScreenState {
       _setVisibleFollowTarget(confirmed);
       unawaited(_updateCameraFocusPointForTarget(confirmed));
       return confirmed;
+    }
+
+    if (isTemporarilyLost) {
+      final reacquisitionNow = DateTime.now();
+      if (_expireDetectMyFaceReacquisitionIfNeeded(reacquisitionNow)) {
+        return null;
+      }
+      if (identity == null ||
+          detectionCycleAt == null ||
+          detectionCycleAt == _lastEvaluatedFollowDetectionAt) {
+        return null;
+      }
+      _lastEvaluatedFollowDetectionAt = detectionCycleAt;
+
+      final freshCandidates = candidates
+          .where(
+            (candidate) => _isFreshFollowTarget(candidate, reacquisitionNow),
+          )
+          .toList(growable: false);
+      return _reacquireDetectMyFaceTarget(
+        identity: identity,
+        candidates: freshCandidates,
+      );
     }
 
     if (identity == null) {
@@ -1350,6 +1403,29 @@ extension on _AdminHandGestureLiveScreenState {
         return corrected;
       }
 
+      if (targetType == FollowTargetType.face &&
+          _detectMyFaceReacquisition.isActive) {
+        final missNow = DateTime.now();
+        final missResult = _detectMyFaceReacquisition.observeFreshMiss(missNow);
+        switch (missResult) {
+          case DetectMyFaceMissResult.keepVisible:
+            return visiblePrevious;
+          case DetectMyFaceMissResult.temporarilyLost:
+            final reacquired = _reacquireDetectMyFaceTarget(
+              identity: identity,
+              candidates: freshCandidates,
+            );
+            if (reacquired != null) return reacquired;
+            _followTargetProgress.markTemporarilyLost();
+            _lockedFollowTarget = null;
+            _lockedFollowTargetLostAt = null;
+            return null;
+          case DetectMyFaceMissResult.expired:
+            _expireDetectMyFaceReacquisition(missNow);
+            return null;
+        }
+      }
+
       if (!_followTargetProgress.recordVisibleMiss()) {
         return visiblePrevious;
       }
@@ -1357,6 +1433,23 @@ extension on _AdminHandGestureLiveScreenState {
       return null;
     }
     return null;
+  }
+
+  FollowTarget? _reacquireDetectMyFaceTarget({
+    required FollowTargetIdentity identity,
+    required List<FollowTarget> candidates,
+  }) {
+    final reacquired = _followTargetSelector.reacquireFace(
+      identity: identity,
+      candidates: candidates,
+    );
+    if (reacquired == null) return null;
+
+    _followTargetIdentity = FollowTargetIdentity.fromTarget(reacquired);
+    _followTargetProgress.markVisible();
+    _setVisibleFollowTarget(reacquired);
+    unawaited(_updateCameraFocusPointForTarget(reacquired));
+    return reacquired;
   }
 
   FollowTarget _copyFollowTargetWithDisplayBox(
@@ -1804,7 +1897,16 @@ extension on _AdminHandGestureLiveScreenState {
   }) {
     if (visibleTarget != null) return _followTargetText(visibleTarget);
 
-    if (_isFollowTargetSelectionFailureActive(DateTime.now())) {
+    final now = DateTime.now();
+    if (_followTargetProgress.phase ==
+        FollowTargetTrackingPhase.temporarilyLost) {
+      return _detectMyFaceReacquisitionWaitingText(now);
+    }
+    if (_detectMyFaceReacquisition.shouldShowExpiredNotice(now)) {
+      return 'Face lost - use Detect My Face again';
+    }
+
+    if (_isFollowTargetSelectionFailureActive(now)) {
       return 'Target not found — select again';
     }
 
@@ -1905,6 +2007,7 @@ extension on _AdminHandGestureLiveScreenState {
   void _setVisibleFollowTarget(FollowTarget target) {
     _lockedFollowTarget = target;
     _lockedFollowTargetLostAt = null;
+    _detectMyFaceReacquisition.observeVisible();
   }
 
   /// Keeps a lost target briefly before clearing it.
@@ -1946,9 +2049,27 @@ extension on _AdminHandGestureLiveScreenState {
     unawaited(_updateCameraFocusAtNormalizedPoint(const Offset(0.5, 0.5)));
   }
 
+  bool _expireDetectMyFaceReacquisitionIfNeeded(DateTime now) {
+    if (!_detectMyFaceReacquisition.hasExpired(now)) return false;
+    _expireDetectMyFaceReacquisition(now);
+    return true;
+  }
+
+  void _expireDetectMyFaceReacquisition(DateTime now) {
+    _dropFollowTargetAfterMiss();
+    _detectMyFaceReacquisition.markExpired(now);
+  }
+
+  String _detectMyFaceReacquisitionWaitingText(DateTime now) {
+    final remaining = _detectMyFaceReacquisition.remaining(now);
+    final remainingSeconds = remaining.inMilliseconds / 1000;
+    return 'Face lost - waiting (${remainingSeconds.toStringAsFixed(1)}s)';
+  }
+
   void _resetFollowTargetTrackingState() {
     _followTargetIdentity = null;
     _followTargetProgress.reset();
+    _detectMyFaceReacquisition.clear();
     _lastEvaluatedFollowDetectionAt = null;
     _followTargetConfirmationDeadline = null;
     _followTargetSelectionFailureUntil = null;

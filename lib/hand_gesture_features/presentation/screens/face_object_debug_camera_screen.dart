@@ -9,6 +9,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart'
 import 'package:hand_detection/hand_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../data/factories/hand_detector_factory.dart';
 import '../../domain/constants/hand_gesture_thresholds.dart';
 import '../../domain/enums/follow_target_type.dart';
 import '../../domain/enums/object_detection_backend.dart';
@@ -19,6 +20,7 @@ import '../../domain/services/object_detection_result_stabilizer.dart';
 import '../../domain/services/object_detection_service.dart';
 import '../../domain/services/object_detection_service_factory.dart';
 import '../../domain/services/object_detection_target_smoother.dart';
+import '../../domain/services/hand_geometry_service.dart';
 import '../../domain/utils/camera_frame_box_mapper.dart';
 import '../../domain/utils/camera_preview_geometry.dart';
 import '../../domain/utils/detection_debug_log_formatter.dart';
@@ -26,6 +28,7 @@ import '../painters/object_detection_debug_painter.dart';
 import '../painters/object_detection_debug_painter_factory.dart';
 import '../utils/ml_kit_preview_mapper.dart';
 import '../widgets/hand_camera_loading_view.dart';
+import '../widgets/home_hand_pointer_layer.dart';
 import '../widgets/round_icon_button.dart';
 
 /// Debug-only camera view that shows raw face/object detector output.
@@ -34,11 +37,15 @@ class FaceObjectDebugCameraScreen extends StatefulWidget {
     super.key,
     this.autoStartCamera = true,
     this.objectDetectionBackend = ObjectDetectionBackend.ultralyticsYolo,
+    this.initialLensDirection = CameraLensDirection.back,
+    this.appPointerController,
   });
 
   /// Disabled in widget tests so no real camera/plugin calls are made.
   final bool autoStartCamera;
   final ObjectDetectionBackend objectDetectionBackend;
+  final CameraLensDirection initialLensDirection;
+  final HomeHandPointerController? appPointerController;
 
   @override
   State<FaceObjectDebugCameraScreen> createState() =>
@@ -47,7 +54,10 @@ class FaceObjectDebugCameraScreen extends StatefulWidget {
 
 class _FaceObjectDebugCameraScreenState
     extends State<FaceObjectDebugCameraScreen> {
+  static const _handGeometry = HandGeometryService();
+
   CameraController? _controller;
+  HandDetector? _handDetector;
   ml_face.FaceDetector? _faceDetector;
   ObjectDetectionService? _objectDetectionService;
   Future<ObjectDetectionService>? _objectDetectionServiceStartup;
@@ -71,6 +81,7 @@ class _FaceObjectDebugCameraScreenState
   String _actionLabel = 'Try Again';
   DateTime? _lastFrameProcessedAt;
   int _objectDetectionGeneration = 0;
+  final Object _appPointerOwner = Object();
 
   @override
   void initState() {
@@ -106,7 +117,10 @@ class _FaceObjectDebugCameraScreenState
 
   @override
   void dispose() {
+    widget.appPointerController?.clearExternalPointer(_appPointerOwner);
     unawaited(_cleanupCamera());
+    unawaited(_handDetector?.dispose() ?? Future<void>.value());
+    _handDetector = null;
     unawaited(_faceDetector?.close() ?? Future<void>.value());
     _closeObjectDetectionService();
     super.dispose();
@@ -128,7 +142,7 @@ class _FaceObjectDebugCameraScreenState
       }
 
       if (status.isGranted) {
-        await _loadBackCamera();
+        await _loadCamera();
         return;
       }
 
@@ -155,7 +169,7 @@ class _FaceObjectDebugCameraScreenState
     }
   }
 
-  Future<void> _loadBackCamera() async {
+  Future<void> _loadCamera() async {
     try {
       _availableCameras = await availableCameras();
       if (_availableCameras.isEmpty) {
@@ -167,7 +181,8 @@ class _FaceObjectDebugCameraScreenState
       }
 
       final camera = _availableCameras.firstWhere(
-        (description) => description.lensDirection == CameraLensDirection.back,
+        (description) =>
+            description.lensDirection == widget.initialLensDirection,
         orElse: () => _availableCameras.first,
       );
 
@@ -176,7 +191,7 @@ class _FaceObjectDebugCameraScreenState
       debugPrint('Face/object debug camera load error: $error\n$stackTrace');
       _setCameraFailure(
         title: 'Camera unavailable',
-        message: 'Could not open the back camera.',
+        message: 'Could not open the debug camera.',
       );
     }
   }
@@ -198,6 +213,7 @@ class _FaceObjectDebugCameraScreenState
     try {
       _controller = controller;
       await controller.initialize();
+      await _ensureHandDetector();
       if (!mounted) {
         await controller.dispose();
         return;
@@ -268,6 +284,7 @@ class _FaceObjectDebugCameraScreenState
   }
 
   Future<void> _cleanupCamera() async {
+    widget.appPointerController?.clearExternalPointer(_appPointerOwner);
     await _stopCameraStream();
 
     final controller = _controller;
@@ -317,17 +334,85 @@ class _FaceObjectDebugCameraScreenState
       final frameRotation = _cameraFrameRotation(image);
       final inputRotation = mlKitInputRotation(frameRotation);
       final imageSize = Size(image.width.toDouble(), image.height.toDouble());
-      await _detectFaces(
-        image: image,
-        imageSize: imageSize,
-        inputRotation: inputRotation,
-      );
+      await Future.wait<void>([
+        _detectFaces(
+          image: image,
+          imageSize: imageSize,
+          inputRotation: inputRotation,
+        ),
+        _detectHandPointer(image: image, rotation: frameRotation),
+      ]);
       _submitObjectDetection(image: image, frameRotation: frameRotation);
     } catch (error, stackTrace) {
       debugPrint('Face/object debug frame error: $error\n$stackTrace');
+      widget.appPointerController?.clearExternalPointer(_appPointerOwner);
     } finally {
       _isProcessingFrame = false;
     }
+  }
+
+  Future<void> _ensureHandDetector() async {
+    if (_handDetector != null) return;
+    try {
+      _handDetector = await HandDetectorFactory.create();
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Face/object debug hand pointer initialization ignored: '
+        '$error\n$stackTrace',
+      );
+    }
+  }
+
+  Future<void> _detectHandPointer({
+    required CameraImage image,
+    required CameraFrameRotation? rotation,
+  }) async {
+    final detector = _handDetector;
+    final appPointerController = widget.appPointerController;
+    if (detector == null || appPointerController == null) return;
+
+    final detectionImageSize = detectionSize(
+      width: image.width,
+      height: image.height,
+      rotation: rotation,
+      maxDim: HandGestureThresholds.maxDetectionDimension,
+    );
+    late final List<Hand> hands;
+    if (Platform.isIOS && image.planes.length == 1) {
+      final plane = image.planes.first;
+      final strideCols = plane.bytesPerRow ~/ 4;
+      hands = strideCols <= 0
+          ? const <Hand>[]
+          : await detector.detectFromCameraFrame(
+              CameraFrame(
+                bytes: plane.bytes,
+                width: image.width,
+                height: image.height,
+                strideCols: strideCols,
+                conversion: CameraFrameConversion.bgra2bgr,
+                rotation: rotation,
+              ),
+              maxDim: HandGestureThresholds.maxDetectionDimension,
+            );
+    } else {
+      hands = await detector.detectFromCameraImage(
+        image,
+        rotation: rotation,
+        maxDim: HandGestureThresholds.maxDetectionDimension,
+      );
+    }
+
+    if (!mounted) return;
+    final hand = _handGeometry.bestReliableHand(hands);
+    final tip = hand == null
+        ? null
+        : _handGeometry.visibleLandmark(hand, HandLandmarkType.indexFingerTip);
+    appPointerController.updateExternalPointer(
+      owner: _appPointerOwner,
+      indexTip: tip == null ? null : Offset(tip.x, tip.y),
+      detectionImageSize: detectionImageSize,
+      mirrorHorizontally: _shouldMirrorPreviewCoordinates,
+    );
   }
 
   Future<void> _detectFaces({

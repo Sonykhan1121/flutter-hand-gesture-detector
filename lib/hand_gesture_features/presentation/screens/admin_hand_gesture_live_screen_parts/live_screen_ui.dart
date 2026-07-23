@@ -203,6 +203,12 @@ extension on _AdminHandGestureLiveScreenState {
         showSelectedDebugPainter && _gestureDebugMode == GestureDebugMode.punch
         ? _reliableHandWithPoint10ForCircleDebug()
         : null;
+    final faceReacquisitionNow = DateTime.now();
+    final showFaceReacquisitionCountdown =
+        _followTargetProgress.phase ==
+        FollowTargetTrackingPhase.temporarilyLost;
+    final showFaceReacquisitionExpiredNotice = _detectMyFaceReacquisition
+        .shouldShowExpiredNotice(faceReacquisitionNow);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -576,6 +582,23 @@ extension on _AdminHandGestureLiveScreenState {
                             ),
                           ],
                         ),
+                      ),
+                    ),
+                  ),
+                if (showFaceReacquisitionCountdown ||
+                    showFaceReacquisitionExpiredNotice)
+                  SafeArea(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 128),
+                        child: showFaceReacquisitionCountdown
+                            ? FaceReacquisitionStatusOverlay.waiting(
+                                remaining: _detectMyFaceReacquisition.remaining(
+                                  faceReacquisitionNow,
+                                ),
+                              )
+                            : const FaceReacquisitionStatusOverlay.timedOut(),
                       ),
                     ),
                   ),

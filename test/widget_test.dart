@@ -22,6 +22,13 @@ void main() {
     );
 
     expect(find.text('Control Settings'), findsOneWidget);
+    final settingsPanel = tester.widget<Container>(
+      find.byKey(const Key('controlSettingsPanel')),
+    );
+    expect(
+      (settingsPanel.decoration! as BoxDecoration).color,
+      Colors.transparent,
+    );
     expect(find.text('Hand Gesture'), findsOneWidget);
     expect(find.text('ON'), findsOneWidget);
     expect(find.text('GESTURE'), findsOneWidget);

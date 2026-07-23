@@ -246,6 +246,7 @@ class GestureDebugEvaluator {
               distance3dRatio >= HandGestureThresholds.zoomInMinDistanceRatio;
     requirements.add(
       GestureDebugRequirement(
+        id: GestureDebugRequirementId.zoomTipGap,
         matches: distanceMatches,
         text: isZoomOut
             ? 'Tip gap 2D ${(distance2dRatio * 100).toStringAsFixed(1)}%, '
@@ -305,9 +306,11 @@ class GestureDebugEvaluator {
       requirements: requirements,
       landmarkTypes: const {
         HandLandmarkType.wrist,
+        HandLandmarkType.thumbMCP,
         HandLandmarkType.thumbIP,
         HandLandmarkType.thumbTip,
         HandLandmarkType.indexFingerMCP,
+        HandLandmarkType.indexFingerPIP,
         HandLandmarkType.indexFingerDIP,
         HandLandmarkType.indexFingerTip,
         HandLandmarkType.middleFingerMCP,
