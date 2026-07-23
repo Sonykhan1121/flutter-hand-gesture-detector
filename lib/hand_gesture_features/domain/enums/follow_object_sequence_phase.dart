@@ -1,4 +1,4 @@
-/// Internal phases for the open-palm, closed-fist, open-palm target sequence.
+/// Internal phases for the palm, fist, index-point, final-palm sequence.
 enum FollowObjectSequencePhase {
   /// No follow-object sequence is in progress.
   idle,
@@ -10,10 +10,15 @@ enum FollowObjectSequencePhase {
   /// The hand must remain on screen while waiting for closed fist.
   waitingForClosed,
 
-  /// Closed fist is already detected.
-  /// The hand must remain on screen while waiting for the final open palm.
-  waitingForFinalOpen,
+  /// Closed fist is already detected; wait for an index-only pointing pose.
+  waitingForPoint,
 
-  /// The closed fist left the frame and may return before auto-release.
+  /// The index fingertip is dwelling inside one target rectangle.
+  holdingPoint,
+
+  /// One target completed its dwell; wait for the explicit final open palm.
+  waitingForFinalPalm,
+
+  /// The selecting hand left the frame and may return before cancellation.
   waitingForHandReturn,
 }

@@ -1,584 +1,267 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gesture_detector/hand_gesture_features/domain/enums/follow_object_release_reason.dart';
+import 'package:gesture_detector/hand_gesture_features/domain/enums/follow_object_sequence_phase.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/models/open_palm_gesture_detection_result.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/follow_object_sequence_detector.dart';
 import 'package:gesture_detector/hand_gesture_features/domain/services/open_palm_gesture_detector.dart';
 import 'package:hand_detection/hand_detection.dart';
 
 void main() {
-  group('FollowObjectSequenceDetector', () {
-    test('19-point package fist is restricted from Punch', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
+  group('FollowObjectSequenceDetector index-point sequence', () {
+    test('continuous first palm arms at exactly one second', () {
+      final palm = _FakeOpenPalmGestureDetector()..isDetected = true;
+      final detector = _detector(palm);
+      final start = DateTime(2026);
 
-      openPalm.isDetected = true;
-      detector.update(_hand(), now, mirrorHorizontally: false);
-      detector.update(
-        _hand(),
-        now.add(const Duration(seconds: 1)),
-        mirrorHorizontally: false,
-      );
-
-      openPalm.isDetected = false;
-      final punch = detector.update(
-        _nineteenPointPackageFistHand(),
-        now.add(const Duration(milliseconds: 1200)),
-        mirrorHorizontally: false,
-      );
-      expect(punch.isActive, isTrue);
-      expect(punch.isTargetSelectionActive, isTrue);
-      expect(punch.packageGestureType, GestureType.closedFist);
-    });
-
-    test(
-      'waits two seconds before releasing from the last visible hand center',
-      () {
-        final openPalm = _FakeOpenPalmGestureDetector();
-        final detector = FollowObjectSequenceDetector(
-          openPalmGestureDetector: openPalm,
-        );
-        final now = DateTime(2026);
-
-        openPalm.isDetected = true;
-        detector.update(_hand(), now, mirrorHorizontally: false);
-        detector.update(
-          _hand(),
-          now.add(const Duration(seconds: 1)),
-          mirrorHorizontally: false,
-        );
-
-        openPalm.isDetected = false;
-        final activeResult = detector.update(
-          _hand(
-            box: BoundingBox.ltrb(100, 120, 220, 300),
-            gestureType: GestureType.closedFist,
-          ),
-          now.add(const Duration(milliseconds: 1200)),
-          mirrorHorizontally: false,
-        );
-
-        expect(activeResult.isTargetSelectionActive, isTrue);
-
-        detector.update(
-          _hand(box: BoundingBox.ltrb(140, 180, 260, 360)),
-          now.add(const Duration(milliseconds: 1300)),
-          mirrorHorizontally: false,
-        );
-
-        final waitingResult = detector.handleHandMissing(
-          now.add(const Duration(milliseconds: 1400)),
-        );
-
-        expect(waitingResult.isDetected, isFalse);
-        expect(waitingResult.isWaitingForHandReturn, isTrue);
-        expect(waitingResult.handReturnProgress, 0);
-        expect(
-          waitingResult.handReturnDeadline,
-          now.add(const Duration(milliseconds: 3400)),
-        );
-        expect(waitingResult.savedHandPoint?.dx, 200);
-        expect(waitingResult.savedHandPoint?.dy, 270);
-        expect(detector.isTargetSelectionActive, isTrue);
-
-        final stillWaiting = detector.handleHandMissing(
-          now.add(const Duration(milliseconds: 3399)),
-        );
-        expect(stillWaiting.isDetected, isFalse);
-        expect(stillWaiting.isWaitingForHandReturn, isTrue);
-
-        final releaseResult = detector.handleHandMissing(
-          now.add(const Duration(milliseconds: 3400)),
-        );
-        expect(releaseResult.isDetected, isTrue);
-        expect(
-          releaseResult.releaseReason,
-          FollowObjectReleaseReason.handLostTimeout,
-        );
-        expect(releaseResult.releasePoint?.dx, 200);
-        expect(releaseResult.releasePoint?.dy, 270);
-        expect(detector.isTargetSelectionActive, isFalse);
-      },
-    );
-
-    test('closed fist returning inside grace resumes target selection', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
-      _startTargetSelection(detector, openPalm, now);
-
-      final waiting = detector.handleHandMissing(
-        now.add(const Duration(milliseconds: 1300)),
-      );
-      expect(waiting.isWaitingForHandReturn, isTrue);
-
-      final resumed = detector.update(
-        _hand(
-          box: BoundingBox.ltrb(180, 200, 300, 380),
-          gestureType: GestureType.closedFist,
-        ),
-        now.add(const Duration(milliseconds: 2500)),
-        mirrorHorizontally: false,
-      );
-
-      expect(resumed.isDetected, isFalse);
-      expect(resumed.isWaitingForHandReturn, isFalse);
-      expect(resumed.isTargetSelectionActive, isTrue);
-    });
-
-    test('open palm returning inside grace releases at its current center', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
-      _startTargetSelection(detector, openPalm, now);
-      detector.handleHandMissing(now.add(const Duration(milliseconds: 1300)));
-
-      openPalm.isDetected = true;
-      final released = detector.update(
-        _hand(box: BoundingBox.ltrb(200, 220, 320, 400)),
-        now.add(const Duration(milliseconds: 2000)),
-        mirrorHorizontally: false,
-      );
-
-      expect(released.isDetected, isTrue);
-      expect(released.releaseReason, FollowObjectReleaseReason.openPalm);
-      expect(released.releasePoint?.dx, 260);
-      expect(released.releasePoint?.dy, 310);
-    });
-
-    test(
-      'relaxed finger return uses existing two-frame release confirmation',
-      () {
-        final openPalm = _FakeOpenPalmGestureDetector();
-        final detector = FollowObjectSequenceDetector(
-          openPalmGestureDetector: openPalm,
-        );
-        final now = DateTime(2026);
-        _startTargetSelection(detector, openPalm, now);
-        detector.handleHandMissing(now.add(const Duration(milliseconds: 1300)));
-
-        final first = detector.update(
-          _relaxedReleaseHand(extendedFingerCount: 1),
-          now.add(const Duration(milliseconds: 1800)),
-          mirrorHorizontally: false,
-        );
-        expect(first.isWaitingForHandReturn, isTrue);
-        expect(first.isDetected, isFalse);
-
-        final released = detector.update(
-          _relaxedReleaseHand(
-            extendedFingerCount: 1,
-            box: BoundingBox.ltrb(180, 200, 340, 420),
-          ),
-          now.add(const Duration(milliseconds: 1900)),
-          mirrorHorizontally: false,
-        );
-        expect(released.isDetected, isTrue);
-        expect(released.releaseReason, FollowObjectReleaseReason.openPalm);
-        expect(released.releasePoint?.dx, 260);
-        expect(released.releasePoint?.dy, 310);
-      },
-    );
-
-    test('other returned pose keeps the original point until timeout', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
-      _startTargetSelection(detector, openPalm, now);
-      detector.handleHandMissing(now.add(const Duration(milliseconds: 1300)));
-
-      final returned = detector.update(
-        _hand(box: BoundingBox.ltrb(250, 260, 370, 440)),
-        now.add(const Duration(milliseconds: 2000)),
-        mirrorHorizontally: false,
-      );
-      expect(returned.isWaitingForHandReturn, isTrue);
-
-      final released = detector.handleHandMissing(
-        now.add(const Duration(milliseconds: 3300)),
-      );
-      expect(released.releaseReason, FollowObjectReleaseReason.handLostTimeout);
-      expect(released.releasePoint?.dx, 160);
-      expect(released.releasePoint?.dy, 190);
-    });
-
-    test('clear cancels a pending hand-return grace period', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
-      _startTargetSelection(detector, openPalm, now);
+      detector.update(_baseHand(), start, mirrorHorizontally: false);
       expect(
         detector
-            .handleHandMissing(now.add(const Duration(milliseconds: 1300)))
-            .isWaitingForHandReturn,
-        isTrue,
+            .update(
+              _baseHand(),
+              start.add(const Duration(milliseconds: 999)),
+              mirrorHorizontally: false,
+            )
+            .isTargetSelectionActive,
+        isFalse,
       );
-
-      detector.clear();
-      final result = detector.handleHandMissing(
-        now.add(const Duration(milliseconds: 3400)),
+      detector.update(
+        _baseHand(),
+        start.add(const Duration(seconds: 1)),
+        mirrorHorizontally: false,
       );
-      expect(result.isDetected, isFalse);
-      expect(result.isWaitingForHandReturn, isFalse);
-      expect(detector.isTargetSelectionActive, isFalse);
+      expect(detector.debugPhase, FollowObjectSequencePhase.waitingForClosed);
     });
 
-    test('final open palm release uses the current hand center', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
+    test('closed fist advances to index-only pointing', () {
+      final palm = _FakeOpenPalmGestureDetector();
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      _armWithFist(detector, palm, start);
 
-      openPalm.isDetected = true;
-      detector.update(_hand(), now, mirrorHorizontally: false);
-      detector.update(
-        _hand(),
-        now.add(const Duration(seconds: 1)),
+      final pointing = detector.update(
+        _indexOnlyHand(),
+        start.add(const Duration(milliseconds: 1200)),
         mirrorHorizontally: false,
       );
 
-      openPalm.isDetected = false;
-      detector.update(
-        _hand(gestureType: GestureType.closedFist),
-        now.add(const Duration(milliseconds: 1200)),
-        mirrorHorizontally: false,
-      );
-
-      openPalm
-        ..isDetected = true
-        ..confidence = 0.66;
-      final releaseResult = detector.update(
-        _hand(box: BoundingBox.ltrb(200, 220, 320, 400)),
-        now.add(const Duration(milliseconds: 1300)),
-        mirrorHorizontally: false,
-      );
-
-      expect(releaseResult.isDetected, isTrue);
-      expect(releaseResult.releaseReason, FollowObjectReleaseReason.openPalm);
-      expect(releaseResult.releasePoint?.dx, 260);
-      expect(releaseResult.releasePoint?.dy, 310);
-      expect(releaseResult.gestureConfidence, closeTo(0.66, 0.001));
+      expect(pointing.isTargetSelectionActive, isTrue);
+      expect(pointing.isIndexOnlyPointing, isTrue);
+      expect(pointing.indexPip, isNotNull);
+      expect(pointing.indexPip!.dx, 135);
+      expect(pointing.indexPip!.dy, 155);
+      expect(pointing.indexTip, isNotNull);
+      expect(pointing.indexTip!.dx, 135);
+      expect(pointing.indexTip!.dy, 50);
     });
 
-    for (final extendedFingerCount in const [1, 2]) {
-      test('final release accepts $extendedFingerCount extended finger(s) '
-          'after two reliable frames', () {
-        final openPalm = _FakeOpenPalmGestureDetector();
-        final detector = FollowObjectSequenceDetector(
-          openPalmGestureDetector: openPalm,
-        );
-        final now = DateTime(2026);
-        _startTargetSelection(detector, openPalm, now);
+    test('open palm cannot confirm before target dwell completes', () {
+      final palm = _FakeOpenPalmGestureDetector();
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      _armWithFist(detector, palm, start);
 
-        final firstFrame = detector.update(
-          _relaxedReleaseHand(extendedFingerCount: extendedFingerCount),
-          now.add(const Duration(milliseconds: 1300)),
-          mirrorHorizontally: false,
-        );
-        expect(firstFrame.isDetected, isFalse);
-        expect(firstFrame.isTargetSelectionActive, isTrue);
-
-        final releaseResult = detector.update(
-          _relaxedReleaseHand(
-            extendedFingerCount: extendedFingerCount,
-            box: BoundingBox.ltrb(160, 180, 320, 400),
-          ),
-          now.add(const Duration(milliseconds: 1400)),
-          mirrorHorizontally: false,
-        );
-
-        expect(releaseResult.isDetected, isTrue);
-        expect(releaseResult.releaseReason, FollowObjectReleaseReason.openPalm);
-        expect(releaseResult.releasePoint?.dx, 240);
-        expect(releaseResult.releasePoint?.dy, 290);
-        expect(detector.isTargetSelectionActive, isFalse);
-      });
-    }
-
-    test('closed-fist classification prevents accidental relaxed release', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
+      palm.isDetected = true;
+      final earlyPalm = detector.update(
+        _baseHand(),
+        start.add(const Duration(milliseconds: 1300)),
+        mirrorHorizontally: false,
       );
-      final now = DateTime(2026);
-      _startTargetSelection(detector, openPalm, now);
 
-      for (var frame = 0; frame < 3; frame++) {
+      expect(earlyPalm.isDetected, isFalse);
+      expect(earlyPalm.isFinalPalmConfirmation, isFalse);
+      expect(detector.debugPhase, FollowObjectSequencePhase.waitingForPoint);
+    });
+
+    test('fist or lost point resets only the active dwell phase', () {
+      final palm = _FakeOpenPalmGestureDetector();
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      _armWithFist(detector, palm, start);
+      detector.markPointHoldStarted();
+      expect(detector.debugPhase, FollowObjectSequencePhase.holdingPoint);
+
+      detector.update(
+        _baseHand(gestureType: GestureType.closedFist),
+        start.add(const Duration(milliseconds: 1300)),
+        mirrorHorizontally: false,
+      );
+
+      expect(detector.debugPhase, FollowObjectSequencePhase.waitingForPoint);
+      expect(detector.isTargetSelectionActive, isTrue);
+    });
+
+    test('rejects victory, multiple fingers, partial index, and bad hand', () {
+      final palm = _FakeOpenPalmGestureDetector();
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      _armWithFist(detector, palm, start);
+
+      for (final hand in [
+        _indexOnlyHand(gestureType: GestureType.victory),
+        _indexOnlyHand(openMiddle: true),
+        _indexOnlyHand(partialIndex: true),
+        _indexOnlyHand(score: 0.2),
+      ]) {
         final result = detector.update(
-          _relaxedReleaseHand(
-            extendedFingerCount: 2,
-            gestureType: GestureType.closedFist,
-          ),
-          now.add(Duration(milliseconds: 1300 + frame * 100)),
+          hand,
+          start.add(const Duration(milliseconds: 1300)),
           mirrorHorizontally: false,
         );
-        expect(result.isDetected, isFalse);
-        expect(result.isTargetSelectionActive, isTrue);
+        expect(result.isIndexOnlyPointing, isFalse);
+        expect(result.indexTip, isNull);
       }
     });
 
-    test('an interrupted relaxed pose restarts frame confirmation', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
-      _startTargetSelection(detector, openPalm, now);
-
-      detector.update(
-        _relaxedReleaseHand(extendedFingerCount: 1),
-        now.add(const Duration(milliseconds: 1300)),
-        mirrorHorizontally: false,
-      );
-      detector.update(
-        _relaxedReleaseHand(extendedFingerCount: 0),
-        now.add(const Duration(milliseconds: 1400)),
-        mirrorHorizontally: false,
-      );
-      final restarted = detector.update(
-        _relaxedReleaseHand(extendedFingerCount: 1),
-        now.add(const Duration(milliseconds: 1500)),
-        mirrorHorizontally: false,
-      );
-
-      expect(restarted.isDetected, isFalse);
-      expect(restarted.isTargetSelectionActive, isTrue);
+    test('final palm succeeds at exact two-second boundary', () {
+      final palm = _FakeOpenPalmGestureDetector();
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      _armWithFist(detector, palm, start);
+      detector.markPointHoldStarted();
+      final deadline = start.add(const Duration(milliseconds: 3200));
       expect(
-        detector
-            .update(
-              _relaxedReleaseHand(extendedFingerCount: 1),
-              now.add(const Duration(milliseconds: 1600)),
-              mirrorHorizontally: false,
-            )
-            .isDetected,
+        detector.markPointHoldComplete(confirmationDeadline: deadline),
         isTrue,
       );
-    });
 
-    test('a partly straightened single finger is enough for final release', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
-      _startTargetSelection(detector, openPalm, now);
-
-      final hand = _relaxedReleaseHand(
-        extendedFingerCount: 1,
-        partiallyStraightened: true,
-      );
-      expect(
-        detector
-            .update(
-              hand,
-              now.add(const Duration(milliseconds: 1300)),
-              mirrorHorizontally: false,
-            )
-            .isDetected,
-        isFalse,
-      );
-      expect(
-        detector
-            .update(
-              hand,
-              now.add(const Duration(milliseconds: 1400)),
-              mirrorHorizontally: false,
-            )
-            .isDetected,
-        isTrue,
-      );
-    });
-
-    test('carries custom open-palm confidence while active', () {
-      final openPalm = _FakeOpenPalmGestureDetector()
+      palm
         ..isDetected = true
-        ..confidence = 0.72;
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-
-      final result = detector.update(
-        _hand(),
-        DateTime(2026),
+        ..confidence = 0.82;
+      final confirmed = detector.update(
+        _baseHand(),
+        deadline,
         mirrorHorizontally: false,
       );
 
-      expect(result.isActive, isTrue);
-      expect(result.packageGestureType, GestureType.openPalm);
-      expect(result.gestureConfidence, closeTo(0.72, 0.001));
-    });
-
-    test('hand lost before closed fist clears without release', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
-
-      openPalm.isDetected = true;
-      detector.update(_hand(), now, mirrorHorizontally: false);
-      detector.update(
-        _hand(),
-        now.add(const Duration(seconds: 1)),
-        mirrorHorizontally: false,
-      );
-
-      final releaseResult = detector.releaseFromLastVisiblePoint(
-        now.add(const Duration(milliseconds: 1200)),
-      );
-
-      expect(releaseResult.isDetected, isFalse);
-      expect(releaseResult.releasePoint, isNull);
+      expect(confirmed.isDetected, isTrue);
+      expect(confirmed.isFinalPalmConfirmation, isTrue);
+      expect(confirmed.gestureConfidence, closeTo(0.82, 0.001));
       expect(detector.isTargetSelectionActive, isFalse);
     });
 
-    test('unreliable hand cannot start the open-palm hold', () {
-      final openPalm = _FakeOpenPalmGestureDetector()..isDetected = true;
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
+    test('final palm later than two seconds cancels', () {
+      final palm = _FakeOpenPalmGestureDetector();
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      _armWithFist(detector, palm, start);
+      detector.markPointHoldStarted();
+      final deadline = start.add(const Duration(milliseconds: 3200));
+      detector.markPointHoldComplete(confirmationDeadline: deadline);
 
-      final result = detector.update(
-        _hand(score: double.nan),
-        DateTime(2026),
+      palm.isDetected = true;
+      final timedOut = detector.update(
+        _baseHand(),
+        deadline.add(const Duration(milliseconds: 1)),
         mirrorHorizontally: false,
       );
 
-      expect(result.isActive, isFalse);
-      expect(result.isDetected, isFalse);
-      expect(detector.isTargetSelectionActive, isFalse);
+      expect(timedOut.wasCancelled, isTrue);
+      expect(timedOut.isDetected, isFalse);
+      expect(timedOut.cancellationReason, contains('timed out'));
     });
 
-    test('unreliable hand interrupts first open-palm hold', () {
-      final openPalm = _FakeOpenPalmGestureDetector()..isDetected = true;
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
+    test('pre-dwell hand loss gives grace then cancels without release', () {
+      final palm = _FakeOpenPalmGestureDetector();
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      _armWithFist(detector, palm, start);
+      final lostAt = start.add(const Duration(milliseconds: 1200));
 
-      detector.update(_hand(), now, mirrorHorizontally: false);
-      final result = detector.update(
-        _hand(score: 0.2),
-        now.add(const Duration(milliseconds: 400)),
-        mirrorHorizontally: false,
-      );
-
-      expect(result.isActive, isFalse);
-
-      final releaseResult = detector.releaseFromLastVisiblePoint(
-        now.add(const Duration(milliseconds: 500)),
-      );
-      expect(releaseResult.isDetected, isFalse);
-    });
-
-    test('unreliable hand starts grace and keeps last release point', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
-
-      openPalm.isDetected = true;
-      detector.update(_hand(), now, mirrorHorizontally: false);
-      detector.update(
-        _hand(),
-        now.add(const Duration(seconds: 1)),
-        mirrorHorizontally: false,
-      );
-
-      openPalm.isDetected = false;
-      detector.update(
-        _hand(
-          box: BoundingBox.ltrb(100, 120, 220, 300),
-          gestureType: GestureType.closedFist,
-        ),
-        now.add(const Duration(milliseconds: 1200)),
-        mirrorHorizontally: false,
-      );
-
-      final unreliableResult = detector.update(
-        _hand(box: BoundingBox.ltrb(300, 300, 360, 360), score: 0.2),
-        now.add(const Duration(milliseconds: 1300)),
-        mirrorHorizontally: false,
-      );
-
-      expect(unreliableResult.isTargetSelectionActive, isTrue);
-      expect(unreliableResult.isWaitingForHandReturn, isTrue);
-
-      final releaseResult = detector.handleHandMissing(
-        now.add(const Duration(milliseconds: 3300)),
-      );
-
-      expect(releaseResult.isDetected, isTrue);
+      final waiting = detector.handleHandMissing(lostAt);
+      expect(waiting.isWaitingForHandReturn, isTrue);
       expect(
-        releaseResult.releaseReason,
-        FollowObjectReleaseReason.handLostTimeout,
+        detector
+            .handleHandMissing(lostAt.add(const Duration(seconds: 2)))
+            .isWaitingForHandReturn,
+        isTrue,
       );
-      expect(releaseResult.releasePoint?.dx, 160);
-      expect(releaseResult.releasePoint?.dy, 210);
+      final cancelled = detector.handleHandMissing(
+        lostAt.add(const Duration(milliseconds: 2001)),
+      );
+      expect(cancelled.wasCancelled, isTrue);
+      expect(cancelled.releasePoint, isNull);
+      expect(cancelled.isDetected, isFalse);
     });
 
-    test('non-finite package confidence does not start target selection', () {
-      final openPalm = _FakeOpenPalmGestureDetector();
-      final detector = FollowObjectSequenceDetector(
-        openPalmGestureDetector: openPalm,
-      );
-      final now = DateTime(2026);
+    test('fist returns at exact hand grace boundary and resumes pointing', () {
+      final palm = _FakeOpenPalmGestureDetector();
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      _armWithFist(detector, palm, start);
+      final lostAt = start.add(const Duration(milliseconds: 1200));
+      detector.handleHandMissing(lostAt);
 
-      openPalm.isDetected = true;
-      detector.update(_hand(), now, mirrorHorizontally: false);
-      detector.update(
-        _hand(),
-        now.add(const Duration(seconds: 1)),
+      final returned = detector.update(
+        _baseHand(gestureType: GestureType.closedFist),
+        lostAt.add(const Duration(seconds: 2)),
         mirrorHorizontally: false,
       );
 
-      openPalm.isDetected = false;
+      expect(returned.wasCancelled, isFalse);
+      expect(returned.isTargetSelectionActive, isTrue);
+      expect(detector.debugPhase, FollowObjectSequencePhase.waitingForPoint);
+    });
+
+    test('frozen target deadline is not extended by hand loss', () {
+      final palm = _FakeOpenPalmGestureDetector();
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      _armWithFist(detector, palm, start);
+      detector.markPointHoldStarted();
+      final deadline = start.add(const Duration(milliseconds: 3200));
+      detector.markPointHoldComplete(confirmationDeadline: deadline);
+      detector.handleHandMissing(start.add(const Duration(milliseconds: 2500)));
+
+      palm.isDetected = true;
+      final confirmed = detector.update(
+        _baseHand(),
+        deadline,
+        mirrorHorizontally: false,
+      );
+      expect(confirmed.isFinalPalmConfirmation, isTrue);
+    });
+
+    test('unreliable hand interrupts the initial palm hold', () {
+      final palm = _FakeOpenPalmGestureDetector()..isDetected = true;
+      final detector = _detector(palm);
+      final start = DateTime(2026);
+      detector.update(_baseHand(), start, mirrorHorizontally: false);
+
       final result = detector.update(
-        _hand(
-          gestureType: GestureType.closedFist,
-          gestureConfidence: double.infinity,
-        ),
-        now.add(const Duration(milliseconds: 1200)),
+        _baseHand(score: 0.2),
+        start.add(const Duration(milliseconds: 500)),
         mirrorHorizontally: false,
       );
 
-      expect(result.isTargetSelectionActive, isFalse);
-      expect(detector.isTargetSelectionActive, isFalse);
+      expect(result.isActive, isFalse);
+      expect(detector.debugPhase, FollowObjectSequencePhase.idle);
     });
   });
 }
 
-void _startTargetSelection(
+FollowObjectSequenceDetector _detector(_FakeOpenPalmGestureDetector palm) {
+  return FollowObjectSequenceDetector(openPalmGestureDetector: palm);
+}
+
+void _armWithFist(
   FollowObjectSequenceDetector detector,
-  _FakeOpenPalmGestureDetector openPalm,
-  DateTime now,
+  _FakeOpenPalmGestureDetector palm,
+  DateTime start,
 ) {
-  openPalm.isDetected = true;
-  detector.update(_hand(), now, mirrorHorizontally: false);
+  palm.isDetected = true;
+  detector.update(_baseHand(), start, mirrorHorizontally: false);
   detector.update(
-    _hand(),
-    now.add(const Duration(seconds: 1)),
+    _baseHand(),
+    start.add(const Duration(seconds: 1)),
     mirrorHorizontally: false,
   );
-  openPalm.isDetected = false;
-  final result = detector.update(
-    _hand(gestureType: GestureType.closedFist),
-    now.add(const Duration(milliseconds: 1200)),
+  palm.isDetected = false;
+  final armed = detector.update(
+    _baseHand(gestureType: GestureType.closedFist),
+    start.add(const Duration(milliseconds: 1100)),
     mirrorHorizontally: false,
   );
-  expect(result.isTargetSelectionActive, isTrue);
+  expect(armed.isTargetSelectionActive, isTrue);
+  expect(detector.debugPhase, FollowObjectSequencePhase.waitingForPoint);
 }
 
 class _FakeOpenPalmGestureDetector extends OpenPalmGestureDetector {
@@ -599,20 +282,15 @@ class _FakeOpenPalmGestureDetector extends OpenPalmGestureDetector {
   }
 }
 
-Hand _hand({
-  BoundingBox? box,
-  GestureType? gestureType,
-  double gestureConfidence = 1,
-  double score = 1,
-}) {
+Hand _baseHand({GestureType? gestureType, double score = 1}) {
   return Hand(
-    boundingBox: box ?? BoundingBox.ltrb(100, 100, 220, 280),
+    boundingBox: BoundingBox.ltrb(80, 40, 230, 270),
     score: score,
     landmarks: [
       HandLandmark(
         type: HandLandmarkType.wrist,
-        x: (box?.left ?? 100) + 10,
-        y: (box?.top ?? 100) + 10,
+        x: 150,
+        y: 255,
         z: 0,
         visibility: 1,
       ),
@@ -622,114 +300,125 @@ Hand _hand({
     handedness: Handedness.right,
     gesture: gestureType == null
         ? null
-        : GestureResult(type: gestureType, confidence: gestureConfidence),
+        : GestureResult(type: gestureType, confidence: 1),
   );
 }
 
-Hand _nineteenPointPackageFistHand() {
-  const points = <(double, double)>[
-    (200, 240),
-    (180, 225),
-    (175, 215),
-    (180, 205),
-    (50, 50),
-    (170, 200),
-    (170, 220),
-    (180, 225),
-    (190, 220),
-    (160, 200),
-    (190, 220),
-    (200, 225),
-    (240, 240),
-    (210, 200),
-    (50, 50),
-    (200, 225),
-    (190, 220),
-    (230, 200),
-    (230, 220),
-    (220, 225),
-    (210, 220),
-  ];
-
-  return Hand(
-    boundingBox: BoundingBox.ltrb(100, 80, 300, 280),
-    score: 1,
-    landmarks: [
-      for (var index = 0; index < points.length; index += 1)
-        HandLandmark(
-          type: HandLandmarkType.values[index],
-          x: points[index].$1,
-          y: points[index].$2,
-          z: 0,
-          visibility: 1,
-        ),
-    ],
-    imageWidth: 400,
-    imageHeight: 400,
-    handedness: Handedness.right,
-    gesture: const GestureResult(type: GestureType.closedFist, confidence: 1),
-  );
-}
-
-Hand _relaxedReleaseHand({
-  required int extendedFingerCount,
-  BoundingBox? box,
+Hand _indexOnlyHand({
   GestureType? gestureType,
-  bool partiallyStraightened = false,
+  bool openMiddle = false,
+  bool partialIndex = false,
+  double score = 1,
 }) {
-  final boundingBox = box ?? BoundingBox.ltrb(100, 80, 300, 340);
-  final landmarks = <HandLandmark>[_landmark(HandLandmarkType.wrist, 200, 310)];
-  final chains = const [
-    [
-      HandLandmarkType.indexFingerMCP,
-      HandLandmarkType.indexFingerPIP,
-      HandLandmarkType.indexFingerDIP,
-      HandLandmarkType.indexFingerTip,
-    ],
-    [
-      HandLandmarkType.middleFingerMCP,
-      HandLandmarkType.middleFingerPIP,
-      HandLandmarkType.middleFingerDIP,
-      HandLandmarkType.middleFingerTip,
-    ],
-    [
-      HandLandmarkType.ringFingerMCP,
-      HandLandmarkType.ringFingerPIP,
-      HandLandmarkType.ringFingerDIP,
-      HandLandmarkType.ringFingerTip,
-    ],
-    [
-      HandLandmarkType.pinkyMCP,
-      HandLandmarkType.pinkyPIP,
-      HandLandmarkType.pinkyDIP,
-      HandLandmarkType.pinkyTip,
-    ],
-  ];
-
-  for (var index = 0; index < chains.length; index++) {
-    final x = 140.0 + index * 40;
-    final extended = index < extendedFingerCount;
-    final relaxedBent = extended && partiallyStraightened && index == 0;
-    landmarks.addAll([
-      _landmark(chains[index][0], x, 240),
-      _landmark(chains[index][1], x, 200),
-      _landmark(
-        chains[index][2],
-        relaxedBent ? x + 15 : x,
-        relaxedBent ? 174 : (extended ? 150 : 220),
-      ),
-      _landmark(
-        chains[index][3],
-        relaxedBent ? x + 30 : x,
-        relaxedBent ? 148 : (extended ? 100 : 245),
-      ),
-    ]);
-  }
+  final indexTipY = partialIndex ? 185.0 : 50.0;
+  final middle = openMiddle
+      ? [
+          HandLandmark(
+            type: HandLandmarkType.middleFingerMCP,
+            x: 160,
+            y: 205,
+            z: 0,
+            visibility: 1,
+          ),
+          HandLandmark(
+            type: HandLandmarkType.middleFingerPIP,
+            x: 160,
+            y: 155,
+            z: 0,
+            visibility: 1,
+          ),
+          HandLandmark(
+            type: HandLandmarkType.middleFingerDIP,
+            x: 160,
+            y: 105,
+            z: 0,
+            visibility: 1,
+          ),
+          HandLandmark(
+            type: HandLandmarkType.middleFingerTip,
+            x: 160,
+            y: 55,
+            z: 0,
+            visibility: 1,
+          ),
+        ]
+      : _foldedChain(
+          HandLandmarkType.middleFingerMCP,
+          HandLandmarkType.middleFingerPIP,
+          HandLandmarkType.middleFingerDIP,
+          HandLandmarkType.middleFingerTip,
+          160,
+        );
 
   return Hand(
-    boundingBox: boundingBox,
-    score: 1,
-    landmarks: landmarks,
+    boundingBox: BoundingBox.ltrb(80, 40, 230, 270),
+    score: score,
+    landmarks: [
+      HandLandmark(
+        type: HandLandmarkType.wrist,
+        x: 150,
+        y: 255,
+        z: 0,
+        visibility: 1,
+      ),
+      HandLandmark(
+        type: HandLandmarkType.thumbIP,
+        x: 115,
+        y: 220,
+        z: 0,
+        visibility: 1,
+      ),
+      HandLandmark(
+        type: HandLandmarkType.thumbTip,
+        x: 130,
+        y: 220,
+        z: 0,
+        visibility: 1,
+      ),
+      HandLandmark(
+        type: HandLandmarkType.indexFingerMCP,
+        x: 135,
+        y: 205,
+        z: 0,
+        visibility: 1,
+      ),
+      HandLandmark(
+        type: HandLandmarkType.indexFingerPIP,
+        x: 135,
+        y: 155,
+        z: 0,
+        visibility: 1,
+      ),
+      HandLandmark(
+        type: HandLandmarkType.indexFingerDIP,
+        x: 135,
+        y: 105,
+        z: 0,
+        visibility: 1,
+      ),
+      HandLandmark(
+        type: HandLandmarkType.indexFingerTip,
+        x: 135,
+        y: indexTipY,
+        z: 0,
+        visibility: 1,
+      ),
+      ...middle,
+      ..._foldedChain(
+        HandLandmarkType.ringFingerMCP,
+        HandLandmarkType.ringFingerPIP,
+        HandLandmarkType.ringFingerDIP,
+        HandLandmarkType.ringFingerTip,
+        180,
+      ),
+      ..._foldedChain(
+        HandLandmarkType.pinkyMCP,
+        HandLandmarkType.pinkyPIP,
+        HandLandmarkType.pinkyDIP,
+        HandLandmarkType.pinkyTip,
+        200,
+      ),
+    ],
     imageWidth: 400,
     imageHeight: 400,
     handedness: Handedness.right,
@@ -739,6 +428,17 @@ Hand _relaxedReleaseHand({
   );
 }
 
-HandLandmark _landmark(HandLandmarkType type, double x, double y) {
-  return HandLandmark(type: type, x: x, y: y, z: 0, visibility: 1);
+List<HandLandmark> _foldedChain(
+  HandLandmarkType mcpType,
+  HandLandmarkType pipType,
+  HandLandmarkType dipType,
+  HandLandmarkType tipType,
+  double x,
+) {
+  return [
+    HandLandmark(type: mcpType, x: x, y: 205, z: 0, visibility: 1),
+    HandLandmark(type: pipType, x: x + 5, y: 175, z: 0, visibility: 1),
+    HandLandmark(type: dipType, x: x + 12, y: 188, z: 0, visibility: 1),
+    HandLandmark(type: tipType, x: x, y: 198, z: 0, visibility: 1),
+  ];
 }

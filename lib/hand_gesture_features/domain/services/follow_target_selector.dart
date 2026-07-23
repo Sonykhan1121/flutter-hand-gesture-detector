@@ -7,6 +7,25 @@ import '../models/follow_target.dart';
 import '../models/follow_target_identity.dart';
 import '../models/follow_target_selection_memory.dart';
 
+class StrictPointingTargetSelection {
+  const StrictPointingTargetSelection._({
+    required this.target,
+    required this.isAmbiguous,
+  });
+
+  const StrictPointingTargetSelection.none()
+    : this._(target: null, isAmbiguous: false);
+
+  const StrictPointingTargetSelection.ambiguous()
+    : this._(target: null, isAmbiguous: true);
+
+  const StrictPointingTargetSelection.selected(FollowTarget target)
+    : this._(target: target, isAmbiguous: false);
+
+  final FollowTarget? target;
+  final bool isAmbiguous;
+}
+
 /// Picks and tracks the face/object target selected by a release gesture.
 class FollowTargetSelector {
   const FollowTargetSelector();
@@ -52,6 +71,72 @@ class FollowTargetSelector {
     }
 
     return bestCandidate;
+  }
+
+  /// Selects the unique smallest unpadded face/object box under a display point.
+  ///
+  /// This intentionally has no nearest-center fallback. Equal minimum areas
+  /// are ambiguous because choosing either rectangle would be arbitrary.
+  StrictPointingTargetSelection selectAtPoint({
+    required Offset selectionPoint,
+    required List<FollowTarget> faces,
+    required List<FollowTarget> objects,
+    DateTime? detectedAfter,
+    FollowTarget? activeCandidate,
+    double activeCandidateHysteresis = 0,
+  }) {
+    final eligible = <FollowTarget>[...faces, ...objects]
+        .where(
+          (candidate) =>
+              detectedAfter == null ||
+              !candidate.detectedAt.isBefore(detectedAfter),
+        )
+        .toList(growable: false);
+    final containing = eligible
+        .where((candidate) => candidate.displayBox.contains(selectionPoint))
+        .toList(growable: false);
+
+    final strictSelection = _smallestContainingSelection(containing);
+    if (strictSelection.target != null || strictSelection.isAmbiguous) {
+      return strictSelection;
+    }
+
+    if (activeCandidate == null ||
+        activeCandidateHysteresis <= 0 ||
+        !activeCandidateHysteresis.isFinite) {
+      return const StrictPointingTargetSelection.none();
+    }
+
+    final maintained = eligible
+        .where(
+          (candidate) =>
+              isSamePointingCandidate(activeCandidate, candidate) &&
+              candidate.displayBox
+                  .inflate(activeCandidateHysteresis)
+                  .contains(selectionPoint),
+        )
+        .toList(growable: false);
+    if (maintained.length == 1) {
+      return StrictPointingTargetSelection.selected(maintained.single);
+    }
+    return maintained.length > 1
+        ? const StrictPointingTargetSelection.ambiguous()
+        : const StrictPointingTargetSelection.none();
+  }
+
+  /// Backward-compatible strict fingertip entry point.
+  StrictPointingTargetSelection selectAtIndexTip({
+    required Offset indexTip,
+    required List<FollowTarget> faces,
+    required List<FollowTarget> objects,
+    DateTime? detectedAfter,
+  }) {
+    return selectAtPoint(
+      selectionPoint: indexTip,
+      faces: faces,
+      objects: objects,
+      detectedAfter: detectedAfter,
+    );
   }
 
   /// Removes ML Kit's common "Home goods" false positive around the hand.
@@ -208,6 +293,64 @@ class FollowTargetSelector {
     }
 
     return isSpatiallyContinuous(previous, candidate);
+  }
+
+  /// Strict-but-jitter-tolerant identity continuity during the pointing dwell.
+  bool isSamePointingCandidate(FollowTarget previous, FollowTarget candidate) {
+    if (candidate.type != previous.type) return false;
+
+    final previousTrackingId = previous.trackingId;
+    final candidateTrackingId = candidate.trackingId;
+    if (previousTrackingId != null &&
+        candidateTrackingId != null &&
+        previousTrackingId == candidateTrackingId) {
+      return true;
+    }
+
+    final previousLabel = FollowTargetIdentity.normalizeLabel(
+      previous.label ?? previous.type.displayLabel,
+    );
+    final candidateLabel = FollowTargetIdentity.normalizeLabel(
+      candidate.label ?? candidate.type.displayLabel,
+    );
+    if (previousLabel != candidateLabel) return false;
+    if (previous.type == FollowTargetType.object &&
+        (previous.classIndex == null ||
+            candidate.classIndex != previous.classIndex)) {
+      return false;
+    }
+    if (!isSpatiallyContinuous(previous, candidate)) return false;
+
+    final previousAppearance = previous.appearanceSignature;
+    final candidateAppearance = candidate.appearanceSignature;
+    return previousAppearance == null ||
+        candidateAppearance == null ||
+        previousAppearance.compositeSimilarity(candidateAppearance) >=
+            HandGestureThresholds.followTargetVisibleSimilarity;
+  }
+
+  /// Resolves a frozen dwell target without allowing a different box to win.
+  FollowTarget? resolveFrozenPointingTarget({
+    required FollowTarget frozen,
+    required List<FollowTarget> candidates,
+  }) {
+    final trackingId = frozen.trackingId;
+    if (trackingId != null) {
+      final exact = candidates
+          .where(
+            (candidate) =>
+                candidate.type == frozen.type &&
+                candidate.trackingId == trackingId,
+          )
+          .toList(growable: false);
+      if (exact.length == 1) return exact.single;
+      if (exact.length > 1) return null;
+    }
+
+    final compatible = candidates
+        .where((candidate) => isSamePointingCandidate(frozen, candidate))
+        .toList(growable: false);
+    return compatible.length == 1 ? compatible.single : null;
   }
 
   /// Returns a confirmation only when exactly one candidate matches safely.
@@ -390,5 +533,31 @@ class FollowTargetSelector {
     final dx = first.dx - second.dx;
     final dy = first.dy - second.dy;
     return math.sqrt(dx * dx + dy * dy);
+  }
+
+  StrictPointingTargetSelection _smallestContainingSelection(
+    List<FollowTarget> candidates,
+  ) {
+    if (candidates.isEmpty) {
+      return const StrictPointingTargetSelection.none();
+    }
+
+    final sorted = List<FollowTarget>.of(candidates)
+      ..sort((first, second) {
+        final firstArea = first.displayBox.width * first.displayBox.height;
+        final secondArea = second.displayBox.width * second.displayBox.height;
+        return firstArea.compareTo(secondArea);
+      });
+    if (sorted.length > 1) {
+      final firstArea =
+          sorted[0].displayBox.width * sorted[0].displayBox.height;
+      final secondArea =
+          sorted[1].displayBox.width * sorted[1].displayBox.height;
+      if ((secondArea - firstArea).abs() <=
+          HandGestureThresholds.followObjectPointingAreaTieTolerance) {
+        return const StrictPointingTargetSelection.ambiguous();
+      }
+    }
+    return StrictPointingTargetSelection.selected(sorted.first);
   }
 }

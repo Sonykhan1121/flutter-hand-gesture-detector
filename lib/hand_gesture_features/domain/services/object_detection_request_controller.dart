@@ -31,8 +31,15 @@ class ObjectDetectionRequestController {
     required DateTime now,
     required bool detectorBusy,
     required Future<List<AppObjectDetection>> Function() detect,
+    Duration? minIntervalOverride,
   }) {
-    if (!_canSubmit(now: now, detectorBusy: detectorBusy)) return null;
+    if (!_canSubmit(
+      now: now,
+      detectorBusy: detectorBusy,
+      minIntervalOverride: minIntervalOverride,
+    )) {
+      return null;
+    }
 
     final request = detect();
     _lastSubmittedAt = now;
@@ -58,12 +65,17 @@ class ObjectDetectionRequestController {
     _cachedDetections = const [];
   }
 
-  bool _canSubmit({required DateTime now, required bool detectorBusy}) {
+  bool _canSubmit({
+    required DateTime now,
+    required bool detectorBusy,
+    Duration? minIntervalOverride,
+  }) {
     if (detectorBusy || isBusy) return false;
 
     final lastSubmittedAt = _lastSubmittedAt;
     if (lastSubmittedAt == null) return true;
 
-    return now.difference(lastSubmittedAt) >= minInterval;
+    return now.difference(lastSubmittedAt) >=
+        (minIntervalOverride ?? minInterval);
   }
 }

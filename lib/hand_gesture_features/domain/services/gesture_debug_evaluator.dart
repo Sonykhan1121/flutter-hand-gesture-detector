@@ -41,6 +41,9 @@ class GestureDebugEvaluator {
     required int followRelaxedReleaseFrames,
     required double followFirstOpenHoldProgress,
     required double followHandReturnProgress,
+    bool? followIndexOnly,
+    double followPointHoldProgress = 0,
+    double followFinalPalmProgress = 0,
   }) {
     if (hand == null || !geometry.isReliableHand(hand)) {
       return GestureDebugEvaluation(
@@ -99,9 +102,11 @@ class GestureDebugEvaluator {
           phase: followPhase,
           openPalm: followOpenPalm,
           closedFist: followClosedFist,
-          relaxedReleaseFrames: followRelaxedReleaseFrames,
           firstOpenHoldProgress: followFirstOpenHoldProgress,
           handReturnProgress: followHandReturnProgress,
+          indexOnly: followIndexOnly,
+          pointHoldProgress: followPointHoldProgress,
+          finalPalmProgress: followFinalPalmProgress,
         );
       case GestureDebugMode.off:
       case GestureDebugMode.direction:
@@ -588,9 +593,11 @@ class GestureDebugEvaluator {
     required FollowObjectSequencePhase phase,
     required bool? openPalm,
     required bool? closedFist,
-    required int relaxedReleaseFrames,
     required double firstOpenHoldProgress,
     required double handReturnProgress,
+    required bool? indexOnly,
+    required double pointHoldProgress,
+    required double finalPalmProgress,
   }) {
     final packageGesture = hand.gesture;
     final requirements = [
@@ -621,12 +628,20 @@ class GestureDebugEvaluator {
         text: 'Closed Fist ${_boolLabel(closedFist)}',
       ),
       GestureDebugRequirement(
-        matches:
-            relaxedReleaseFrames >=
-            HandGestureThresholds.followObjectRelaxedReleaseConfirmationFrames,
+        matches: indexOnly == true,
+        text: 'Index-only point ${_boolLabel(indexOnly)}',
+      ),
+      GestureDebugRequirement(
+        matches: pointHoldProgress >= 1,
         text:
-            'Release frames $relaxedReleaseFrames/'
-            '${HandGestureThresholds.followObjectRelaxedReleaseConfirmationFrames}',
+            'Target dwell ${(pointHoldProgress * 100).toStringAsFixed(0)}% / 100%',
+      ),
+      GestureDebugRequirement(
+        matches:
+            phase != FollowObjectSequencePhase.waitingForFinalPalm ||
+            finalPalmProgress <= 1,
+        text:
+            'Final-palm window ${(finalPalmProgress * 100).toStringAsFixed(0)}% / 100%',
       ),
       GestureDebugRequirement(
         matches: packageGesture != null,
@@ -749,7 +764,9 @@ class GestureDebugEvaluator {
     FollowObjectSequencePhase.idle => 'idle',
     FollowObjectSequencePhase.holdingFirstOpen => 'hold first open palm',
     FollowObjectSequencePhase.waitingForClosed => 'waiting for closed fist',
-    FollowObjectSequencePhase.waitingForFinalOpen => 'waiting for release',
+    FollowObjectSequencePhase.waitingForPoint => 'waiting for index point',
+    FollowObjectSequencePhase.holdingPoint => 'holding target',
+    FollowObjectSequencePhase.waitingForFinalPalm => 'waiting for final palm',
     FollowObjectSequencePhase.waitingForHandReturn => 'waiting for hand return',
   };
 

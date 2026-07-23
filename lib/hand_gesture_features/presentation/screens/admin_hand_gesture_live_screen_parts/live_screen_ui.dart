@@ -183,10 +183,14 @@ extension on _AdminHandGestureLiveScreenState {
     final closedFistObjectCandidates = closedFistTargetCandidates
         .where((target) => target.type == FollowTargetType.object)
         .toList(growable: false);
-    const selectionCandidateColor = followTargetSelectionGreen;
+    final selectionCandidateColor = _followTargetPointingDwell.isFrozen
+        ? followTargetSelectionGreen
+        : const Color(0xFFFFB020);
     final selectionCandidateLabelPrefix = _followTargetSelectionCandidateHidden
         ? 'Last seen: '
-        : 'Release → ';
+        : _followTargetPointingDwell.isFrozen
+        ? 'Open palm → '
+        : 'Hold ${(_followPointingHoldProgress * 100).round()}% → ';
     final showFollowTargetDebugOverlay =
         _showFollowTargetDebugOverlay &&
         !showClosedFistTargetCandidate &&
@@ -280,6 +284,28 @@ extension on _AdminHandGestureLiveScreenState {
                                                 painter:
                                                     _handLandmarkPainterForCurrentMode(
                                                       controller,
+                                                    ),
+                                              ),
+                                            if (_followPointingCursor != null)
+                                              CustomPaint(
+                                                key: const Key(
+                                                  'followPointingCursor',
+                                                ),
+                                                painter:
+                                                    FollowPointingCursorPainter(
+                                                      realIndexTip:
+                                                          _followPointingCursor!
+                                                              .realIndexTip,
+                                                      projectedPoint:
+                                                          _followPointingCursor!
+                                                              .visiblePoint,
+                                                      progress:
+                                                          _followPointingHoldProgress,
+                                                      isInFrame:
+                                                          _followPointingCursor!
+                                                              .isInFrame,
+                                                      previewQuarterTurns:
+                                                          overlayQuarterTurns,
                                                     ),
                                               ),
                                             if (showSelectedDebugPainter &&
@@ -843,6 +869,10 @@ extension on _AdminHandGestureLiveScreenState {
           .debugFirstOpenHoldProgress(now),
       followHandReturnProgress: _followObjectSequenceDetector
           .debugHandReturnProgress(now),
+      followIndexOnly: _followObjectSequenceDetector.debugIndexOnly,
+      followPointHoldProgress: _followPointingHoldProgress,
+      followFinalPalmProgress: _followObjectSequenceDetector
+          .debugFinalPalmProgress(now),
     );
 
     return GestureFamilyDebugOverlayPainter(

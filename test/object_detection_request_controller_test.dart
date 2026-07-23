@@ -152,6 +152,53 @@ void main() {
       expect(submitCount, 1);
     });
 
+    test(
+      'selection override accelerates cadence without overlapping',
+      () async {
+        final controller = ObjectDetectionRequestController(
+          minInterval: const Duration(milliseconds: 650),
+        );
+        final start = DateTime(2026);
+        var submitCount = 0;
+
+        final first = controller.submit(
+          now: start,
+          detectorBusy: false,
+          minIntervalOverride: const Duration(milliseconds: 350),
+          detect: () {
+            submitCount++;
+            return Future.value(const []);
+          },
+        );
+        await first;
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          controller.submit(
+            now: start.add(const Duration(milliseconds: 349)),
+            detectorBusy: false,
+            minIntervalOverride: const Duration(milliseconds: 350),
+            detect: () {
+              submitCount++;
+              return Future.value(const []);
+            },
+          ),
+          isNull,
+        );
+        final exact = controller.submit(
+          now: start.add(const Duration(milliseconds: 350)),
+          detectorBusy: false,
+          minIntervalOverride: const Duration(milliseconds: 350),
+          detect: () {
+            submitCount++;
+            return Future.value(const []);
+          },
+        );
+        expect(exact, isNotNull);
+        expect(submitCount, 2);
+      },
+    );
+
     test('clear drops pending and cached results', () async {
       final controller = ObjectDetectionRequestController(
         minInterval: const Duration(milliseconds: 350),

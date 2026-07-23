@@ -73,7 +73,7 @@ class GestureDetectorApp extends StatefulWidget {
     super.key,
     this.showFloatingCameraDetectionButton = true,
     this.showMovingDownTrainingListItem = true,
-    this.initialObjectDetectionBackend = ObjectDetectionBackend.ultralyticsYolo,
+    this.initialObjectDetectionBackend = ObjectDetectionBackend.googleMlKit,
     this.supportsNativeMethodChannel = false,
     this.supportsOpenCvSdk = false,
     this.supportsUltralyticsYolo = true,

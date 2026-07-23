@@ -18,6 +18,15 @@ class FollowObjectSequenceResult {
     this.handReturnDeadline,
     this.handReturnProgress = 0,
     this.savedHandPoint,
+    this.indexPip,
+    this.indexTip,
+    this.isIndexOnlyPointing = false,
+    this.isWaitingForFinalPalm = false,
+    this.finalPalmDeadline,
+    this.finalPalmProgress = 0,
+    this.isFinalPalmConfirmation = false,
+    this.wasCancelled = false,
+    this.cancellationReason,
   });
 
   final bool isActive;
@@ -34,4 +43,19 @@ class FollowObjectSequenceResult {
   final DateTime? handReturnDeadline;
   final double handReturnProgress;
   final Offset? savedHandPoint;
+
+  /// Raw hand-detection coordinates used to project a virtual Point 8.
+  final Offset? indexPip;
+  final Offset? indexTip;
+  final bool isIndexOnlyPointing;
+
+  /// Final confirmation state after the 500ms target dwell completes.
+  final bool isWaitingForFinalPalm;
+  final DateTime? finalPalmDeadline;
+  final double finalPalmProgress;
+  final bool isFinalPalmConfirmation;
+
+  /// True only on the frame where a timeout cancels the active sequence.
+  final bool wasCancelled;
+  final String? cancellationReason;
 }

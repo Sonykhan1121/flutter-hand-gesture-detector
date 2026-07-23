@@ -614,6 +614,183 @@ void main() {
       expect(update.isCandidateHidden, isFalse);
     });
   });
+
+  group('FollowTargetSelector strict index pointing', () {
+    const selector = FollowTargetSelector();
+
+    test('requires fingertip inside a box with no nearest fallback', () {
+      final result = selector.selectAtIndexTip(
+        indexTip: const Offset(0.49, 0.49),
+        faces: const [],
+        objects: [
+          _target(
+            type: FollowTargetType.object,
+            displayBox: const Rect.fromLTWH(0.50, 0.50, 0.10, 0.10),
+            label: 'cup',
+          ),
+        ],
+      );
+
+      expect(result.target, isNull);
+      expect(result.isAmbiguous, isFalse);
+    });
+
+    test('overlap chooses the unique smallest containing face or object', () {
+      final face = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.10, 0.10, 0.50, 0.50),
+        label: 'face',
+      );
+      final object = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.25, 0.25, 0.10, 0.10),
+        label: 'cup',
+      );
+
+      final result = selector.selectAtIndexTip(
+        indexTip: const Offset(0.30, 0.30),
+        faces: [face],
+        objects: [object],
+      );
+
+      expect(result.target, same(object));
+      expect(result.isAmbiguous, isFalse);
+    });
+
+    test('equal minimum areas are rejected as ambiguous', () {
+      final first = _target(
+        type: FollowTargetType.face,
+        displayBox: const Rect.fromLTWH(0.20, 0.20, 0.10, 0.10),
+        label: 'face',
+      );
+      final second = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.22, 0.22, 0.10, 0.10),
+        label: 'cup',
+      );
+
+      final result = selector.selectAtIndexTip(
+        indexTip: const Offset(0.25, 0.25),
+        faces: [first],
+        objects: [second],
+      );
+
+      expect(result.target, isNull);
+      expect(result.isAmbiguous, isTrue);
+    });
+
+    test('stale containing targets are rejected', () {
+      final now = DateTime(2026);
+      final result = selector.selectAtIndexTip(
+        indexTip: const Offset(0.25, 0.25),
+        faces: const [],
+        objects: [
+          _target(
+            type: FollowTargetType.object,
+            displayBox: const Rect.fromLTWH(0.20, 0.20, 0.10, 0.10),
+            label: 'cup',
+            detectedAt: now,
+          ),
+        ],
+        detectedAfter: now.add(const Duration(milliseconds: 1)),
+      );
+
+      expect(result.target, isNull);
+    });
+
+    test('hysteresis maintains only the already-active candidate', () {
+      final active = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.20, 0.20, 0.10, 0.10),
+        label: 'cup',
+        trackingId: 7,
+      );
+      final refreshed = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.20, 0.20, 0.10, 0.10),
+        label: 'cup',
+        trackingId: 7,
+      );
+
+      final maintained = selector.selectAtPoint(
+        selectionPoint: const Offset(0.31, 0.25),
+        faces: const [],
+        objects: [refreshed],
+        activeCandidate: active,
+        activeCandidateHysteresis: 0.015,
+      );
+      final cannotAcquire = selector.selectAtPoint(
+        selectionPoint: const Offset(0.31, 0.25),
+        faces: const [],
+        objects: [refreshed],
+        activeCandidateHysteresis: 0.015,
+      );
+
+      expect(maintained.target, same(refreshed));
+      expect(cannotAcquire.target, isNull);
+    });
+
+    test('strict containment wins over old-candidate hysteresis', () {
+      final active = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.20, 0.20, 0.10, 0.10),
+        label: 'cup',
+        trackingId: 7,
+      );
+      final oldRefreshed = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.20, 0.20, 0.10, 0.10),
+        label: 'cup',
+        trackingId: 7,
+      );
+      final newStrictTarget = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.305, 0.20, 0.05, 0.10),
+        label: 'bottle',
+        trackingId: 9,
+      );
+
+      final result = selector.selectAtPoint(
+        selectionPoint: const Offset(0.31, 0.25),
+        faces: const [],
+        objects: [oldRefreshed, newStrictTarget],
+        activeCandidate: active,
+        activeCandidateHysteresis: 0.015,
+      );
+
+      expect(result.target, same(newStrictTarget));
+    });
+
+    test('frozen target resolves only one compatible identity', () {
+      final frozen = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.20, 0.20, 0.10, 0.10),
+        label: 'cup',
+        trackingId: 7,
+      );
+      final latest = _target(
+        type: FollowTargetType.object,
+        displayBox: const Rect.fromLTWH(0.25, 0.20, 0.10, 0.10),
+        label: 'cup',
+        trackingId: 7,
+      );
+      expect(
+        selector.resolveFrozenPointingTarget(
+          frozen: frozen,
+          candidates: [latest],
+        ),
+        same(latest),
+      );
+
+      expect(
+        selector.resolveFrozenPointingTarget(
+          frozen: frozen,
+          candidates: [latest, latest],
+        ),
+        isNull,
+      );
+    });
+  });
 }
 
 FollowTarget _target({

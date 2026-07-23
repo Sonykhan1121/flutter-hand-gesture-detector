@@ -37,6 +37,18 @@ abstract final class HandGestureThresholds {
   static const Duration followObjectHandReturnGraceDuration = Duration(
     seconds: 2,
   );
+  static const Duration followObjectPointingHoldDuration = Duration(
+    milliseconds: 500,
+  );
+  static const Duration followObjectFinalPalmConfirmationDuration = Duration(
+    seconds: 2,
+  );
+  static const int followObjectPointingMinFreshDetectionCycles = 2;
+  static const double followObjectPointingAreaTieTolerance = 1e-9;
+  static const double followObjectPointingThumbMaxReachRatio = 0.42;
+  static const double followObjectProjectedPointDistanceMultiplier = 2.0;
+  static const double followObjectProjectedPointSmoothingAlpha = 0.35;
+  static const double followObjectProjectedPointDwellHysteresis = 0.015;
   static const int followObjectRelaxedReleaseMinExtendedFingers = 1;
   static const int followObjectRelaxedReleaseConfirmationFrames = 2;
   static const int followTargetSelectionConfirmationCycles = 2;
@@ -79,6 +91,12 @@ abstract final class HandGestureThresholds {
   );
   static const Duration iosGoogleMlKitObjectDetectionMinInterval = Duration(
     milliseconds: 200,
+  );
+  static const Duration followObjectSelectionDetectionMinInterval = Duration(
+    milliseconds: 200,
+  );
+  static const Duration iosFollowObjectSelectionDetectionMinInterval = Duration(
+    milliseconds: 350,
   );
   static const Duration googleMlKitEmptyResultHoldDuration = Duration(
     milliseconds: 600,
